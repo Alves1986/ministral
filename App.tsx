@@ -121,17 +121,23 @@ const InnerApp = () => {
               hasInitialSync.current = true;
           }
 
+          // Timeout de segurança: desbloqueia o app em no máximo 5s
+          // mesmo que o fetch falhe silenciosamente ou não retorne.
+          const safetyTimer = setTimeout(() => setAppReady(true), 5000);
+
           if (sessionUser.organizationId) {
               Supabase.fetchOrganizationMinistries(sessionUser.organizationId)
-              .then(ministries => {
-                  setAvailableMinistries(ministries);
-                  setAppReady(true);
-              })
-              .catch(err => {
-                  console.warn("Failed to load menus (non-critical)", err);
-                  setAppReady(true);
-              });
+                  .then(ministries => {
+                      setAvailableMinistries(ministries);
+                      setAppReady(true);
+                  })
+                  .catch(err => {
+                      console.warn("Failed to load menus (non-critical)", err);
+                      setAppReady(true);
+                  })
+                  .finally(() => clearTimeout(safetyTimer));
           } else {
+              clearTimeout(safetyTimer);
               setAppReady(true);
           }
       }
@@ -775,7 +781,6 @@ const InnerApp = () => {
       )}
       
       <DashboardLayout
-          key={ministryId}
           onLogout={handleLogout}
           title={ministryTitle || 'Carregando...'}
           currentTab={isTabValid ? currentTab : 'dashboard'}
@@ -886,7 +891,7 @@ const InnerApp = () => {
         activeMinistryId={ministryId}
     >
         <Suspense fallback={<LoadingFallback />}>
-            <div key={ministryId} className="h-full">
+            <div className="h-full">
                 {(currentTab === 'dashboard' || !isTabValid) && dashboardScreen}
 
                 {currentTab === 'calendar' && safeEnabledTabs.includes('calendar') && calendarScreen}
