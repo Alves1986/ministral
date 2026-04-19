@@ -10,6 +10,7 @@ import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
 import { subscribeUserToPush } from './utils/pushUtils';
+import { getSupabase } from './services/supabase/client';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -778,7 +779,34 @@ const InnerApp = () => {
           onLogout={handleLogout}
           title={ministryTitle || 'Carregando...'}
           currentTab={isTabValid ? currentTab : 'dashboard'}
-          onTabChange={setCurrentTab}
+          onTabChange={async (tab) => {
+              setCurrentTab(tab);
+              
+              // Mapa de keys relacionadas a cada aba para invalidação inteligente
+              const tabQueryMap: Record<string, string[]> = {
+                  'members': ['members'],
+                  'calendar': ['assignments', 'rules'],
+                  'schedule-editor': ['assignments', 'rules', 'members'],
+                  'announcements': ['announcements'],
+                  'availability': ['availability', 'availabilityV2'],
+                  'repertoire': ['repertoire'],
+                  'repertoire-manager': ['repertoire'],
+                  'ranking': ['ranking'],
+                  'dashboard': ['nextEvent', 'assignments', 'announcements'],
+                  'swaps': ['swaps'],
+                  'history': ['audit'],
+                  'event-rules': ['rules'],
+                  'settings': ['settings']
+              };
+
+              const keysToInvalidate = tabQueryMap[tab];
+              if (keysToInvalidate) {
+                  // Invalidação via predicate para ser mais preciso
+                  queryClient.invalidateQueries({
+                      predicate: (query) => keysToInvalidate.includes(query.queryKey[0] as string)
+                  });
+              }
+          }}
           mainNavItems={MAIN_NAV}
           managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
           notifications={notifications}
@@ -816,10 +844,16 @@ const InnerApp = () => {
                   // 3. Atualiza no servidor em segundo plano ou aguarda brevemente
                   await Supabase.updateProfileMinistry(uId, id, oId);
                   
-                  // 4. Limpa Cache agora que já temos os novos dados de acesso
-                  queryClient.clear();
+                  // 4. Salva o ID antigo para limpeza seletiva e remove queries do ministério anterior
+                  const oldMinistryId = ministryId;
+                  queryClient.removeQueries({
+                      predicate: (query) => query.queryKey[1] === oldMinistryId
+                  });
 
-                  // 5. Atualiza store LOCALMENTE de forma atômica
+                  // 5. Atualiza a sessão ANTES da troca de estado para garantir consistência
+                  await refreshSession();
+
+                  // 6. Atualiza store LOCALMENTE de forma atômica
                   // Usamos os dados que acabamos de buscar para evitar flickering
                   setMinistryId(id);
                   setCurrentUser({ 
@@ -829,9 +863,6 @@ const InnerApp = () => {
                       allowedMinistries: profileCheck.data?.allowed_ministries || activeUser!.allowedMinistries, 
                       access_role: activeUser!.isOrgAdmin ? 'admin' : (access.role === 'admin' ? 'admin' : 'member')
                   });
-
-                  // 6. Atualiza a sessão
-                  await refreshSession();
 
                   const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
                   addToast(`Alternado para ${label}`, 'info');
@@ -962,6 +993,15 @@ const InnerApp = () => {
                 }
                 try {
                     await Supabase.joinMinistry(id, orgId, r); 
+                    
+                    // Se for super admin ou org admin, refresha e avisa que entrou
+                    // Senão, avisa que a solicitação foi enviada
+                    if (activeUser?.isSuperAdmin || activeUser?.isOrgAdmin) {
+                        addToast("Você entrou no ministério com sucesso!", "success");
+                    } else {
+                        addToast("Solicitação enviada! Aguarde a aprovação.", "info");
+                    }
+
                     await refreshSession(); 
                     await refreshData(); 
                 } catch (e: any) {
@@ -999,6 +1039,64 @@ const InnerApp = () => {
   );
 };
 
+const SupabaseHealthCheck: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [status, setStatus] = useState<'checking' | 'ok' | 'failed'>('checking');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const pingDb = async () => {
+      try {
+        const sb = getSupabase();
+        if (!sb) {
+          throw new Error('Supabase client is null. Missing environment variables.');
+        }
+        // Testa a comunicação mínima com o Supabase usando Auth (que não requer acessar tabelas restritas)
+        const { error } = await sb.auth.getSession();
+        if (error) throw error;
+        
+        if (isMounted) setStatus('ok');
+      } catch (e: any) {
+        console.error("SupabaseHealthCheck falhou:", e);
+        if (isMounted) {
+          setErrorMsg(e?.message || 'Erro desconhecido');
+          setStatus('failed');
+        }
+      }
+    };
+    pingDb();
+    
+    return () => { isMounted = false; };
+  }, []);
+
+  if (status === 'checking') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+        <h2 className="text-xl font-semibold text-gray-800">Conectando ao Servidor...</h2>
+        <p className="text-gray-500 mt-2 text-sm">Validando sistema na plataforma Vercel</p>
+      </div>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+        <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
+          <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Falha Crítica de Conexão</h2>
+          <p className="text-gray-600 text-center max-w-md">
+            Não foi possível estabelecer contato com a base de dados principal (Supabase).
+          </p>
+          <div className="mt-4 p-4 bg-gray-100 rounded text-xs font-mono text-gray-700">
+            {errorMsg}
+          </div>
+        </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 const queryClientInstance = new QueryClient({
   defaultOptions: {
     queries: {
@@ -1013,11 +1111,13 @@ const queryClientInstance = new QueryClient({
 const App = () => {
   return (
     <QueryClientProvider client={queryClientInstance}>
-      <SessionProvider>
-        <ToastProvider>
-          <InnerApp />
-        </ToastProvider>
-      </SessionProvider>
+      <SupabaseHealthCheck>
+        <SessionProvider>
+          <ToastProvider>
+            <InnerApp />
+          </ToastProvider>
+        </SessionProvider>
+      </SupabaseHealthCheck>
     </QueryClientProvider>
   );
 };

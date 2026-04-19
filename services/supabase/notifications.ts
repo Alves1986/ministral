@@ -9,9 +9,10 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         .select('*, organization_ministries(label)')
         .eq('organization_id', orgId);
     
-    // Se não for admin, filtramos apenas pelos ministérios aos quais o usuário tem acesso
+    // Se não for admin, filtramos apenas pelos ministérios aos quais o usuário tem acesso ou notificações direcionadas a ele
     if (!isAdmin) {
-        query = query.in('ministry_id', ministryIds);
+        const ids = ministryIds.length > 0 ? ministryIds.join(',') : 'null';
+        query = query.or(`ministry_id.in.(${ids}),target_user_id.eq.${userId}`);
     }
     
     const { data: globalNotifs, error: fetchError } = await query
@@ -22,7 +23,7 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     if (fetchError && (fetchError.code === 'PGRST204' || fetchError.message?.includes('action_link'))) {
         console.warn("[Notifications] Schema cache error on global fetch, retrying basic.");
         const { data: retryNotifs } = await sb.from('notifications')
-            .select('id, title, message, type, created_at, ministry_id, organization_id')
+            .select('id, title, message, type, created_at, ministry_id, organization_id, action_link')
             .eq('organization_id', orgId)
             .order('created_at', { ascending: false })
             .limit(30);
@@ -41,7 +42,7 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
             type: n.type,
             timestamp: n.created_at,
             read: false,
-            actionLink: 'announcements'
+            actionLink: (n as any).action_link || 'announcements'
         }));
     }
         
@@ -218,7 +219,7 @@ export const clearAllNotificationsSQL = async (
     }
 };
 
-export const notifySuperAdmins = async (title: string, message: string, actionLink?: string, targetMinistryId?: string, orgId?: string) => {
+export const notifySuperAdmins = async (title: string, message: string, actionLink?: string, targetMinistryId?: string, orgId?: string, type: string = 'info') => {
     const sb = getSupabase();
     if (!sb) return;
 
@@ -294,15 +295,16 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
             ministry_id: tMinId,
             title,
             message: finalMessage,
-            type: 'info',
+            type,
             action_link: actionLink || 'super-admin'
         });
     }
 
     if (notificationsToInsert.length > 0) {
         // Inserção em lote
-        await sb.from('notifications').insert(notificationsToInsert);
+        return await sb.from('notifications').insert(notificationsToInsert);
     }
+    return { data: null, error: null };
 };
 
 export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {

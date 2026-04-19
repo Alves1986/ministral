@@ -125,50 +125,70 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
 
-    // Check if user is super admin
-    const { data: profile } = await sb.from('profiles').select('is_super_admin, name, allowed_ministries').eq('id', user.id).single();
+    // Check if user is super admin or org admin
+    const { data: profile } = await sb.from('profiles')
+        .select('id, is_super_admin, is_admin, name, allowed_ministries, organization_id')
+        .eq('id', user.id)
+        .maybeSingle();
+    
     const isSuperAdmin = profile?.is_super_admin || false;
+    const isOrgAdmin = profile?.is_admin || false;
+    const canJoinDirectly = isSuperAdmin || (isOrgAdmin && profile?.organization_id === orgId);
 
     // Fetch ministry label to avoid leaking ID in notification
     const { data: minData } = await sb.from('organization_ministries').select('label').eq('id', ministryId).maybeSingle();
     const ministryName = minData?.label || 'Ministério';
 
-    if (isSuperAdmin) {
-        // Super Admin joins directly
-        await sb.from('ministry_members').insert({
+    if (canJoinDirectly) {
+        // Direct Entry
+        const { error: joinError } = await sb.from('ministry_members').upsert({
             ministry_id: ministryId,
             profile_id: user.id,
             role: 'member',
             functions: roles
-        });
+        }, { onConflict: 'ministry_id, profile_id' });
+
+        if (joinError) {
+            console.error("[joinMinistry] Error joining directly:", joinError);
+            throw joinError;
+        }
         
         if (profile) {
             const allowed = new Set(profile.allowed_ministries || []);
             allowed.add(ministryId);
             await sb.from('profiles').update({ allowed_ministries: Array.from(allowed) })
-                .eq('id', user.id)
-                .eq('organization_id', orgId);
+                .eq('id', user.id);
         }
 
         await notifySuperAdmins(
-            'Membro Entrou em Ministério',
-            `O super admin ${profile?.name || user.user_metadata?.full_name || 'Um usuário'} entrou no ministério ${ministryName}.`,
+            'Novo Integrante (Entrada Direta)',
+            `O usuário ${profile?.name || user.email} entrou diretamente no ministério ${ministryName}.`,
             'members',
             ministryId,
             orgId
         );
     } else {
-        // Regular user: Create a join request via notifications
-        // We use a special type 'join_request' and store data in action_link or message
-        // For better management, we'll use the notifications table as a temporary request store
-        // Notify admins of this specific ministry
-        await notifySuperAdmins(
-            'Membro Entrou em Ministério',
-            `O usuário ${profile?.name || user.user_metadata?.full_name || user.email} entrou no ministério ${ministryName}.`,
-            'members',
+        // Regular user: Create a join request via weight notifications
+        const userName = profile?.name || user.user_metadata?.full_name || user.email;
+        const actionData = JSON.stringify({
+            userId: user.id,
+            userName,
+            roles: roles || []
+        });
+
+        const response = await notifySuperAdmins(
+            'Solicitação de Entrada',
+            `O usuário ${userName} solicitou entrada no ministério ${ministryName}.`,
+            actionData,
             ministryId,
-            orgId
+            orgId,
+            'join_request'
         );
+
+        if (response?.error) {
+            console.error("[joinMinistry] Error sending join request:", response.error);
+            throw new Error("Não foi possível enviar a solicitação. Tente novamente.");
+        }
     }
 };
 
@@ -176,13 +196,15 @@ export const approveJoinRequest = async (notificationId: string, userId: string,
     const sb = getSupabase();
     if (!sb) return;
 
-    // 1. Add to ministry_members
-    await sb.from('ministry_members').insert({
+    // 1. Add to ministry_members (upsert to be safe)
+    const { error: memberError } = await sb.from('ministry_members').upsert({
         ministry_id: ministryId,
         profile_id: userId,
         role: 'member',
         functions: roles
-    });
+    }, { onConflict: 'ministry_id, profile_id' });
+
+    if (memberError) throw memberError;
 
     // 2. Update allowed_ministries in profile
     const { data: profile } = await sb.from('profiles').select('allowed_ministries').eq('id', userId).single();
@@ -190,8 +212,7 @@ export const approveJoinRequest = async (notificationId: string, userId: string,
         const allowed = new Set(profile.allowed_ministries || []);
         allowed.add(ministryId);
         await sb.from('profiles').update({ allowed_ministries: Array.from(allowed) })
-            .eq('id', userId)
-            .eq('organization_id', orgId);
+            .eq('id', userId);
     }
 
     // 3. Mark notification as read/cleared or delete it
@@ -203,7 +224,9 @@ export const approveJoinRequest = async (notificationId: string, userId: string,
         ministry_id: ministryId,
         title: 'Solicitação Aprovada',
         message: 'Sua solicitação para entrar no ministério foi aprovada!',
-        type: 'success'
+        type: 'success',
+        target_user_id: userId,
+        action_link: 'dashboard'
     });
 };
 
@@ -220,7 +243,9 @@ export const rejectJoinRequest = async (notificationId: string, orgId: string, m
         ministry_id: ministryId,
         title: 'Solicitação Recusada',
         message: 'Sua solicitação para entrar no ministério foi recusada pelos administradores.',
-        type: 'error'
+        type: 'error',
+        target_user_id: userId,
+        action_link: 'dashboard'
     });
 };
 

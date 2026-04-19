@@ -41,7 +41,12 @@ export default defineConfig(({ mode }) => {
       '__SUPABASE_KEY__': JSON.stringify(env.VITE_SUPABASE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
       'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.API_KEY || ''),
       'process.env.OPENROUTER_API_KEY': JSON.stringify(env.VITE_OPENROUTER_API_KEY || ''),
-      '__SW_CACHE_VERSION__': JSON.stringify(`v${Date.now()}`),
+      // Evita Date.now() dinâmico: Usa o SHA do commit da Vercel ou versão do package.json
+      '__SW_CACHE_VERSION__': JSON.stringify(
+        process.env.VERCEL_GIT_COMMIT_SHA?.substring(0, 8) || 
+        process.env.npm_package_version || 
+        '1.0.0'
+      ),
     },
     build: {
       outDir: 'dist',

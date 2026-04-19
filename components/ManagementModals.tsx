@@ -66,12 +66,17 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
         setGeneratedLink("");
     };
 
+    const handleClose = () => {
+        reset();
+        onClose();
+    };
+
     useEffect(() => {
         if (isOpen) reset();
     }, [isOpen]);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Convidar Novo Membro">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Convidar Novo Membro">
             <div className="space-y-6">
                 {!generatedLink ? (
                     <>
