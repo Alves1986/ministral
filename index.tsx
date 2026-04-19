@@ -53,19 +53,6 @@ export const BootupGuard: React.FC<{ children: React.ReactNode }> = ({ children 
   return <>{children}</>;
 };
 
-// Register Service Worker for PWA & Push Notifications
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => {
-        console.log('SW registered: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
-
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = createRoot(rootElement);

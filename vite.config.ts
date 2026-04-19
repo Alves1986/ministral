@@ -4,9 +4,13 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { VitePWA } from 'vite-plugin-pwa';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Leia a versão do package.json para usar como cache estável
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, './package.json'), 'utf-8'));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -16,17 +20,15 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        strategies: 'injectManifest',
-        srcDir: 'src',
-        filename: 'sw.js',
+        strategies: 'generateSW',
+        registerType: 'autoUpdate',
         injectRegister: 'auto',
         manifest: false, // Use existing manifest.json in root
-        devOptions: {
-          enabled: true,
-          type: 'module',
-        },
-        injectManifest: {
-          injectionPoint: undefined, // We are not using __WB_MANIFEST yet, just custom logic
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true
         }
       })
     ],
@@ -41,12 +43,7 @@ export default defineConfig(({ mode }) => {
       '__SUPABASE_KEY__': JSON.stringify(env.VITE_SUPABASE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
       'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.API_KEY || ''),
       'process.env.OPENROUTER_API_KEY': JSON.stringify(env.VITE_OPENROUTER_API_KEY || ''),
-      // Evita Date.now() dinâmico: Usa o SHA do commit da Vercel ou versão do package.json
-      '__SW_CACHE_VERSION__': JSON.stringify(
-        process.env.VERCEL_GIT_COMMIT_SHA?.substring(0, 8) || 
-        process.env.npm_package_version || 
-        '1.0.0'
-      ),
+      '__SW_CACHE_VERSION__': JSON.stringify(`v${pkg.version}`),
     },
     build: {
       outDir: 'dist',
