@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import './index.css';
 
 // DEBUG PARA PRODUÇÃO: Adicione isso no main.tsx ou index.tsx envolvendo seu <App />
 export const BootupGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
