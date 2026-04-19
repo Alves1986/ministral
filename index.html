@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ministral" />
+    
+    <title>Ministral</title>
+    
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/branding/favicon-light.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/branding/favicon-dark.png" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="/branding/icon-light.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+      (function() {
+        try {
+          var savedMode = localStorage.getItem('themeMode');
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (savedMode === 'dark' || (savedMode === 'system' && systemDark) || (!savedMode && systemDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              ministral: {
+                50: '#F8FAFC',
+                100: '#E5E7EB',
+                500: '#1E3A5F', // Primary Blue
+                600: '#2A4E7A', // Secondary Blue
+                gold: '#D6B25E', // Accent Gold
+                dark: '#0F172A', // Background Dark
+                text: '#0B1220', // Text Primary
+                muted: '#6B7280', // Text Secondary
+              },
+              accent: '#D6B25E',
+              primary: '#1E3A5F',
+              secondary: '#14B8A6',
+              secondaryHover: '#0D9488',
+            },
+            animation: {
+              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'shimmer': 'shimmer 2.5s infinite linear',
+            },
+            keyframes: {
+              slideUp: {
+                '0%': { transform: 'translateY(10px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              shimmer: {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Noise texture for texture, but subtle */
+      :root {
+        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+      }
+
+      body { 
+        @apply text-zinc-900 dark:text-zinc-100 antialiased selection:bg-ministral-500/30 selection:text-ministral-text dark:selection:text-ministral-50;
+        background-color: #F8FAFC; /* Background Light */
+      }
+
+      .dark body {
+        background-color: #0F172A; /* Background Dark */
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: var(--bg-noise);
+        pointer-events: none;
+        z-index: 50;
+        opacity: 0.6;
+      }
+
+      /* Professional Scrollbar */
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { 
+        @apply bg-zinc-300 dark:bg-zinc-800 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-700 transition-colors; 
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* Utilities */
+      .glass-panel {
+        @apply bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>

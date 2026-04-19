@@ -1,0 +1,61 @@
+export const fetchOrganizationsWithStats = async () => {
+export const saveOrganization = async (id: string | null, name: string, slug: string, billing?: any) => {
+export const toggleOrganizationStatus = async (id: string, active: boolean) => {
+export const saveOrganizationMinistry = async (orgId: string, code: string, label: string) => {
+export const deleteOrganizationMinistry = async (orgId: string, code: string) => {
+export const loginWithEmail = async (email: string, pass: string) => {
+export const logout = async () => {
+export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string, orgId: string) => {
+export const createInviteToken = async (ministryId: string, orgId: string, label?: string) => {
+export const validateInviteToken = async (token: string) => {
+export const registerWithInvite = async (token: string, userData: any) => {
+export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: string) => {
+export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string, userId: string, dates: string[], notes: any, targetMonth: string) => {
+export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
+export const saveMemberAvailability = async (ministryId: string, orgId: string, userId: string, dates: string[], notes: any, monthTarget?: string) => {
+export const getSupabase = () => supabase;
+export const setServiceOrgContext = (id: string) => { serviceOrgId = id; };
+export const clearServiceOrgContext = () => { serviceOrgId = null; };
+export const configureSupabaseManual = (url: string, key: string) => { console.warn("Manual config disabled."); };
+export const validateConnection = async (url: string, key: string) => { return false; };
+export const createEventRule = async (orgId: string, ruleData: any) => {
+export const deleteEventRule = async (orgId: string, ruleId: string) => {
+export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
+export const deleteMinistryEvent = async (ministryId: string, orgId: string, eventIso: string) => {
+export const updateMinistryEvent = async (ministryId: string, orgId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
+export const fetchOrganizationDetails = async (orgId: string): Promise<Organization | null> => {
+export const fetchOrganizationMinistries = async (orgId?: string): Promise<MinistryDef[]> => {
+export const fetchUserAllowedMinistries = async (userId: string, orgId?: string): Promise<string[]> => {
+export const fetchMinistrySettings = async (ministryId: string, orgId?: string): Promise<MinistrySettings | null> => {
+export const joinMinistry = async (ministryId: string, orgId: string, roles: string[]) => {
+export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
+export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
+export const createSwapRequestSQL = async (ministryId: string, orgId: string, request: any) => {
+export const performSwapSQL = async (ministryId: string, orgId: string, reqId: string, takenByName: string, takenById: string) => {
+export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
+export const updateMemberData = async (memberId: string, orgId: string, data: any) => {
+export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
+export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {
+export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
+export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
+export const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
+export const fetchMinistryMembers = async (ministryId: string, orgId?: string) => {
+export const updateProfileMinistry = async (userId: string, ministryId: string) => {
+export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string) => {
+export const sendNotificationSQL = async (ministryId: string, orgId: string, notification: any) => {
+export const markNotificationsReadSQL = async (ids: string[], userId: string, orgId: string) => {
+export const clearAllNotificationsSQL = async (ministryId: string, orgId: string) => {
+export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {
+export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
+export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
+export const fetchRankingData = async (ministryId: string, orgId?: string): Promise<RankingEntry[]> => {
+export const fetchRepertoire = async (ministryId: string, orgId: string) => {
+export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
+export const deleteFromRepertoire = async (id: string, orgId: string) => {
+export const updateRepertoireItem = async (id: string, orgId: string, updates: any) => {
+export const fetchScheduleAssignments = async (ministryId: string, month: string, orgId?: string) => {
+export const saveScheduleAssignment = async (ministryId: string, orgId: string, eventKey: string, role: string, memberId: string, memberName: string) => {
+export const removeScheduleAssignment = async (ministryId: string, orgId: string, logicalKey: string) => {
+export const toggleAssignmentConfirmation = async (ministryId: string, orgId: string, key: string) => {
+export const clearScheduleForMonth = async (ministryId: string, orgId: string, month: string) => {
+export const fetchGlobalSchedules = async (month: string, ministryId: string, orgId: string) => {

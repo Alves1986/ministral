@@ -1,0 +1,7 @@
+{
+  "name": "Ministral",
+  "description": "Gestão ministerial inteligente para igrejas",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
