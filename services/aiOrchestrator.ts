@@ -1,6 +1,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+function getAIClient() {
+  let apiKey = '';
+  try {
+    apiKey = import.meta.env?.VITE_GEMINI_API_KEY || '';
+  } catch (e) {}
+  
+  if (!apiKey && typeof process !== 'undefined' && process.env) {
+    apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+  }
+  
+  return new GoogleGenAI({ apiKey });
+}
 
 export enum AI_TASKS {
   MINISTRY_HEALTH = 'MINISTRY_HEALTH',
@@ -225,6 +236,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
             }
         }
 
+        const ai = getAIClient();
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: [{ role: "user", parts: [{ text: fullPrompt }] }],

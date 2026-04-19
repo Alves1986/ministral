@@ -14,21 +14,9 @@
   "icons": [
     {
       "src": "/branding/icon-light.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/branding/icon-light.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/branding/icon-light.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
   "screenshots": [
@@ -53,14 +41,14 @@
       "short_name": "Escala",
       "description": "Ver minha escala do mês",
       "url": "/?tab=calendar",
-      "icons": [{ "src": "/branding/icon-light.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/branding/icon-light.png", "sizes": "512x512" }]
     },
     {
       "name": "Avisos",
       "short_name": "Avisos",
       "description": "Ver avisos importantes",
       "url": "/?tab=announcements",
-      "icons": [{ "src": "/branding/icon-light.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/branding/icon-light.png", "sizes": "512x512", "type": "image/png" }]
     }
   ],
   "launch_handler": {

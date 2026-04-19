@@ -32,14 +32,19 @@ if (!envUrl && typeof process !== 'undefined' && process.env) {
     envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 }
 
-const supabase = (envUrl && envKey) 
+const supabase = (envUrl && envKey)
   ? createClient(envUrl, envKey, {
       auth: {
           persistSession: true,
           autoRefreshToken: true,
-          detectSessionInUrl: true
+          detectSessionInUrl: true,
+          lock: async (name, acquireTimeout, fn) => {
+              // Fallback: ignora o lock e executa diretamente
+              // Evita o timeout do Navigator.locks em ambientes com múltiplas abas
+              return await fn();
+          }
       }
-  }) 
+  })
   : null;
 
 if (!supabase) {
