@@ -45,33 +45,24 @@ export const MembersScreen: React.FC<Props> = ({
 
   // Filter join requests from notifications
   const joinRequests = useMemo(() => {
-      const isAdmin = currentUser.access_role === 'admin' || currentUser.isSuperAdmin || currentUser.isOrgAdmin;
-      if (!isAdmin) return [];
-
       return notifications
-        .filter(n => {
-            const isJoinType = n.type === 'join_request';
-            const hasJoinData = typeof n.actionLink === 'string' && n.actionLink.startsWith('{') && n.actionLink.includes('"userId"');
-            const nMinId = n.ministryId || (n as any).ministry_id;
-            return (isJoinType || hasJoinData) && nMinId === currentUser.ministryId;
-        })
+        .filter(n => n.type === 'join_request' && n.ministryId === currentUser.ministryId)
         .map(n => {
             try {
-                const data = typeof n.actionLink === 'string' ? JSON.parse(n.actionLink) : n.actionLink;
-                if (!data.userId || !data.userName) return null;
+                const data = JSON.parse(n.actionLink);
                 return {
                     id: n.id,
                     userId: data.userId,
                     userName: data.userName,
-                    roles: data.roles || [],
+                    roles: data.roles,
                     timestamp: n.timestamp
                 };
             } catch (e) {
                 return null;
             }
         })
-        .filter(Boolean) as any[];
-  }, [notifications, currentUser.ministryId, currentUser.access_role, currentUser.isSuperAdmin, currentUser.isOrgAdmin]);
+        .filter(Boolean);
+  }, [notifications, currentUser.ministryId]);
 
   const handleInviteClick = () => {
     const plan = organization?.plan_type || 'trial';

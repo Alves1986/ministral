@@ -20,12 +20,14 @@ export default defineConfig(({ mode }) => {
         srcDir: 'src',
         filename: 'sw.js',
         injectRegister: 'auto',
-        manifest: false,
-        injectManifest: {
-          injectionPoint: undefined,
+        manifest: false, // Use existing manifest.json in root
+        devOptions: {
+          enabled: true,
+          type: 'module',
         },
-        // Forçar a saída como .js mesmo em modo module se necessário
-        selfDestroying: false,
+        injectManifest: {
+          injectionPoint: undefined, // We are not using __WB_MANIFEST yet, just custom logic
+        }
       })
     ],
     resolve: {
@@ -43,14 +45,6 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 2000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom', 'lucide-react', '@supabase/supabase-js'],
-          }
-        }
-      }
     },
     publicDir: 'public',
     test: {

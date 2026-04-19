@@ -778,34 +778,7 @@ const InnerApp = () => {
           onLogout={handleLogout}
           title={ministryTitle || 'Carregando...'}
           currentTab={isTabValid ? currentTab : 'dashboard'}
-          onTabChange={async (tab) => {
-              setCurrentTab(tab);
-              
-              // Mapa de keys relacionadas a cada aba para invalidação inteligente
-              const tabQueryMap: Record<string, string[]> = {
-                  'members': ['members'],
-                  'calendar': ['assignments', 'rules'],
-                  'schedule-editor': ['assignments', 'rules', 'members'],
-                  'announcements': ['announcements'],
-                  'availability': ['availability', 'availabilityV2'],
-                  'repertoire': ['repertoire'],
-                  'repertoire-manager': ['repertoire'],
-                  'ranking': ['ranking'],
-                  'dashboard': ['nextEvent', 'assignments', 'announcements'],
-                  'swaps': ['swaps'],
-                  'history': ['audit'],
-                  'event-rules': ['rules'],
-                  'settings': ['settings']
-              };
-
-              const keysToInvalidate = tabQueryMap[tab];
-              if (keysToInvalidate) {
-                  // Invalidação via predicate para ser mais preciso
-                  queryClient.invalidateQueries({
-                      predicate: (query) => keysToInvalidate.includes(query.queryKey[0] as string)
-                  });
-              }
-          }}
+          onTabChange={setCurrentTab}
           mainNavItems={MAIN_NAV}
           managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
           notifications={notifications}
@@ -843,16 +816,10 @@ const InnerApp = () => {
                   // 3. Atualiza no servidor em segundo plano ou aguarda brevemente
                   await Supabase.updateProfileMinistry(uId, id, oId);
                   
-                  // 4. Salva o ID antigo para limpeza seletiva e remove queries do ministério anterior
-                  const oldMinistryId = ministryId;
-                  queryClient.removeQueries({
-                      predicate: (query) => query.queryKey[1] === oldMinistryId
-                  });
+                  // 4. Limpa Cache agora que já temos os novos dados de acesso
+                  queryClient.clear();
 
-                  // 5. Atualiza a sessão ANTES da troca de estado para garantir consistência
-                  await refreshSession();
-
-                  // 6. Atualiza store LOCALMENTE de forma atômica
+                  // 5. Atualiza store LOCALMENTE de forma atômica
                   // Usamos os dados que acabamos de buscar para evitar flickering
                   setMinistryId(id);
                   setCurrentUser({ 
@@ -862,6 +829,9 @@ const InnerApp = () => {
                       allowedMinistries: profileCheck.data?.allowed_ministries || activeUser!.allowedMinistries, 
                       access_role: activeUser!.isOrgAdmin ? 'admin' : (access.role === 'admin' ? 'admin' : 'member')
                   });
+
+                  // 6. Atualiza a sessão
+                  await refreshSession();
 
                   const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
                   addToast(`Alternado para ${label}`, 'info');
@@ -992,15 +962,6 @@ const InnerApp = () => {
                 }
                 try {
                     await Supabase.joinMinistry(id, orgId, r); 
-                    
-                    // Se for super admin ou org admin, refresha e avisa que entrou
-                    // Senão, avisa que a solicitação foi enviada
-                    if (activeUser?.isSuperAdmin || activeUser?.isOrgAdmin) {
-                        addToast("Você entrou no ministério com sucesso!", "success");
-                    } else {
-                        addToast("Solicitação enviada! Aguarde a aprovação.", "info");
-                    }
-
                     await refreshSession(); 
                     await refreshData(); 
                 } catch (e: any) {
