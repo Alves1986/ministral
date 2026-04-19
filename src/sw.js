@@ -71,9 +71,27 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 3. Outras requisições: Network First
+  // 3. Outras requisições: Network First (garantindo que um response válido seja retornado sempre)
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request)
+      .catch(() => {
+        return caches.match(event.request).then(cachedResponse => {
+          // Se não houver cache e a rede falhar, deve retornar um fallback válido
+          // em vez de "undefined" que gera o erro de `Returned response is null`.
+          if (cachedResponse) {
+             return cachedResponse;
+          }
+          // Para integrações API como Supabase, precisamos retornar uma Response mockada de falha 
+          // caso o Offline não tenha cache
+          if (event.request.headers.get('accept')?.includes('application/json') || event.request.method !== 'GET') {
+              return new Response(
+                  JSON.stringify({ error: 'Você está offline.' }), 
+                  { status: 503, headers: { 'Content-Type': 'application/json' } }
+              );
+          }
+          return new Response('Network error occurred.', { status: 408, statusText: 'Request Timeout' });
+        });
+      })
   );
 });
 
