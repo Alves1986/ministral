@@ -337,7 +337,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     setAvailability: () => refreshData(),
     setNotifications: (updated: any, shouldRefresh = true) => {
         if (Array.isArray(updated)) {
-            queryClient.setQueryData(keys.notifications(currentUser?.allowedMinistries || (mid ? [mid] : []), currentUser?.id || '', orgId, !!isAdmin), updated);
+            queryClient.setQueriesData({ queryKey: ['notifications'] }, updated);
         }
         if (shouldRefresh) refreshData();
     },

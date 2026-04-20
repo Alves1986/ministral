@@ -159,6 +159,12 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - memberBlocks: Pares de IDs de membros que NÃO podem ser escalados juntos no mesmo evento.
     - memberPrefers: Pares de IDs de membros que devem ser escalados juntos sempre que possível.
     
+    REGRA DE DOMINGO (IMUTÁVEL):
+    - Domingos podem ter até dois eventos no mesmo dia: um pela manhã (hora < 12:00) e um à noite (hora >= 18:00).
+    - Um membro que já foi escalado em um evento de domingo de MANHÃ NÃO PODE ser escalado no evento de domingo à NOITE do mesmo dia, independentemente de sua disponibilidade declarada.
+    - Para identificar isso: compare o campo 'time' das ocorrências. Se duas ocorrências caírem na mesma data (event_date igual) e uma tiver time < "12:00" e a outra time >= "18:00", trate-as como conflito de turno para o mesmo membro.
+    - Esta regra se aplica em ambas as direções: escalado de manhã → bloqueado à noite; escalado à noite → bloqueado de manhã.
+    
     DADOS DE ENTRADA:
     - Ocorrências: ${JSON.stringify(data.occurrences)}
     - Funções Requeridas: ${JSON.stringify(data.roles)}
@@ -238,7 +244,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 
         const ai = getAIClient();
         const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
+            model: "gemma-4-27b-it",
             contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
             config
         });

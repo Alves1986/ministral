@@ -83,8 +83,8 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
                     const stats = getAssignedStats(evt);
                     const time = evt.iso.split('T')[1].slice(0, 5);
                     const statusColor = stats.isFull 
-                        ? 'bg-ministral-500 text-white border-ministral-600 dark:bg-ministral-600/30 dark:text-ministral-100 dark:border-ministral-500/30' 
-                        : 'bg-ministral-50 text-ministral-800 border-ministral-100 dark:bg-ministral-900/20 dark:text-ministral-300 dark:border-ministral-800';
+                        ? 'bg-ministral-500 text-white border-ministral-600 dark:bg-ministral-600 dark:text-white dark:border-ministral-500 hover:dark:bg-ministral-500' 
+                        : 'bg-ministral-50 text-ministral-800 border-ministral-100 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 hover:dark:bg-zinc-700';
                     
                     const statusDot = stats.isFull ? 'bg-white' : 'bg-ministral-500';
 

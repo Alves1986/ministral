@@ -172,6 +172,15 @@ export const clearNotificationsSQL = async (ids: string[], userId: string, orgId
         organization_id: orgId
     }));
     
+    // Fallback útil: marca como lida também. Se a tabela notification_clears 
+    // falhar ou não existir no ambiente do usuário, pelo menos o outro dispositivo
+    // não mostrará como "não lida" (pontinho vermelho).
+    try {
+        await sb.from('notification_reads').upsert(inserts, { onConflict: 'user_id, notification_id' });
+    } catch (e) {
+        // ignora silenciosamente
+    }
+    
     try {
         await sb.from('notification_clears').upsert(inserts, { onConflict: 'user_id, notification_id' });
     } catch (e) {
@@ -212,6 +221,10 @@ export const clearAllNotificationsSQL = async (
         organization_id: orgId
     }));
     
+    try {
+        await sb.from('notification_reads').upsert(inserts, { onConflict: 'user_id, notification_id' });
+    } catch (e) {}
+
     try {
         await sb.from('notification_clears').upsert(inserts, { onConflict: 'user_id, notification_id' });
     } catch (e) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
     fetchRulesV2, 
     fetchAssignmentsV2, 
@@ -475,6 +476,7 @@ interface Props {
 
 export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMonth, onMonthChange, currentTab, isAdmin, isPro, roles }) => {
     const { addToast } = useToast();
+    const queryClient = useQueryClient();
     
     // -- STATE --
     const [loading, setLoading] = useState(true);
@@ -653,6 +655,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             }
             
             addToast(`${aiSuggestions.length} atribuições aplicadas com sucesso!`, 'success');
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
             loadData(); // Recarregar para garantir sincronia
         } catch (error) {
             console.error(error);
@@ -714,6 +717,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 });
                 addToast('Removido da escala', 'success');
             }
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
         } catch (error) {
             console.error(error);
             addToast('Erro ao salvar alteração', 'error');
@@ -737,6 +741,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 member_id: null as any
             });
             addToast('Evento removido da escala deste mês', 'success');
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
             await loadData();
         } catch (error) {
             console.error(error);
