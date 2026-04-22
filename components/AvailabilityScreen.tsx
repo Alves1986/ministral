@@ -88,9 +88,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedMemberId) return;
 
-    // Se o usuário estiver ativamente fazendo edições (dirty) ou estiver no meio de um salvamento (saving),
-    // NÃO sobrescrevemos o "temporário" com os dados do banco para não apagar o trabalho dele.
-    if (saveState === 'dirty' || saveState === 'saving') return;
+    // Se o usuário estiver ativamente editando (dirty), salvando (saving)
+    // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
+    // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
+    // com os dados mais recentes antes de repaginar a página pra Idle.
+    if (saveState !== 'idle') return;
 
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
@@ -100,9 +102,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // Note key format: ID_YYYY-MM-00
     const noteKey = `${selectedMemberId}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
-    
-    // IMPORTANTE: Se o estado for 'saved', mantemos ele. Caso contrário vamos para 'idle'.
-    setSaveState(prev => (prev === 'saved' ? prev : 'idle'));
   }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState]);
 
   // Auto-dismiss do estado 'saved'
