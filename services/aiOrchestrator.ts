@@ -1,13 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 function getAIClient() {
+  // O Backend deve SEMPRE usar a GEMINI_API_KEY do ambiente (segura)
   let apiKey = '';
-  try {
-    apiKey = import.meta.env?.VITE_GEMINI_API_KEY || '';
-  } catch (e) {}
   
-  if (!apiKey && typeof process !== 'undefined' && process.env) {
-    apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+  if (typeof process !== 'undefined' && process.env) {
+    apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  }
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY not found in environment. Please configure it in settings.");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -190,17 +192,26 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any): Promise<any> {
     // Se estiver rodando no navegador, redireciona o processamento para o backend (onde está a API Key segura)
     if (typeof window !== 'undefined') {
-        const res = await fetch('/api/ai/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskType, context, payload })
-        });
-        if (!res.ok) {
-            let errMsg = 'Failed AI proxy call';
-            try { const errRes = await res.json(); errMsg = errRes.error || errMsg; } catch(e) {}
-            throw new Error(errMsg);
+        try {
+            const res = await fetch('/api/ai/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskType, context, payload })
+            });
+
+            if (!res.ok) {
+                let errMsg = `Server returned ${res.status}`;
+                try { 
+                    const errRes = await res.json(); 
+                    errMsg = errRes.error || errMsg; 
+                } catch(e) {}
+                throw new Error(errMsg);
+            }
+            return await res.json();
+        } catch (err: any) {
+            console.error('[runAI] Browser fetch error:', err);
+            throw new Error(`Conexão com IA falhou: ${err.message}`);
         }
-        return res.json();
     }
 
     let actualContext = context as AIContext;
@@ -219,6 +230,9 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 
     if (!actualPayload) throw new Error("Payload is required for AI task");
 
+    const promptGenerator = PROMPTS[taskType];
+    if (!promptGenerator) throw new Error(`Task type ${taskType} not implemented.`);
+
     const fullPrompt = `
     ${GLOBAL_PERSONALITY}
     
@@ -230,7 +244,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     - Funções: ${(actualContext.roles || []).join(', ')}
     
     TAREFA:
-    ${PROMPTS[taskType](actualPayload)}
+    ${promptGenerator(actualPayload)}
   `;
 
     try {
@@ -245,8 +259,6 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
             systemInstruction: "Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.",
         };
         
-        let promptWithInstructions = fullPrompt;
-
         if (needsJson) {
             config.responseMimeType = "application/json";
             if (taskType === AI_TASKS.SCALE_GENERATION) {
@@ -267,17 +279,20 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
         }
 
         const ai = getAIClient();
-        const response = await ai.models.generateContent({
+        const result = await ai.models.generateContent({
             model: "gemini-1.5-flash",
-            contents: [{ role: "user", parts: [{ text: promptWithInstructions }] }],
+            contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
             config
         });
 
-        const content = response.text || "";
+        const content = result.text;
+        if (!content) {
+            throw new Error("AI returned empty content");
+        }
         return parseAIResponse(content, taskType);
-    } catch (error) {
+    } catch (error: any) {
         console.error(`[AIOrchestrator] Gemini failed for task ${taskType}:`, error);
-        throw new Error(`AI processing failed for ${taskType}.`);
+        throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
     }
 }
 
