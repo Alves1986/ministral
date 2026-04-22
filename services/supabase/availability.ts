@@ -54,6 +54,8 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const next = new Date(year, month, 1);
     const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
 
+    console.log("[saveMemberAvailabilityV2] Iniciando delete...", { orgId, ministryId, userId, targetMonth, nextMonth });
+
     const { error: delError } = await sb
         .from('member_availability')
         .delete()
@@ -62,6 +64,8 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         .eq('user_id', userId)
         .gte('available_date', `${targetMonth}-01`)
         .lt('available_date', `${nextMonth}-01`);
+
+    console.log("[saveMemberAvailabilityV2] Delete concluído", { delError });
 
     if (delError) throw delError;
 
@@ -102,10 +106,14 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         });
     }
 
+    console.log("[saveMemberAvailabilityV2] Iniciando insert...", rows.length, "linhas");
+
     if (rows.length > 0) {
         const { error: insError } = await sb
             .from('member_availability')
             .insert(rows);
+            
+        console.log("[saveMemberAvailabilityV2] Insert concluído", { insError });
 
         if (insError) throw insError;
     }
