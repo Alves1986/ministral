@@ -253,7 +253,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 
         const ai = getAIClient();
         const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-preview",
+            model: "gemini-1.5-flash",
             contents: [{ role: "user", parts: [{ text: promptWithInstructions }] }],
             config
         });

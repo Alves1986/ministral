@@ -98,8 +98,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const AI_MODELS = [
     { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Geração', description: 'Otimizado para gerar escalas estruturadas e textos longos.' },
     { id: 'openai/gpt-oss-120b:free', name: 'Lógica', description: 'Focado em decisões complexas, análise e raciocínio.' },
-    { id: 'z-ai/glm-4.5-air:free', name: 'Velocidade', description: 'Resposta ultra-rápida para tarefas de escrita e avisos.' },
-    { id: 'google/gemma-4-31b-it:free', name: 'Equilibrado', description: 'Modelo versátil e confiável para uso geral.' }
+    { id: 'z-ai/glm-4.5-air:free', name: 'Velocidade', description: 'Resposta ultra-rápida para tarefas de escrita e avisos.' }
   ];
 
   useEffect(() => {
