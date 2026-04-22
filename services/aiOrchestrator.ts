@@ -188,6 +188,21 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
 };
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any): Promise<any> {
+    // Se estiver rodando no navegador, redireciona o processamento para o backend (onde está a API Key segura)
+    if (typeof window !== 'undefined') {
+        const res = await fetch('/api/ai/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskType, context, payload })
+        });
+        if (!res.ok) {
+            let errMsg = 'Failed AI proxy call';
+            try { const errRes = await res.json(); errMsg = errRes.error || errMsg; } catch(e) {}
+            throw new Error(errMsg);
+        }
+        return res.json();
+    }
+
     let actualContext = context as AIContext;
     let actualPayload = payload;
 

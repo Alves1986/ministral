@@ -50,6 +50,18 @@ async function startServer() {
     }
   });
 
+  app.post("/api/ai/run", async (req, res) => {
+    try {
+      const { taskType, context, payload } = req.body;
+      const { runAI } = await import("./services/aiOrchestrator.ts");
+      const result = await runAI(taskType, context, payload);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error executing AI task:", error);
+      res.status(500).json({ error: error.message || "Failed to execute AI task" });
+    }
+  });
+
   app.post("/api/spotify/token", async (req, res) => {
     try {
       const clientId = process.env.VITE_SPOTIFY_CLIENT_ID;
