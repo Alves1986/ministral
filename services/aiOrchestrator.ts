@@ -226,21 +226,34 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
             AI_TASKS.TEXT_REWRITE
         ].includes(taskType);
 
-        const config: any = {};
+        const config: any = {
+            systemInstruction: "Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.",
+        };
         
-        // Gemma does not support responseSchema or systemInstruction. We embed everything into the prompt.
         let promptWithInstructions = fullPrompt;
 
         if (needsJson) {
-            promptWithInstructions += `\n\n[CRITICAL INSTRUCTION] You MUST output the response purely in valid JSON format.`;
+            config.responseMimeType = "application/json";
             if (taskType === AI_TASKS.SCALE_GENERATION) {
-                promptWithInstructions += `\nOutput strictly as a JSON Array of objects with properties: { event_rule_id: string, event_date: string, role: string, member_id: string }`;
+                config.responseSchema = {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            event_rule_id: { type: Type.STRING },
+                            event_date: { type: Type.STRING },
+                            role: { type: Type.STRING },
+                            member_id: { type: Type.STRING }
+                        },
+                        required: ["event_rule_id", "event_date", "role", "member_id"]
+                    }
+                };
             }
         }
 
         const ai = getAIClient();
         const response = await ai.models.generateContent({
-            model: "gemma-2-27b-it",
+            model: "gemini-3.1-flash-preview",
             contents: [{ role: "user", parts: [{ text: promptWithInstructions }] }],
             config
         });
