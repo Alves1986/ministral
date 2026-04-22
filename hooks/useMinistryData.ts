@@ -207,6 +207,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             { event: '*', schema: 'public', table: 'member_availability', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.availabilityV2(mid, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.availability(mid, orgId) });
             }
         )
         .on(

@@ -455,8 +455,8 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            // O cache será atualizado automaticamente pelo realtime channel em useMinistryData.ts
-            // Remover `refreshData()` previne que 15 queries rodem simultaneamente e causem lock no navegador.
+            // Invalidação DIRETA para renovar a tela de imediato contornando latência do Realtime
+            await queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId!] });
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 
@@ -474,7 +474,6 @@ const InnerApp = () => {
             try {
                 await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: activeUser!.name, requesterId: activeUser!.id || '', role: role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); 
                 addToast("Pedido de troca solicitado com sucesso.", "success");
-                await refreshData(); 
             } catch (e: any) {
                 addToast("Erro ao solicitar troca: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -485,7 +484,6 @@ const InnerApp = () => {
             try {
                 await Supabase.performSwapSQL(ministryId, orgId!, reqId, activeUser!.name, activeUser!.id!); 
                 addToast("Escala assumida com sucesso.", "success");
-                await refreshData(); 
             } catch (e: any) {
                 addToast("Erro ao assumir escala: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -495,7 +493,6 @@ const InnerApp = () => {
             try {
                 await Supabase.cancelSwapRequestSQL(reqId, orgId!); 
                 addToast("Pedido removido com sucesso.", "info"); 
-                await refreshData(); 
             } catch (e: any) {
                 addToast("Erro ao remover pedido: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -531,7 +528,6 @@ const InnerApp = () => {
             });
             await Supabase.interactAnnouncementSQL(id, activeUser!.id!, activeUser!.name, 'read', orgId!);
             await queryClient.invalidateQueries({ queryKey: ['announcements'] });
-            await refreshData();
         }} 
         onToggleLike={async (id) => {
             queryClient.setQueryData(['announcements', ministryId, orgId!], (old: any) => {
@@ -556,7 +552,6 @@ const InnerApp = () => {
             });
             await Supabase.interactAnnouncementSQL(id, activeUser!.id!, activeUser!.name, 'like', orgId!);
             await queryClient.invalidateQueries({ queryKey: ['announcements'] });
-            await refreshData();
         }} 
     />
   ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData]);
@@ -1031,7 +1026,6 @@ const InnerApp = () => {
             try {
                 await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: activeUser!.name, requesterId: activeUser!.id || '', role: r, eventIso: i, eventTitle: t, status: 'pending', createdAt: new Date().toISOString() }); 
                 addToast("Pedido de troca solicitado com sucesso.", "success");
-                await refreshData(); 
                 setEventDetailsModal({ isOpen: false, event: null }); 
             } catch (e: any) {
                 addToast("Erro ao solicitar troca: " + (e.message || "Erro desconhecido"), "error");

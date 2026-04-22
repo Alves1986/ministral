@@ -108,9 +108,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (saveState !== 'saved') return;
     
+    // Agora que forçamos a invalidação no App.tsx diretamente, podemos voltar a Idade para que ele sincronize rápido
     const timeout = setTimeout(() => {
       setSaveState('idle');
-    }, 3000);
+    }, 1000);
     
     return () => clearTimeout(timeout);
   }, [saveState]);
