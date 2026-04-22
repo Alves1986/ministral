@@ -455,7 +455,7 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            await refreshData(); 
+            refreshData(); 
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 

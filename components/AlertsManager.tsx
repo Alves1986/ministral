@@ -76,7 +76,8 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
           const plainText = tempDiv.textContent || tempDiv.innerText || "";
           
           const refined = await runAI(AI_TASKS.TEXT_REWRITE, getAIContext(), { text: plainText, tone });
-          setMessage(`<p>${refined}</p>`);
+          const newHtml = refined?.html || refined;
+          setMessage(newHtml);
           addToast("Texto melhorado com IA!", "success");
       } catch (error) {
           console.error("AI Polish error:", error);

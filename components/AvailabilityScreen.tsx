@@ -202,14 +202,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
               consolidatedNotes[currentNoteKey] = generalNote.trim();
           }
 
-          // 4. Envia payload consolidado (USANDO ID)
-          await onSaveAvailability(
+          // 4. Envia payload consolidado (USANDO ID) com Timeout de 10s para evitar looping infinito
+          const savePromise = onSaveAvailability(
               ministryId, 
               selectedMemberId, 
               consolidatedDates, 
               consolidatedNotes, 
               currentMonth
           );
+
+          const timeoutPromise = new Promise<void>((_, reject) => {
+              setTimeout(() => reject(new Error("O tempo limite foi esgotado. Verifique sua conexão e tente novamente.")), 15000);
+          });
+
+          await Promise.race([savePromise, timeoutPromise]);
           
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');

@@ -115,7 +115,14 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     return `
       ${styles[data.tone as string] || styles.professional}
       TEXTO: "${data.text}"
-      REGRAS: Retorne APENAS o texto reescrito, sem explicações.
+      REGRAS: 
+      - Retorne APENAS um objeto JSON válido, sem explicações ou markdown externo.
+      - A chave deve ser "html".
+      - O valor DEVE ser o texto em formato HTML simples (use tags como <p>, <b>, <i>, <br>). SEM markdown como ** ou *.
+      ESTRUTURA ESPERADA:
+      {
+        "html": "<p><b>Atenção:</b> O ensaio foi cancelado.</p>"
+      }
     `;
   },
   [AI_TASKS.SCALE_SUGGESTION]: (data) => `
@@ -215,7 +222,8 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
         const needsJson = [
             AI_TASKS.MINISTRY_HEALTH,
             AI_TASKS.GENERATE_NOTICE,
-            AI_TASKS.SCALE_GENERATION
+            AI_TASKS.SCALE_GENERATION,
+            AI_TASKS.TEXT_REWRITE
         ].includes(taskType);
 
         const config: any = {
@@ -262,8 +270,8 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
         const cleaned = content.trim();
         
         // Tenta extrair JSON de blocos de código se Gemini envolver em markdown
-        const jsonMatch = cleaned.match(/```json\n([\s\S]*?)\n```/);
-        const jsonStr = jsonMatch ? jsonMatch[1] : cleaned;
+        const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
         
         if (jsonStr.startsWith('{') || jsonStr.startsWith('[')) {
             const parsed = JSON.parse(jsonStr);

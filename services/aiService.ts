@@ -7,7 +7,7 @@ export const polishAnnouncementAI = async (
 ): Promise<string> => {
   try {
     const result = await runAI(AI_TASKS.TEXT_REWRITE, { text, tone });
-    return result || text;
+    return result?.html || result?.text || result || text;
   } catch (error) {
     console.error('[aiService] Error polishing announcement:', error);
     return text;
