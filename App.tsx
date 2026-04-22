@@ -455,7 +455,8 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            refreshData(); 
+            // O cache será atualizado automaticamente pelo realtime channel em useMinistryData.ts
+            // Remover `refreshData()` previne que 15 queries rodem simultaneamente e causem lock no navegador.
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 

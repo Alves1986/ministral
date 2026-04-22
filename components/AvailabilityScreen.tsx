@@ -88,6 +88,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedMemberId) return;
 
+    // Se o usuário estiver ativamente fazendo edições (dirty) ou estiver no meio de um salvamento (saving),
+    // NÃO sobrescrevemos o "temporário" com os dados do banco para não apagar o trabalho dele.
+    if (saveState === 'dirty' || saveState === 'saving') return;
+
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
@@ -97,10 +101,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
     const noteKey = `${selectedMemberId}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
-    // IMPORTANTE: Se o estado for 'saved' ou 'saving', NÃO resetamos para 'idle'.
-    // Isso garante que o refresh dos dados (que acontece após salvar) não "apague" o card de sucesso.
-    setSaveState(prev => (prev === 'saved' || prev === 'saving' ? prev : 'idle'));
-  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members]);
+    // IMPORTANTE: Se o estado for 'saved', mantemos ele. Caso contrário vamos para 'idle'.
+    setSaveState(prev => (prev === 'saved' ? prev : 'idle'));
+  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState]);
 
   // Auto-dismiss do estado 'saved'
   useEffect(() => {
@@ -245,7 +248,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (saveState === 'dirty') {
           if (!window.confirm("Há alterações não salvas. Descartar?")) return;
       }
-      // Se estiver salvo, permite navegar (o useEffect de load vai resetar para idle na próxima renderização de dados)
+      setSaveState('idle');
       onMonthChange(adjustMonth(currentMonth, dir));
   };
 
@@ -268,6 +271,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         value={selectedMemberId} 
                         onChange={(e) => {
                             if(saveState === 'dirty' && !confirm("Descartar alterações?")) return;
+                            setSaveState('idle');
                             setSelectedMemberId(e.target.value);
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-secondary outline-none max-w-[140px]"
