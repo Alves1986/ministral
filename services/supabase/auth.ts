@@ -1,7 +1,6 @@
 import { getSupabase } from './client';
 import { notifySuperAdmins } from './notifications';
 import { log } from '../../utils/logger';
-import { insertAuditLog } from './misc';
 
 export const loginWithEmail = async (email: string, pass: string) => {
     const sb = getSupabase();
@@ -136,17 +135,6 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
             console.error('[createInviteToken] Error inserting token:', error);
             return { success: false, message: error.message };
         }
-
-        // Audit Log (Não aguardamos para não atrasar a resposta ao usuário)
-        (async () => {
-            try {
-                const { data: profile } = await sb.from('profiles').select('name').eq('id', uId).maybeSingle();
-                const authorName = profile?.name || 'Admin';
-                await insertAuditLog(ministryId, orgId, authorName, 'CREATE_INVITE', `${ministryId} - ${label || 'Sem label'}`);
-            } catch (e) {
-                console.warn('[createInviteToken] Audit log failed:', e);
-            }
-        })();
 
         const url = `${window.location.origin}?invite=${token}`;
         return { success: true, url };

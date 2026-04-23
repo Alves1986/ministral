@@ -1,5 +1,5 @@
 import { getSupabase, serviceOrgId } from './client';
-import { TeamMemberProfile, SwapRequest, AuditLogEntry } from '../../types';
+import { TeamMemberProfile, SwapRequest } from '../../types';
 import { notifySuperAdmins } from './notifications';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string): Promise<SwapRequest[]> => {
@@ -131,40 +131,14 @@ export const updateMemberData = async (memberId: string, orgId: string, data: Pa
     }
 };
 
-export const insertAuditLog = async (
-  ministryId: string,
-  orgId: string,
-  authorName: string,
-  action: string,
-  details: string
-) => {
-    const sb = getSupabase();
-    if (!sb) return;
-    const { error } = await sb.from('audit_logs').insert({
-        organization_id: orgId,
-        ministry_id: ministryId,
-        author_name: authorName,
-        action,
-        details,
-    });
-    if (error) console.error('[AuditLog] Failed to insert:', error);
-};
-
 export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-
-    // Obter nome do autor para o log
-    const { data: { user } } = await sb.auth.getUser();
-    const { data: profile } = await sb.from('profiles').select('name').eq('id', user?.id).maybeSingle();
-    const authorName = profile?.name || user?.email || 'Sistema';
 
     await sb.from('ministry_members')
         .delete()
         .eq('ministry_id', ministryId)
         .eq('profile_id', memberId);
-
-    await insertAuditLog(ministryId, orgId, authorName, 'DELETE_MEMBER', memberName);
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {
@@ -207,28 +181,6 @@ export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId
             .eq('profile_id', targetProfile.id)
             .eq('ministry_id', ministryId);
     }
-
-    await insertAuditLog(ministryId, orgId, authorName, 'TOGGLE_ADMIN', `${email} - Admin: ${isAdmin}`);
-};
-
-export const fetchAuditLogs = async (ministryId: string, orgId: string): Promise<AuditLogEntry[]> => {
-    const sb = getSupabase();
-    if (!sb) return [];
-    const { data } = await sb.from('audit_logs')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-        
-    return (data || []).map((l: { id: string; created_at: string; action: string; details: string; author_name: string; organization_id: string }) => ({
-        id: l.id,
-        date: l.created_at,
-        action: l.action,
-        details: l.details,
-        author: l.author_name,
-        organizationId: l.organization_id
-    }));
 };
 
 export const fetchUserMinistryAccess = async (userId: string, ministryId: string, orgId?: string): Promise<{ functions: string[], role: string }> => {

@@ -22,7 +22,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     swapsQuery,
     repertoireQuery,
     conflictsQuery,
-    auditLogsQuery,
     rulesQuery,
     nextEventQuery,
     availabilityV2Query,
@@ -165,7 +164,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
               query.queryKey[0] === 'event_rules' || 
               query.queryKey[0] === 'settings' || 
               query.queryKey[0] === 'members' ||
-              query.queryKey[0] === 'audit' ||
               query.queryKey[0] === 'conflicts' ||
               query.queryKey[0] === 'assignments' ||
               query.queryKey[0] === 'rules' ||
@@ -249,10 +247,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           { event: '*', schema: 'public', table: 'repertoire_items', filter: `ministry_id=eq.${mid}` },
           () => { queryClient.invalidateQueries({ queryKey: keys.repertoire(mid, orgId) }); }
         )
-        .on('postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'audit_logs', filter: `ministry_id=eq.${mid}` },
-          () => { queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid, orgId) }); }
-        )
         .subscribe();
 
     return () => {
@@ -322,7 +316,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     repertoire: repertoireQuery.data || [],
     swapRequests: swapsQuery.data || [],
     globalConflicts: conflictsQuery.data || {}, 
-    auditLogs: auditLogsQuery.data || [], 
     eventRules, 
     nextEvent: nextEventQuery.data || null,
     ministryTitle,
@@ -348,7 +341,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       events, cleanRoles, rawRoles, expandedRoles, assignmentsQuery.data, 
       membersQuery.data, availabilityV2, availabilityByName, notesByName, 
       notificationsQuery.data, announcementsQuery.data, repertoireQuery.data, 
-      swapsQuery.data, conflictsQuery.data, auditLogsQuery.data, eventRules, 
+      swapsQuery.data, conflictsQuery.data, eventRules, 
       nextEventQuery.data, ministryTitle, availabilityWindow, integrations, 
       isLoadingQueries, isLoadingEvents, refreshData, queryClient, mid, orgId, isAdmin, currentUser
   ]);

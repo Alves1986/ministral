@@ -1,7 +1,6 @@
 import { getSupabase } from './client';
 import { Organization, MinistryDef, MinistrySettings } from '../../types';
 import { notifySuperAdmins } from './notifications';
-import { insertAuditLog } from './misc';
 
 export const fetchOrganizationDetails = async (orgId: string): Promise<Organization | null> => {
     const sb = getSupabase();
@@ -314,10 +313,4 @@ export const saveMinistrySettings = async (
             .eq('id', ministryId)
             .eq('organization_id', orgId);
     }
-
-    // Audit Log
-    const { data: { user } } = await sb.auth.getUser();
-    const { data: profile } = await sb.from('profiles').select('name').eq('id', user?.id).maybeSingle();
-    const authorName = profile?.name || user?.email || 'Sistema';
-    await insertAuditLog(ministryId, orgId, authorName, 'UPDATE_MINISTRY_SETTINGS', 'Configurações atualizadas');
 };

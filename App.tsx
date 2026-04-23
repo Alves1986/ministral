@@ -52,7 +52,7 @@ import { AlertsManager } from './components/AlertsManager';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
+import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -187,7 +187,7 @@ const InnerApp = () => {
     membersMap, publicMembers, availability, availabilityNotes, 
     availabilityByName, notesByName, // NEW Legacy Props
     notifications, announcements, 
-    repertoire, swapRequests, globalConflicts, auditLogs, roles, rawRoles, expandedRoles,
+    repertoire, swapRequests, globalConflicts, roles, rawRoles, expandedRoles,
     ministryTitle, availabilityWindow, integrations, eventRules, nextEvent, 
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
@@ -205,7 +205,6 @@ const InnerApp = () => {
   const [isEventsModalOpen, setEventsModalOpen] = useState(false);
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
-  const [isAuditModalOpen, setAuditModalOpen] = useState(false);
 
   useEffect(() => {
       const handlePwaReady = () => setShowInstallBanner(true);
@@ -570,9 +569,6 @@ const InnerApp = () => {
                     <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700">
                         <Briefcase size={16}/> <span>Funções</span>
                     </button>
-                    <button onClick={() => setAuditModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700">
-                        <HistoryIcon size={16}/> <span>Histórico</span>
-                    </button>
                     <ToolsMenu 
                         onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().join('/')})), schedule, organization?.logo_url)} 
                         onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().join('/')})), roles, schedule, organization?.logo_url)} 
@@ -602,7 +598,7 @@ const InnerApp = () => {
             roles={expandedRoles}
         />
     </div>
-  ), [currentMonth, ministryTitle, events, schedule, roles, organization, ministryId, orgId, publicMembers, currentTab, isAdmin, activeUser, expandedRoles, refreshData, queryClient, confirmAction, addToast, setRolesModalOpen, setAuditModalOpen]);
+  ), [currentMonth, ministryTitle, events, schedule, roles, organization, ministryId, orgId, publicMembers, currentTab, isAdmin, activeUser, expandedRoles, refreshData, queryClient, confirmAction, addToast, setRolesModalOpen]);
 
   const rankingScreen = useMemo(() => (
     <RankingScreen ministryId={ministryId} currentUser={activeUser!} />
@@ -1020,7 +1016,6 @@ const InnerApp = () => {
             refreshData(); 
         }} currentMonth={currentMonth} />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={rawRoles} ministryName={ministryTitle} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, r); refreshData(); }} />
-        <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
         
         {eventDetailsModal.isOpen && <EventDetailsModal isOpen={eventDetailsModal.isOpen} onClose={() => setEventDetailsModal({ isOpen: false, event: null })} event={eventDetailsModal.event} schedule={schedule} roles={rawRoles} allMembers={publicMembers} onSave={async (oldIso, newTitle, newTime, apply) => { const newIso = oldIso.split('T')[0] + 'T' + newTime; await Supabase.updateMinistryEvent(ministryId, orgId!, oldIso, newTitle, newIso, apply); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} onSwapRequest={async (r, i, t) => { 
             try {

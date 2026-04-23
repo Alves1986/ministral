@@ -97,9 +97,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           return;
       }
       if(date) localStorage.setItem('repertoire_draft_date', date);
-      const url = getLoginUrl(ministryId);
+      const url = getLoginUrl();
       if (url) window.location.href = url;
-      else addToast("Client ID não configurado! Vá em Configurações > Integração Spotify e salve o ID.", "error");
+      else addToast("A chave do Spotify não está configurada no servidor (.env).", "error");
   };
 
   const handleLoadPlaylists = async () => {
@@ -120,7 +120,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const handleSpotifySearch = async () => {
       if (!spotifyQuery.trim() || !ministryId) return;
       setSpotifyLoading(true);
-      const results = await searchSpotifyTracks(spotifyQuery, ministryId);
+      const results = await searchSpotifyTracks(spotifyQuery);
       setSpotifyResults(results);
       setSpotifyLoading(false);
       if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");

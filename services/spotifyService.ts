@@ -19,20 +19,18 @@ interface SpotifyPlaylist {
 let appToken: string | null = null;
 let tokenExpiry: number = 0;
 
-const getCredentials = (ministryId: string) => {
-    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
-    let clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
-
+const getCredentials = () => {
+    let clientId = "";
     try {
         // @ts-ignore
-        if (!clientId && import.meta.env) clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
+        if (import.meta.env) clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
     } catch(e) {}
 
     return { clientId };
 };
 
 // --- 1. AUTENTICAÇÃO DO APLICATIVO (Client Credentials) ---
-export const getClientCredentialsToken = async (ministryId: string): Promise<string | null> => {
+export const getClientCredentialsToken = async (): Promise<string | null> => {
     if (appToken && Date.now() < tokenExpiry) return appToken;
 
     try {
@@ -56,8 +54,8 @@ export const getClientCredentialsToken = async (ministryId: string): Promise<str
 };
 
 // --- 2. AUTENTICAÇÃO DO USUÁRIO (Implicit Grant) ---
-export const getLoginUrl = (ministryId: string) => {
-    const { clientId } = getCredentials(ministryId);
+export const getLoginUrl = () => {
+    const { clientId } = getCredentials();
     if (!clientId) return null;
 
     const redirectUri = window.location.origin; // Redireciona para a própria página
@@ -153,9 +151,9 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
     } catch (e) { return []; }
 };
 
-export const searchSpotifyTracks = async (query: string, ministryId: string): Promise<SpotifyTrack[]> => {
+export const searchSpotifyTracks = async (query: string): Promise<SpotifyTrack[]> => {
     let token = getUserToken();
-    if (!token) token = await getClientCredentialsToken(ministryId);
+    if (!token) token = await getClientCredentialsToken();
 
     if (!token) return [];
 

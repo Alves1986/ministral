@@ -1,6 +1,5 @@
 import { getSupabase } from './client';
 import { notifySuperAdmins } from './notifications';
-import { insertAuditLog } from './misc';
 
 export const createEventRule = async (orgId: string, ruleData: any) => {
     const sb = getSupabase();
@@ -18,12 +17,6 @@ export const createEventRule = async (orgId: string, ruleData: any) => {
     }).select();
     if (error) throw error;
 
-    // Audit Log
-    const { data: { user } } = await sb.auth.getUser();
-    const { data: profile } = await sb.from('profiles').select('name').eq('id', user?.id).maybeSingle();
-    const authorName = profile?.name || user?.email || 'Sistema';
-    await insertAuditLog(ruleData.ministryId, orgId, authorName, 'CREATE_EVENT_RULE', JSON.stringify(ruleData));
-
     // Notify super admins
     await notifySuperAdmins(
         'Nova Regra de Agenda',
@@ -40,16 +33,9 @@ export const deleteEventRule = async (orgId: string, ruleId: string) => {
     if (!sb) return;
 
     // Obter dados da regra antes de deletar para o log
-    const { data: rule } = await sb.from('event_rules').select('ministry_id').eq('id', ruleId).single();
+    const { data: rule } = await sb.from('event_rules').select('ministry_id, title').eq('id', ruleId).single();
 
     await sb.from('event_rules').update({ active: false }).eq('id', ruleId).eq('organization_id', orgId);
-
-    if (rule) {
-        const { data: { user } } = await sb.auth.getUser();
-        const { data: profile } = await sb.from('profiles').select('name').eq('id', user?.id).maybeSingle();
-        const authorName = profile?.name || user?.email || 'Sistema';
-        await insertAuditLog(rule.ministry_id, orgId, authorName, 'DELETE_EVENT_RULE', ruleId);
-    }
 };
 
 export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
@@ -127,20 +113,4 @@ export const updateMinistryEvent = async (
    .eq('organization_id', orgId);
  
  if (updateError) throw updateError;
- 
- // Audit log
- try {
-   const { data: { user } } = await sb.auth.getUser();
-   const { data: profile } = await sb.from('profiles')
-     .select('name').eq('id', user?.id).maybeSingle();
-   const authorName = profile?.name || user?.email || 'Sistema';
-   await insertAuditLog(
-     ministryId, orgId, authorName,
-     'UPDATE_EVENT_RULE',
-     JSON.stringify({ oldIso, newTitle, newTime, applyToAll })
-   );
- } catch (e) {
-   // Audit log nao deve bloquear a operacao principal
-   console.warn('[updateMinistryEvent] Audit log falhou:', e);
- }
 };

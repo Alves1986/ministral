@@ -1,5 +1,4 @@
 import { getSupabase } from './client';
-import { insertAuditLog } from './misc';
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string, isAdmin: boolean = false) => {
     const sb = getSupabase();
@@ -366,13 +365,6 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
         } else {
             throw error;
         }
-    }
-
-    // Audit Log (Opcional, não deve bloquear se falhar)
-    try {
-        await insertAuditLog(ministryId, orgId, authorName, 'CREATE_ANNOUNCEMENT', announcement.title);
-    } catch (e) {
-        console.warn("[Notifications] Failed to log audit:", e);
     }
 };
 

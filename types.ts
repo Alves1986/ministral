@@ -77,15 +77,6 @@ export interface MinistrySettings {
     quickAccessItems?: string[];
 }
 
-export interface AuditLogEntry {
-  id?: string;
-  date: string;
-  action: string;
-  details: string;
-  author: string;
-  organizationId?: string;
-}
-
 export interface AppNotification {
   id: string;
   type: 'info' | 'success' | 'warning' | 'alert';

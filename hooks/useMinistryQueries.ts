@@ -15,7 +15,6 @@ import {
   SwapRequest, 
   RepertoireItem, 
   GlobalConflictMap, 
-  AuditLogEntry,
   User
 } from '../types';
 import { EventRule } from '../domain/events/types';
@@ -33,7 +32,6 @@ export const keys = {
   repertoire: (mid: string, oid: string) => ['repertoire', mid, oid],
   globalConflicts: (mid: string, month: string, oid: string) => ['conflicts', mid, month, oid],
   ranking: (mid: string, oid: string) => ['ranking', mid, oid],
-  auditLogs: (mid: string, oid: string) => ['audit', mid, oid],
   nextEvent: (mid: string, oid: string) => ['nextEvent', mid, oid],
   availabilityV2: (mid: string, oid: string) => ['availabilityV2', mid, oid]
 };
@@ -151,15 +149,6 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     refetchOnWindowFocus: false
   });
 
-  // 10. Audit Logs
-  const auditLogsQuery: UseQueryResult<AuditLogEntry[]> = useQuery({
-    queryKey: keys.auditLogs(ministryId, orgId),
-    queryFn: () => Supabase.fetchAuditLogs(ministryId, orgId),
-    enabled: isQueryEnabled && user?.access_role === 'admin',
-    staleTime: STALE_SLOW,
-    gcTime: GC_TIME
-  });
-
   // 11. Rules (New) - Agora usa a camada de infra correta
   const rulesQuery: UseQueryResult<EventRule[]> = useQuery({
     queryKey: keys.rules(ministryId, orgId),
@@ -201,7 +190,6 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     swapsQuery,
     repertoireQuery,
     conflictsQuery,
-    auditLogsQuery,
     rulesQuery,
     nextEventQuery,
     availabilityV2Query,

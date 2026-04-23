@@ -54,12 +54,6 @@ export const SettingsScreen: React.FC<Props> = ({
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
-  
-  const [spotifyId, setSpotifyId] = useState(ministryConfig?.spotifyClientId || "");
-  const [spotifySecret, setSpotifySecret] = useState(ministryConfig?.spotifyClientSecret || "");
-  const [youtubeKey, setYoutubeKey] = useState(ministryConfig?.youtubeApiKey || "");
-  const [showSpotifySecret, setShowSpotifySecret] = useState(false);
-  const [showYoutubeKey, setShowYoutubeKey] = useState(false);
 
   const [logoPreview, setLogoPreview] = useState(organization?.logo_url || getSystemLogo(themeMode === 'dark' ? 'dark' : 'light'));
   const [logoLoading, setLogoLoading] = useState(false);
@@ -70,14 +64,6 @@ export const SettingsScreen: React.FC<Props> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const { addToast } = useToast();
-
-  useEffect(() => {
-    if (ministryConfig) {
-      setSpotifyId(ministryConfig.spotifyClientId || "");
-      setSpotifySecret(ministryConfig.spotifyClientSecret || "");
-      setYoutubeKey(ministryConfig.youtubeApiKey || "");
-    }
-  }, [ministryConfig]);
 
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
@@ -409,17 +395,12 @@ export const SettingsScreen: React.FC<Props> = ({
         </div>
       </div>
 
-      {isAdmin && onSaveIntegrations && (
+      {isAdmin && isEnterprise && onSaveOrgLogo && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Zap size={16}/> Integrações</h3>
+        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><ImageIcon size={16}/> Logo da Organização</h3>
         
         <div className="space-y-6">
-            {isEnterprise && onSaveOrgLogo && (
               <div className="space-y-4">
-                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                  <ImageIcon size={14}/> Logo da Igreja
-                </h4>
-
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border-2 border-dashed border-zinc-200 dark:border-zinc-700 flex items-center justify-center overflow-hidden">
                     <img 
@@ -488,95 +469,6 @@ export const SettingsScreen: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Spotify API</label>
-                    <div className="space-y-3">
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-400">Spotify Client ID</span>
-                            <input 
-                                type="text" 
-                                value={spotifyId} 
-                                onChange={(e) => setSpotifyId(e.target.value)} 
-                                placeholder="Obtenha em developer.spotify.com"
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" 
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-400">Spotify Client Secret</span>
-                            <div className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <input 
-                                        type={showSpotifySecret ? "text" : "password"} 
-                                        value={spotifySecret} 
-                                        onChange={(e) => setSpotifySecret(e.target.value)} 
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" 
-                                    />
-                                    <button 
-                                        onClick={() => setShowSpotifySecret(!showSpotifySecret)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-                                    >
-                                        {showSpotifySecret ? <Lock size={14} /> : <Unlock size={14} />}
-                                    </button>
-                                </div>
-                                <button 
-                                    onClick={async () => {
-                                        try {
-                                            await onSaveIntegrations?.(spotifyId, spotifySecret);
-                                            addToast('Spotify salvo com sucesso!', 'success');
-                                        } catch(e) {
-                                            addToast('Erro ao salvar Spotify. Tente novamente.', 'error');
-                                        }
-                                    }} 
-                                    className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs"
-                                >
-                                    <Save size={16}/> Salvar Spotify
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="md:col-span-2 pt-4 border-t border-zinc-100 dark:border-zinc-700">
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">YouTube API</label>
-                    <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-zinc-400">YouTube API Key</span>
-                        <div className="flex gap-2">
-                            <div className="relative flex-1">
-                                <input 
-                                    type={showYoutubeKey ? "text" : "password"} 
-                                    value={youtubeKey} 
-                                    onChange={(e) => setYoutubeKey(e.target.value)} 
-                                    placeholder="Obtenha em console.developers.google.com"
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" 
-                                />
-                                <button 
-                                    onClick={() => setShowYoutubeKey(!showYoutubeKey)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-                                >
-                                    {showYoutubeKey ? <Lock size={14} /> : <Unlock size={14} />}
-                                </button>
-                            </div>
-                            <button 
-                                onClick={async () => {
-                                    try {
-                                        await onSaveIntegrations?.(undefined, undefined, youtubeKey);
-                                        addToast('YouTube salvo com sucesso!', 'success');
-                                    } catch(e) {
-                                        addToast('Erro ao salvar YouTube. Tente novamente.', 'error');
-                                    }
-                                }} 
-                                className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs"
-                            >
-                                <Save size={16}/> Salvar YouTube
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
         </div>
       </div>
       )}
