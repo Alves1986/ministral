@@ -36,7 +36,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [selectedMemberId, setSelectedMemberId] = useState<string>(""); 
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
-  const justSavedRef = React.useRef(false);
   
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -88,8 +87,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
   // Load Data on Mount or Change (Sync with Backend Truth)
   useEffect(() => {
     if (!selectedMemberId) return;
+
+    // Se o usuário estiver ativamente editando (dirty), salvando (saving)
+    // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
+    // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
+    // com os dados mais recentes antes de repaginar a página pra Idle.
     if (saveState !== 'idle') return;
-    if (justSavedRef.current) return;
 
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
@@ -105,10 +108,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (saveState !== 'saved') return;
     
-    // Agora que forçamos a invalidação no App.tsx diretamente, podemos voltar a Idade para que ele sincronize rápido
     const timeout = setTimeout(() => {
       setSaveState('idle');
-    }, 1000);
+    }, 3000);
     
     return () => clearTimeout(timeout);
   }, [saveState]);
@@ -223,8 +225,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
-          justSavedRef.current = true;
-          setTimeout(() => { justSavedRef.current = false; }, 3000);
           
       } catch (error: unknown) {
           console.error(error);

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { OPENROUTER_MODELS, DEFAULT_MODEL, runAI, AI_TASKS } from '../services/aiOrchestrator';
+import { runAI, AI_TASKS, OPENROUTER_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
 
 interface Props {
   ministryId: string;

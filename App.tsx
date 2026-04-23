@@ -192,12 +192,6 @@ const InnerApp = () => {
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
   } = useMinistryData(ministryId, currentMonth, activeUser);
-  
-  useEffect(() => {
-    if (integrations.anthropic_api_key) {
-      (window as any).__ministralConfig = { anthropicKey: integrations.anthropic_api_key };
-    }
-  }, [integrations.anthropic_api_key]);
 
   const onlineUsers = useOnlinePresence(activeUser?.id, activeUser?.name);
 
@@ -461,7 +455,8 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-
+            // O cache será atualizado automaticamente pelo realtime channel em useMinistryData.ts
+            // Remover `refreshData()` previne que 15 queries rodem simultaneamente e causem lock no navegador.
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 
@@ -640,9 +635,9 @@ const InnerApp = () => {
             addToast("Abas atualizadas com sucesso", "success");
             refreshData();
         }} 
-        onSaveIntegrations={async (sid, ssec, ykey, qitems, akey) => {
+        onSaveIntegrations={async (sid, ssec, ykey, qitems) => {
             try {
-                await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, undefined, undefined, sid, ssec, ykey, undefined, undefined, qitems, akey);
+                await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, undefined, undefined, sid, ssec, ykey, undefined, undefined, qitems);
                 addToast("Configurações atualizadas com sucesso", "success");
                 refreshData();
             } catch(e) {

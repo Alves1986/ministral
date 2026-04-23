@@ -76,6 +76,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
           const plainText = tempDiv.textContent || tempDiv.innerText || "";
           
           const refined = await runAI(AI_TASKS.TEXT_REWRITE, getAIContext(), { text: plainText, tone });
+          // Parsing robusto — aceita { html: "..." }, { text: "..." } ou string direta:
           const newHtml = typeof refined === 'string'
             ? refined
             : (refined?.html || refined?.text || JSON.stringify(refined));

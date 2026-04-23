@@ -155,8 +155,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       youtubeApiKey: settingsQuery.data?.youtubeApiKey,
       qrCodeUrl: settingsQuery.data?.qrCodeUrl,
       socialLinkUrl: settingsQuery.data?.socialLinkUrl,
-      quickAccessItems: settingsQuery.data?.quickAccessItems,
-      anthropic_api_key: settingsQuery.data?.anthropic_api_key
+      quickAccessItems: settingsQuery.data?.quickAccessItems
   }), [settingsQuery.data]);
 
   const refreshData = useCallback(async () => {
@@ -208,7 +207,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             { event: '*', schema: 'public', table: 'member_availability', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.availabilityV2(mid, orgId) });
-                queryClient.invalidateQueries({ queryKey: keys.availability(mid, orgId) });
             }
         )
         .on(
@@ -254,14 +252,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         .on('postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'audit_logs', filter: `ministry_id=eq.${mid}` },
           () => { queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid, orgId) }); }
-        )
-        .on(
-            'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'organization_ministries', filter: `id=eq.${mid}` },
-            () => {
-                // Invalida settings quando availability_start ou availability_end são atualizados
-                queryClient.invalidateQueries({ queryKey: keys.settings(mid, orgId) });
-            }
         )
         .subscribe();
 
@@ -344,7 +334,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     setSchedule: () => refreshData(),
     setAttendance: () => refreshData(),
     setPublicMembers: () => refreshData(),
-    setAvailability: (_: any) => {},
+    setAvailability: () => refreshData(),
     setNotifications: (updated: any, shouldRefresh = true) => {
         if (Array.isArray(updated)) {
             queryClient.setQueriesData({ queryKey: ['notifications'] }, updated);

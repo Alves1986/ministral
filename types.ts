@@ -75,7 +75,6 @@ export interface MinistrySettings {
     qrCodeUrl?:      string;
     socialLinkUrl?:  string;
     quickAccessItems?: string[];
-    anthropic_api_key?: string;
 }
 
 export interface AuditLogEntry {

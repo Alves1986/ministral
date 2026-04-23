@@ -2,7 +2,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { generateScheduleWithAI, runAI } from "./services/aiOrchestrator.ts";
+import { generateScheduleWithAI } from "./services/aiOrchestrator.ts";
+import { generateAISchedule } from "./services/aiScheduleService.ts";
 import { polishAnnouncementAI } from "./services/aiService.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,24 +15,23 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Check AI Key on startup
-  const aiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  if (!aiKey) {
-    console.warn("⚠️ GEMINI_API_KEY não encontrada no servidor!");
-  } else {
-    console.log("✅ GEMINI_API_KEY configurada no servidor.");
-  }
-
   // API routes FIRST
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", aiConfigured: !!aiKey });
+    res.json({ status: "ok" });
   });
 
   app.post("/api/ai/schedule", async (req, res) => {
     try {
       const { occurrences, roles, members, availability, existingAssignments, rules, model } = req.body;
       
-      const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules, model });
+      // If a specific model is requested, use the orchestrator
+      if (model) {
+        const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules, model });
+        return res.json(result);
+      }
+
+      // Otherwise use the standard AI schedule service (Gemini first)
+      const result = await generateAISchedule({ occurrences, roles, members, availability, existingAssignments });
       res.json(result);
     } catch (error: any) {
       console.error("Error generating schedule:", error);
@@ -47,17 +47,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error polishing text:", error);
       res.status(500).json({ error: error.message || "Failed to polish text" });
-    }
-  });
-
-  app.post("/api/ai/run", async (req, res) => {
-    try {
-      const { taskType, context, payload } = req.body;
-      const result = await runAI(taskType, context, payload);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error executing AI task:", error);
-      res.status(500).json({ error: error.message || "Internal AI Error" });
     }
   });
 
