@@ -155,7 +155,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       youtubeApiKey: settingsQuery.data?.youtubeApiKey,
       qrCodeUrl: settingsQuery.data?.qrCodeUrl,
       socialLinkUrl: settingsQuery.data?.socialLinkUrl,
-      quickAccessItems: settingsQuery.data?.quickAccessItems
+      quickAccessItems: settingsQuery.data?.quickAccessItems,
+      anthropic_api_key: settingsQuery.data?.anthropic_api_key
   }), [settingsQuery.data]);
 
   const refreshData = useCallback(async () => {
@@ -335,7 +336,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     setSchedule: () => refreshData(),
     setAttendance: () => refreshData(),
     setPublicMembers: () => refreshData(),
-    setAvailability: () => refreshData(),
+    setAvailability: (_: any) => {},
     setNotifications: (updated: any, shouldRefresh = true) => {
         if (Array.isArray(updated)) {
             queryClient.setQueriesData({ queryKey: ['notifications'] }, updated);

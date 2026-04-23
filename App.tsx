@@ -192,6 +192,12 @@ const InnerApp = () => {
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
   } = useMinistryData(ministryId, currentMonth, activeUser);
+  
+  useEffect(() => {
+    if (integrations.anthropic_api_key) {
+      (window as any).__ministralConfig = { anthropicKey: integrations.anthropic_api_key };
+    }
+  }, [integrations.anthropic_api_key]);
 
   const onlineUsers = useOnlinePresence(activeUser?.id, activeUser?.name);
 
@@ -455,8 +461,7 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            // Invalidação DIRETA para renovar a tela de imediato contornando latência do Realtime
-            await queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId!] });
+
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 
@@ -635,9 +640,9 @@ const InnerApp = () => {
             addToast("Abas atualizadas com sucesso", "success");
             refreshData();
         }} 
-        onSaveIntegrations={async (sid, ssec, ykey, qitems) => {
+        onSaveIntegrations={async (sid, ssec, ykey, qitems, akey) => {
             try {
-                await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, undefined, undefined, sid, ssec, ykey, undefined, undefined, qitems);
+                await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, undefined, undefined, sid, ssec, ykey, undefined, undefined, qitems, akey);
                 addToast("Configurações atualizadas com sucesso", "success");
                 refreshData();
             } catch(e) {

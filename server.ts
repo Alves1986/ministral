@@ -3,7 +3,6 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateScheduleWithAI, runAI } from "./services/aiOrchestrator.ts";
-import { generateAISchedule } from "./services/aiScheduleService.ts";
 import { polishAnnouncementAI } from "./services/aiService.ts";
 
 const __filename = fileURLToPath(import.meta.url);

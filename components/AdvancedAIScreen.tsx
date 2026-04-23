@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { runAI, AI_TASKS } from '../services/aiOrchestrator';
+import { OPENROUTER_MODELS, DEFAULT_MODEL, runAI, AI_TASKS } from '../services/aiOrchestrator';
 
 interface Props {
   ministryId: string;
@@ -57,7 +57,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<any[]>([]);
-  const [selectedModel, setSelectedModel] = useState('nvidia/nemotron-3-super-120b-a12b:free');
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const { addToast } = useToast();
 
   const getAIContext = () => ({
@@ -95,11 +95,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const [preventiveAlerts, setPreventiveAlerts] = useState<string>('');
   const [predictiveLoading, setPredictiveLoading] = useState(false);
 
-  const AI_MODELS = [
-    { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Geração', description: 'Otimizado para gerar escalas estruturadas e textos longos.' },
-    { id: 'openai/gpt-oss-120b:free', name: 'Lógica', description: 'Focado em decisões complexas, análise e raciocínio.' },
-    { id: 'z-ai/glm-4.5-air:free', name: 'Velocidade', description: 'Resposta ultra-rápida para tarefas de escrita e avisos.' }
-  ];
+  const AI_MODELS = OPENROUTER_MODELS;
 
   useEffect(() => {
     const fetchRules = async () => {
@@ -189,8 +185,8 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       };
   
       const [healthParsed, memberAnalysis] = await Promise.all([
-        runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload),
-        runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload)
+        runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel),
+        runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel)
       ]);
 
       setHealthInsights({
@@ -257,7 +253,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         funcoes: JSON.stringify(escalados)
       };
   
-      const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload);
+      const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload, selectedModel);
       setMessages(result);
     } catch (e: any) {
       addToast('Erro ao gerar mensagens: ' + e.message, 'error');
@@ -275,7 +271,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         availability
       };
   
-      const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload);
+      const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload, selectedModel);
       setExplanation(text);
     } catch (e: any) {
       addToast('Erro ao gerar explicacao: ' + e.message, 'error');
@@ -288,7 +284,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     setPredictiveLoading(true);
     try {
       const payload = { schedule, availability, members, events, roles };
-      const text = await runAI(AI_TASKS.SCALE_SUGGESTION, getAIContext(), payload);
+      const text = await runAI(AI_TASKS.SCALE_SUGGESTION, getAIContext(), payload, selectedModel);
       setScaleSuggestions(text);
     } catch (e: any) {
       addToast('Erro ao obter sugestões: ' + e.message, 'error');
@@ -301,7 +297,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     setPredictiveLoading(true);
     try {
       const payload = { schedule, availability, members, events, roles };
-      const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload);
+      const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload, selectedModel);
       setPreventiveAlerts(text);
     } catch (e: any) {
       addToast('Erro ao obter alertas: ' + e.message, 'error');

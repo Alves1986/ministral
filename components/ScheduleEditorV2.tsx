@@ -32,7 +32,7 @@ import {
     User
 } from 'lucide-react';
 import { useToast } from './Toast';
-import { generateAISchedule } from '../services/aiScheduleService';
+import { generateScheduleWithAI } from '../services/aiOrchestrator';
 
 // --- COMPONENTES AUXILIARES ---
 
@@ -612,7 +612,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             };
 
             const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
-            const aiAssignments = await generateAISchedule(input, savedModel || undefined);
+            const aiAssignments = await generateScheduleWithAI(input, savedModel || undefined);
             
             // Filtrar apenas o que NÃO está preenchido
             const newAssignments = aiAssignments.filter((ai: any) => {
@@ -634,7 +634,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             setShowReviewAI(true);
         } catch (error) {
             console.error(error);
-            addToast('Erro ao gerar escala com IA', 'error');
+            const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+            addToast(`Erro ao gerar escala com IA: ${msg}`, 'error');
         } finally {
             setIsGeneratingAI(false);
         }

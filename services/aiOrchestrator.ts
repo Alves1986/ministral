@@ -1,31 +1,41 @@
-import { GoogleGenAI, Type } from "@google/genai";
+// services/aiOrchestrator.ts
+// ─── OpenRouter API — sem dependências externas de IA ───────────────────────
 
-function getAIClient() {
-  // O Backend deve SEMPRE usar a GEMINI_API_KEY do ambiente (segura)
-  let apiKey = '';
-  
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+function getApiKey(): string {
+  // Browser (Vite)
+  if (typeof window !== 'undefined') {
+    return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
+  }
+  // Node / SSR
   if (typeof process !== 'undefined' && process.env) {
-    apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+    return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
   }
-
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not found in environment. Please configure it in settings.");
-  }
-  
-  return new GoogleGenAI({ apiKey });
+  return '';
 }
 
 export enum AI_TASKS {
-  MINISTRY_HEALTH = 'MINISTRY_HEALTH',
-  SCALE_ANALYSIS = 'SCALE_ANALYSIS',
-  GENERATE_NOTICE = 'GENERATE_NOTICE',
+  MINISTRY_HEALTH  = 'MINISTRY_HEALTH',
+  SCALE_ANALYSIS   = 'SCALE_ANALYSIS',
+  GENERATE_NOTICE  = 'GENERATE_NOTICE',
   EXPLAIN_DECISION = 'EXPLAIN_DECISION',
-  TEXT_REWRITE = 'TEXT_REWRITE',
+  TEXT_REWRITE     = 'TEXT_REWRITE',
   SCALE_SUGGESTION = 'SCALE_SUGGESTION',
-  MEMBER_ANALYSIS = 'MEMBER_ANALYSIS',
+  MEMBER_ANALYSIS  = 'MEMBER_ANALYSIS',
   PREVENTIVE_ALERT = 'PREVENTIVE_ALERT',
   SCALE_GENERATION = 'SCALE_GENERATION'
 }
+
+// Modelos disponíveis — usados pelo AdvancedAIScreen e aqui como fallback
+export const OPENROUTER_MODELS = [
+  { id: 'z-ai/glm-4.5-air:free',          name: 'GLM-4.5 Air (Velocidade)',        description: 'Resposta ultra-rápida para tarefas de escrita e avisos.' },
+  { id: 'openai/gpt-oss-120b:free',        name: 'GPT OSS 120B (Lógica)',           description: 'Focado em decisões complexas, análise e raciocínio.' },
+  { id: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', name: 'Nemotron Embed VL (Análise)', description: 'Otimizado para análise de dados e embeddings.' },
+  { id: 'minimax/minimax-m2.5:free',       name: 'MiniMax M2.5 (Equilibrado)',      description: 'Modelo versátil e confiável para uso geral.' },
+];
+
+export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id; // glm-4.5-air:free
 
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
@@ -43,6 +53,14 @@ interface AIContext {
   history?: unknown;
   current_event?: unknown;
 }
+
+// ─── Tasks que precisam retornar JSON puro ───────────────────────────────────
+const JSON_TASKS = new Set([
+  AI_TASKS.MINISTRY_HEALTH,
+  AI_TASKS.GENERATE_NOTICE,
+  AI_TASKS.SCALE_GENERATION,
+  AI_TASKS.TEXT_REWRITE,
+]);
 
 const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.MINISTRY_HEALTH]: (data) => `
@@ -66,7 +84,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     DADOS: ${JSON.stringify(data)}
 
     Retorne análise clara + melhorias.
-    
     PADRÃO DE RESPOSTA:
     - Título
     - Pontos principais
@@ -111,8 +128,8 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.TEXT_REWRITE]: (data) => {
     const styles: Record<string, string> = {
       professional: "Reescreva o texto abaixo de forma formal, profissional e respeitosa.",
-      exciting: "Reescreva o texto abaixo de forma animada, motivadora e envolvente.",
-      urgent: "Reescreva o texto abaixo de forma urgente, direta e com senso de prioridade."
+      exciting:     "Reescreva o texto abaixo de forma animada, motivadora e envolvente.",
+      urgent:       "Reescreva o texto abaixo de forma urgente, direta e com senso de prioridade."
     };
     return `
       ${styles[data.tone as string] || styles.professional}
@@ -183,57 +200,88 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - Regras de Conflito: ${JSON.stringify(data.rules)}
     
     REGRAS DE RESPOSTA:
-    Retorne APENAS um array JSON. Não inclua texto explicativo.
+    Retorne APENAS um array JSON. Não inclua texto explicativo, markdown ou blocos de código.
     ESTRUTURA DOS ITENS:
     { "event_rule_id": "ruleId da ocorrência", "event_date": "YYYY-MM-DD da ocorrência", "role": "função escalada", "member_id": "id do membro" }
   `
 };
 
-export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any): Promise<any> {
-    // Se estiver rodando no navegador, redireciona o processamento para o backend (onde está a API Key segura)
-    if (typeof window !== 'undefined') {
-        try {
-            const res = await fetch('/api/ai/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskType, context, payload })
-            });
+// ─── Core fetch ──────────────────────────────────────────────────────────────
+async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('VITE_OPENROUTER_API_KEY não configurada.');
 
-            if (!res.ok) {
-                let errMsg = `Server returned ${res.status}`;
-                try { 
-                    const errRes = await res.json(); 
-                    errMsg = errRes.error || errMsg; 
-                } catch(e) {}
-                throw new Error(errMsg);
-            }
-            return await res.json();
-        } catch (err: any) {
-            console.error('[runAI] Browser fetch error:', err);
-            throw new Error(`Conexão com IA falhou: ${err.message}`);
-        }
+  const isJson = JSON_TASKS.has(taskType);
+
+  const body: any = {
+    model,
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'system',
+        content: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.' +
+          (isJson ? ' Responda SOMENTE com JSON válido, sem markdown, sem blocos de código, sem texto adicional.' : '')
+      },
+      { role: 'user', content: prompt }
+    ],
+  };
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
+      'X-Title': 'Ministral',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `OpenRouter error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  if (!content) throw new Error('OpenRouter retornou resposta vazia.');
+  return content;
+}
+
+// ─── Trylist — tenta modelos em sequência até um funcionar ──────────────────
+async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
+  const order = preferredModel
+    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
+    : OPENROUTER_MODELS.map(m => m.id);
+
+  let lastErr: Error = new Error('Todos os modelos falharam.');
+  for (const model of order) {
+    try {
+      return await callOpenRouter(prompt, taskType, model);
+    } catch (err: any) {
+      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
+      lastErr = err;
     }
+  }
+  throw lastErr;
+}
 
-    let actualContext = context as AIContext;
-    let actualPayload = payload;
+// ─── Public API ──────────────────────────────────────────────────────────────
+export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
+  let actualContext = context as AIContext;
+  let actualPayload = payload;
 
-    if (!payload && context && !actualContext.organization_name) {
-        actualPayload = context;
-        actualContext = {
-            organization_name: "Geral",
-            ministry_name: "Geral",
-            total_members: 0,
-            active_members: 0,
-            roles: []
-        };
-    }
+  if (!payload && context && !(context as AIContext).organization_name) {
+    actualPayload = context;
+    actualContext = { organization_name: 'Geral', ministry_name: 'Geral', total_members: 0, active_members: 0, roles: [] };
+  }
 
-    if (!actualPayload) throw new Error("Payload is required for AI task");
+  if (!actualPayload) throw new Error('Payload is required for AI task');
 
-    const promptGenerator = PROMPTS[taskType];
-    if (!promptGenerator) throw new Error(`Task type ${taskType} not implemented.`);
+  const promptGenerator = PROMPTS[taskType];
+  if (!promptGenerator) throw new Error(`Task type ${taskType} not implemented.`);
 
-    const fullPrompt = `
+  const fullPrompt = `
     ${GLOBAL_PERSONALITY}
     
     CONTEXTO DA ORGANIZAÇÃO:
@@ -247,98 +295,53 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     ${promptGenerator(actualPayload)}
   `;
 
-    try {
-        const needsJson = [
-            AI_TASKS.MINISTRY_HEALTH,
-            AI_TASKS.GENERATE_NOTICE,
-            AI_TASKS.SCALE_GENERATION,
-            AI_TASKS.TEXT_REWRITE
-        ].includes(taskType);
-
-        const config: any = {
-            systemInstruction: "Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.",
-        };
-        
-        if (needsJson) {
-            config.responseMimeType = "application/json";
-            if (taskType === AI_TASKS.SCALE_GENERATION) {
-                config.responseSchema = {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            event_rule_id: { type: Type.STRING },
-                            event_date: { type: Type.STRING },
-                            role: { type: Type.STRING },
-                            member_id: { type: Type.STRING }
-                        },
-                        required: ["event_rule_id", "event_date", "role", "member_id"]
-                    }
-                };
-            }
-        }
-
-        const ai = getAIClient();
-        const result = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
-            contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-            config
-        });
-
-        const content = result.text;
-        if (!content) {
-            throw new Error("AI returned empty content");
-        }
-        return parseAIResponse(content, taskType);
-    } catch (error: any) {
-        console.error(`[AIOrchestrator] Gemini failed for task ${taskType}:`, error);
-        throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
-    }
+  try {
+    const content = await callWithFallback(fullPrompt, taskType, preferredModel);
+    return parseAIResponse(content, taskType);
+  } catch (error: any) {
+    console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
+    throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
+  }
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
-    try {
-        const cleaned = content.trim();
-        
-        // Tenta extrair JSON de blocos de código se Gemini envolver em markdown
-        const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-        const jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
-        
-        if (jsonStr.startsWith('{') || jsonStr.startsWith('[')) {
-            const parsed = JSON.parse(jsonStr);
-            
-            // Especial para SCALE_GENERATION: garantir que é um array
-            if (taskType === AI_TASKS.SCALE_GENERATION) {
-                if (Array.isArray(parsed)) return parsed;
-                if (parsed.assignments && Array.isArray(parsed.assignments)) return parsed.assignments;
-                if (parsed.escala && Array.isArray(parsed.escala)) return parsed.escala;
-            }
+  try {
+    const cleaned = content.trim();
+    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
 
-            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-                if (taskType === AI_TASKS.GENERATE_NOTICE) {
-                    if (parsed.message) return [{ name: "Grupo do Ministério", role: "Aviso Geral", message: parsed.message }];
-                }
-                if ('messages' in parsed) return parsed.messages;
-            }
-            return parsed;
+    if (jsonStr.startsWith('{') || jsonStr.startsWith('[')) {
+      const parsed = JSON.parse(jsonStr);
+
+      if (taskType === AI_TASKS.SCALE_GENERATION) {
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed.assignments && Array.isArray(parsed.assignments)) return parsed.assignments;
+        if (parsed.escala && Array.isArray(parsed.escala)) return parsed.escala;
+      }
+
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        if (taskType === AI_TASKS.GENERATE_NOTICE) {
+          if (parsed.message) return [{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: parsed.message }];
         }
-        
-        return cleaned;
-    } catch (error) {
-        console.warn("[AIOrchestrator] Failed to parse JSON response:", error);
-        return content;
+        if ('messages' in parsed) return parsed.messages;
+      }
+      return parsed;
     }
+
+    return cleaned;
+  } catch {
+    return content;
+  }
 }
 
-export async function generateScheduleWithAI(data: any): Promise<any[]> {
-    const context: AIContext = {
-        organization_name: "Geral",
-        ministry_name: "Geral",
-        total_members: data.members?.length || 0,
-        active_members: data.members?.length || 0,
-        roles: data.roles || []
-    };
-
-    const result = await runAI(AI_TASKS.SCALE_GENERATION, context, data);
-    return Array.isArray(result) ? result : [];
+export async function generateScheduleWithAI(data: any, preferredModel?: string): Promise<any[]> {
+  const context: AIContext = {
+    organization_name: 'Geral',
+    ministry_name: 'Geral',
+    total_members: data.members?.length || 0,
+    active_members: data.members?.length || 0,
+    roles: data.roles || []
+  };
+  const result = await runAI(AI_TASKS.SCALE_GENERATION, context, data, preferredModel);
+  return Array.isArray(result) ? result : [];
 }

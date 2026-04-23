@@ -76,7 +76,9 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
           const plainText = tempDiv.textContent || tempDiv.innerText || "";
           
           const refined = await runAI(AI_TASKS.TEXT_REWRITE, getAIContext(), { text: plainText, tone });
-          const newHtml = refined?.html || refined;
+          const newHtml = typeof refined === 'string'
+            ? refined
+            : (refined?.html || refined?.text || JSON.stringify(refined));
           setMessage(newHtml);
           addToast("Texto melhorado com IA!", "success");
       } catch (error) {

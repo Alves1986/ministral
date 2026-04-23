@@ -58,8 +58,10 @@ export const SettingsScreen: React.FC<Props> = ({
   const [spotifyId, setSpotifyId] = useState(ministryConfig?.spotifyClientId || "");
   const [spotifySecret, setSpotifySecret] = useState(ministryConfig?.spotifyClientSecret || "");
   const [youtubeKey, setYoutubeKey] = useState(ministryConfig?.youtubeApiKey || "");
+  const [anthropicKey, setAnthropicKey] = useState(ministryConfig?.anthropic_api_key || "");
   const [showSpotifySecret, setShowSpotifySecret] = useState(false);
   const [showYoutubeKey, setShowYoutubeKey] = useState(false);
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
 
   const [logoPreview, setLogoPreview] = useState(organization?.logo_url || getSystemLogo(themeMode === 'dark' ? 'dark' : 'light'));
   const [logoLoading, setLogoLoading] = useState(false);
@@ -571,6 +573,43 @@ export const SettingsScreen: React.FC<Props> = ({
                                 className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs"
                             >
                                 <Save size={16}/> Salvar YouTube
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="md:col-span-2 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Anthropic AI API</label>
+                    <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-zinc-400">Anthropic API Key (Claude)</span>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <input 
+                                    type={showAnthropicKey ? "text" : "password"} 
+                                    value={anthropicKey} 
+                                    onChange={(e) => setAnthropicKey(e.target.value)} 
+                                    placeholder="Obtenha em console.anthropic.com"
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" 
+                                />
+                                <button 
+                                    onClick={() => setShowAnthropicKey(!showAnthropicKey)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                                >
+                                    {showAnthropicKey ? <Lock size={14} /> : <Unlock size={14} />}
+                                </button>
+                            </div>
+                            <button 
+                                onClick={async () => {
+                                    try {
+                                        await onSaveIntegrations?.(undefined, undefined, undefined, undefined, anthropicKey);
+                                        addToast('Anthropic Key salva com sucesso!', 'success');
+                                    } catch(e) {
+                                        addToast('Erro ao salvar Anthropic Key. Tente novamente.', 'error');
+                                    }
+                                }} 
+                                className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs"
+                            >
+                                <Save size={16}/> Salvar Anthropic
                             </button>
                         </div>
                     </div>
