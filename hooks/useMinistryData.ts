@@ -255,6 +255,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           { event: 'INSERT', schema: 'public', table: 'audit_logs', filter: `ministry_id=eq.${mid}` },
           () => { queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid, orgId) }); }
         )
+        .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'organization_ministries', filter: `id=eq.${mid}` },
+            () => {
+                // Invalida settings quando availability_start ou availability_end são atualizados
+                queryClient.invalidateQueries({ queryKey: keys.settings(mid, orgId) });
+            }
+        )
         .subscribe();
 
     return () => {
