@@ -1,6 +1,4 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-
 export interface CifraClubResult {
     title: string;
     artist: string;
@@ -8,10 +6,17 @@ export interface CifraClubResult {
     key: string;
 }
 
-// FIX: Simplified Gemini initialization to use process.env.API_KEY string directly as per guidelines.
-const getAiClient = () => {
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
-};
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+function getApiKey(): string {
+    if (typeof window !== 'undefined') {
+        return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
+    }
+    if (typeof process !== 'undefined' && process.env) {
+        return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+    }
+    return '';
+}
 
 // Cache simples para evitar chamadas repetitivas
 const searchCache: Record<string, CifraClubResult[]> = {};
@@ -22,7 +27,11 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
         return searchCache[cacheKey];
     }
 
-    const ai = getAiClient();
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        console.error("VITE_OPENROUTER_API_KEY is not defined");
+        return [];
+    }
 
     try {
         const prompt = `
@@ -37,28 +46,39 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
             - key: O tom provável da música (ex: G, Cm, A#) ou "N/A" se não souber.
         `;
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING },
-                            artist: { type: Type.STRING },
-                            url: { type: Type.STRING },
-                            key: { type: Type.STRING }
-                        }
-                    }
-                }
-            }
+        const body = {
+            model: 'google/gemini-2.5-flash', // Using Gemini 2.5 Flash on OpenRouter, or any other appropriate model
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        };
+
+        const res = await fetch(OPENROUTER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
+                'X-Title': 'Ministral',
+            },
+            body: JSON.stringify(body),
         });
 
-        if (response.text) {
-            const results = JSON.parse(response.text);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err?.error?.message || `OpenRouter error ${res.status}`);
+        }
+
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || '';
+
+        if (content) {
+            // Clean markdown blocks if present
+            const cleaned = content.trim();
+            const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+            const jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
+
+            const results = JSON.parse(jsonStr);
             
             // Garbage Collection simples do Cache
             // Se o cache ficar muito grande, deleta a entrada mais antiga (FIFO aproximado)
