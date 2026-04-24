@@ -91,7 +91,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   const availabilityQuery: UseQueryResult<{ availability: Record<string, string[]>; notes: Record<string, string> }> = useQuery({
     queryKey: keys.availability(ministryId, orgId),
     queryFn: () => Supabase.fetchMinistryAvailability(ministryId, orgId),
-    enabled: isQueryEnabled,
+    enabled: false,
     staleTime: STALE_REALTIME,
     gcTime: GC_TIME,
     refetchOnWindowFocus: false

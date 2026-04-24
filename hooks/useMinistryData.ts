@@ -178,14 +178,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       });
   }, [queryClient]);
 
-  const isAdmin = currentUser?.access_role === 'admin' || currentUser?.isOrgAdmin || currentUser?.isSuperAdmin;
-  const allowedMids = currentUser?.allowedMinistries?.join(',') || '';
-  const userId = currentUser?.id || '';
+  const userId = currentUser?.id ?? '';
+  const allowedMids = currentUser?.allowedMinistries ?? (mid ? [mid] : []);
+  const isAdminFlag = !!(currentUser?.access_role === 'admin' || currentUser?.isOrgAdmin || currentUser?.isSuperAdmin);
 
   // 1. Canais que NÃO dependem do mês (Estáveis)
   useEffect(() => {
     const sb = getSupabase();
-    if (!sb || !mid) return;
+    if (!sb || !mid || !orgId) return;
     if (mid.length !== 36) return;
 
     const channel = sb.channel(`ministry-base-live-${mid}`);
@@ -213,10 +213,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             () => {
                 queryClient.invalidateQueries({ 
                     queryKey: keys.notifications(
-                        currentUser?.allowedMinistries || (mid ? [mid] : []), 
-                        currentUser?.id || '', 
+                        allowedMids, 
+                        userId, 
                         orgId,
-                        !!isAdmin
+                        isAdminFlag
                     ) 
                 });
             }
@@ -252,7 +252,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     return () => {
         sb.removeChannel(channel);
     };
-  }, [mid, queryClient, orgId, allowedMids, userId, isAdmin]);
+  }, [mid, queryClient, orgId, allowedMids, userId, isAdminFlag]);
 
   // 2. Canais que dependem do mês (Dinâmicos)
   useEffect(() => {
@@ -343,6 +343,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       notificationsQuery.data, announcementsQuery.data, repertoireQuery.data, 
       swapsQuery.data, conflictsQuery.data, eventRules, 
       nextEventQuery.data, ministryTitle, availabilityWindow, integrations, 
-      isLoadingQueries, isLoadingEvents, refreshData, queryClient, mid, orgId, isAdmin, currentUser
+      isLoadingQueries, isLoadingEvents, refreshData, queryClient, mid, orgId, isAdminFlag, currentUser
   ]);
 }

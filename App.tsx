@@ -454,13 +454,12 @@ const InnerApp = () => {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            // O cache será atualizado automaticamente pelo realtime channel em useMinistryData.ts
-            // Remover `refreshData()` previne que 15 queries rodem simultaneamente e causem lock no navegador.
+            await queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 
     />
-  ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, refreshData, availabilityWindow, ministryId]);
+  ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, availabilityWindow, ministryId]);
 
   const swapsScreen = useMemo(() => (
     <SwapRequestsScreen 
