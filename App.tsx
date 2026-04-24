@@ -6,6 +6,7 @@ import { useToast, ToastProvider } from './components/Toast';
 import * as Supabase from './services/supabaseService';
 import { DEFAULT_TABS, ALL_TABS, User } from './types';
 import { useMinistryData } from './hooks/useMinistryData';
+import { useScreenMemos } from './hooks/useScreenMemos';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
@@ -443,130 +444,14 @@ const InnerApp = () => {
     </div>
   ), [currentMonth, events, schedule, expandedRoles, setEventDetailsModal]);
 
-  const availabilityScreen = useMemo(() => (
-    <AvailabilityScreen 
-        availability={availability} 
-        availabilityNotes={availabilityNotes} 
-        setAvailability={setAvailability} 
-        members={publicMembers} 
-        currentMonth={currentMonth} 
-        onMonthChange={setCurrentMonth} 
-        currentUser={activeUser!} 
-        onSaveAvailability={async (mid, userId, d, n, t) => { 
-            await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            await queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
-        }} 
-        availabilityWindow={availabilityWindow} 
-        ministryId={ministryId} 
-    />
-  ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, availabilityWindow, ministryId]);
+  const { availabilityScreen, swapsScreen, announcementsScreen, repertoireScreen } = useScreenMemos({
+    availability, availabilityNotes, setAvailability, publicMembers,
+    currentMonth, setCurrentMonth, activeUser: activeUser!, orgId: orgId!, availabilityWindow,
+    ministryId, queryClient, schedule, swapRequests, events, addToast,
+    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs
+  });
 
-  const swapsScreen = useMemo(() => (
-    <SwapRequestsScreen 
-        schedule={schedule} 
-        currentMonth={currentMonth} 
-        currentUser={activeUser!} 
-        requests={swapRequests} 
-        visibleEvents={events} 
-        onCreateRequest={async (role, iso, title) => { 
-            try {
-                await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: activeUser!.name, requesterId: activeUser!.id || '', role: role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); 
-                addToast("Pedido de troca solicitado com sucesso.", "success");
-            } catch (e: any) {
-                addToast("Erro ao solicitar troca: " + (e.message || "Erro desconhecido"), "error");
-                console.error(e);
-                throw e;
-            }
-        }} 
-        onAcceptRequest={async (reqId) => { 
-            try {
-                await Supabase.performSwapSQL(ministryId, orgId!, reqId, activeUser!.name, activeUser!.id!); 
-                addToast("Escala assumida com sucesso.", "success");
-            } catch (e: any) {
-                addToast("Erro ao assumir escala: " + (e.message || "Erro desconhecido"), "error");
-                console.error(e);
-            }
-        }} 
-        onCancelRequest={async (reqId) => { 
-            try {
-                await Supabase.cancelSwapRequestSQL(reqId, orgId!); 
-                addToast("Pedido removido com sucesso.", "info"); 
-            } catch (e: any) {
-                addToast("Erro ao remover pedido: " + (e.message || "Erro desconhecido"), "error");
-                console.error(e);
-            }
-        }} 
-    />
-  ), [schedule, currentMonth, activeUser, swapRequests, events, ministryId, orgId, addToast, refreshData]);
 
-  const announcementsScreen = useMemo(() => (
-    <AnnouncementsScreen 
-        announcements={announcements} 
-        currentUser={activeUser!} 
-        onRefresh={refreshData}
-        onMarkRead={async (id) => {
-            queryClient.setQueryData(['announcements', ministryId, orgId!], (old: any) => {
-                if (!old) return old;
-                return old.map((a: any) => {
-                    if (a.id === id) {
-                        const readBy = a.readBy || [];
-                        const alreadyRead = readBy.some((r: any) => r.userId === activeUser!.id);
-                        if (alreadyRead) return a;
-                        return { 
-                            ...a, 
-                            readBy: [...readBy, { 
-                                userId: activeUser!.id, 
-                                name: activeUser!.name, 
-                                timestamp: new Date().toISOString() 
-                            }] 
-                        };
-                    }
-                    return a;
-                });
-            });
-            await Supabase.interactAnnouncementSQL(id, activeUser!.id!, activeUser!.name, 'read', orgId!);
-            await queryClient.invalidateQueries({ queryKey: ['announcements'] });
-        }} 
-        onToggleLike={async (id) => {
-            queryClient.setQueryData(['announcements', ministryId, orgId!], (old: any) => {
-                if (!old) return old;
-                return old.map((a: any) => {
-                    if (a.id === id) {
-                        const likedBy = a.likedBy || [];
-                        const hasLiked = likedBy.some((l: any) => l.userId === activeUser!.id);
-                        return { 
-                            ...a, 
-                            likedBy: hasLiked 
-                                ? likedBy.filter((l: any) => l.userId !== activeUser!.id) 
-                                : [...likedBy, { 
-                                    userId: activeUser!.id, 
-                                    name: activeUser!.name, 
-                                    timestamp: new Date().toISOString() 
-                                }] 
-                        };
-                    }
-                    return a;
-                });
-            });
-            await Supabase.interactAnnouncementSQL(id, activeUser!.id!, activeUser!.name, 'like', orgId!);
-            await queryClient.invalidateQueries({ queryKey: ['announcements'] });
-        }} 
-        onTogglePin={async (id, isPinned) => {
-            try {
-                await Supabase.toggleAnnouncementPinSQL(id, orgId!, !isPinned);
-                await queryClient.invalidateQueries({ queryKey: ['announcements'] });
-                addToast(!isPinned ? "Aviso fixado no topo." : "Aviso desafixado.", "success");
-            } catch (error: any) {
-                console.error("Failed to pin:", error);
-                if (error.message === "MISSING_COLUMN") {
-                    addToast("Para usar o alfinete, execute no Supabase SQL Editor: ALTER TABLE public.announcements ADD COLUMN is_pinned BOOLEAN DEFAULT false;", "error");
-                } else {
-                    addToast("Erro ao fixar aviso.", "error");
-                }
-            }
-        }}
-    />
-  ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData]);
 
   const scheduleEditorScreen = useMemo(() => (
     <div className="space-y-6 animate-fade-in">
@@ -844,6 +729,20 @@ const InnerApp = () => {
                   // 1. Cancela Queries pendentes para evitar processamento desnecessário
                   queryClient.cancelQueries();
 
+                  // Prefetch silencioso das queries mais pesadas do novo ministério
+                  // (não bloqueia — roda em paralelo com as outras operações)
+                  const orgIdLocal = activeUser?.organizationId || '';
+                  queryClient.prefetchQuery({
+                    queryKey: ['settings', id, orgIdLocal],
+                    queryFn: () => Supabase.fetchMinistrySettings(id, orgIdLocal),
+                    staleTime: 10 * 60 * 1000
+                  });
+                  queryClient.prefetchQuery({
+                    queryKey: ['members', id, orgIdLocal],
+                    queryFn: () => Supabase.fetchMinistryMembers(id, orgIdLocal),
+                    staleTime: 5 * 60 * 1000
+                  });
+
                   // 2. Busca permissões para o NOVO ministério ANTES da troca
                   // Isso garante que o store tenha os dados corretos para o render imediato
                   const [access, profileCheck] = await Promise.all([
@@ -912,8 +811,7 @@ const InnerApp = () => {
             {currentTab === 'swaps' && safeEnabledTabs.includes('swaps') && status === 'ready' && ministryId.length === 36 && swapsScreen}
             {currentTab === 'ranking' && safeEnabledTabs.includes('ranking') && status === 'ready' && ministryId.length === 36 && rankingScreen}
             
-            {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="view" ministryId={ministryId} />}
-            {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} />}
+            {repertoireScreen}
             
             {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && announcementsScreen}
             
