@@ -8,10 +8,11 @@ interface Props {
   currentUser: User;
   onMarkRead: (id: string) => void;
   onToggleLike: (id: string) => void;
+  onTogglePin: (id: string, isPinned: boolean) => void;
   onRefresh: () => void;
 }
 
-export const AnnouncementsScreen: React.FC<Props> = ({ announcements, currentUser, onMarkRead, onToggleLike, onRefresh }) => {
+export const AnnouncementsScreen: React.FC<Props> = ({ announcements, currentUser, onMarkRead, onToggleLike, onTogglePin, onRefresh }) => {
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const handleRefresh = async () => {
@@ -48,13 +49,21 @@ export const AnnouncementsScreen: React.FC<Props> = ({ announcements, currentUse
                 <p className="text-zinc-500">Nenhum aviso ativo no momento.</p>
             </div>
         ) : (
-            announcements.map(announcement => (
+            [...announcements]
+                .sort((a, b) => {
+                    if (a.isPinned !== b.isPinned) {
+                        return a.isPinned ? -1 : 1;
+                    }
+                    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                })
+                .map(announcement => (
                 <AnnouncementCard 
                     key={announcement.id} 
                     announcement={announcement} 
                     currentUser={currentUser}
                     onMarkRead={onMarkRead}
                     onToggleLike={onToggleLike}
+                    onTogglePin={onTogglePin}
                 />
             ))
         )}

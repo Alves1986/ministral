@@ -19,7 +19,11 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
   const [message, setMessage] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [type, setType] = useState<'info' | 'success' | 'warning' | 'alert'>('info');
-  const [durationDays, setDurationDays] = useState(7); // Default 7 days
+  const [expirationDate, setExpirationDate] = useState(() => {
+     const d = new Date();
+     d.setDate(d.getDate() + 7);
+     return d.toISOString().split('T')[0];
+  });
   const [isSending, setIsSending] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
   
@@ -42,10 +46,10 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
 
     setIsSending(true);
     try {
-        // Calcula a data de expiração
-        const expirationDate = new Date();
-        expirationDate.setDate(expirationDate.getDate() + durationDays);
-        const expirationIso = expirationDate.toISOString();
+        // Usa a data exata selecionada, convertendo para ISO format no final do dia
+        const expDateObj = new Date(expirationDate);
+        expDateObj.setHours(23, 59, 59, 999);
+        const expirationIso = expDateObj.toISOString();
 
         // ALTERAÇÃO 3 — await direto sem timeout
         await onSend(title, message, type, expirationIso, externalLink.trim() || undefined);
@@ -212,21 +216,18 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
                 </div>
 
                 <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Duração do Aviso (Validade)</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Data de Expiração (Validade do Aviso)</label>
                     <div className="relative">
                         <CalendarClock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                        <select 
-                            value={durationDays} 
-                            onChange={e => setDurationDays(Number(e.target.value))}
+                        <input 
+                            type="date"
+                            value={expirationDate} 
+                            onChange={e => setExpirationDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500 text-zinc-900 dark:text-zinc-100"
-                        >
-                            <option value={3}>3 dias</option>
-                            <option value={7}>7 dias (1 Semana)</option>
-                            <option value={15}>15 dias</option>
-                            <option value={30}>30 dias (1 Mês)</option>
-                        </select>
+                        />
                     </div>
-                    <p className="text-[10px] text-zinc-400 mt-1">O aviso será removido automaticamente dos painéis após este período.</p>
+                    <p className="text-[10px] text-zinc-400 mt-1">O aviso será removido automaticamente dos painéis de todos os membros após esta data.</p>
                 </div>
 
                 <div>
@@ -332,7 +333,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
                                 )}
 
                                 <span className="text-[10px] text-zinc-400 mt-3 block">
-                                    Agora • Válido por {durationDays} dias
+                                    Agora • Válido até {new Date(expirationDate).toLocaleDateString('pt-BR')}
                                 </span>
                             </div>
                         </div>

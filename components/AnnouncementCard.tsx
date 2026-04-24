@@ -2,16 +2,17 @@
 import React, { useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { Announcement, User } from '../types';
-import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube } from 'lucide-react';
+import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube, Pin } from 'lucide-react';
 
 interface Props {
   announcement: Announcement;
   currentUser: User;
   onMarkRead: (id: string) => void;
   onToggleLike?: (id: string) => void; 
+  onTogglePin?: (id: string, isPinned: boolean) => void;
 }
 
-export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike }) => {
+export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike, onTogglePin }) => {
   // Check if current user has read this announcement
   const hasRead = announcement.readBy.some(r => r.userId === currentUser.id);
   const isAdmin = currentUser.access_role === 'admin';
@@ -163,10 +164,24 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                 )}
 
                 <div className="flex justify-between items-start">
-                    <h3 className={`font-bold text-lg ${theme.accent}`}>{announcement.title}</h3>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full shrink-0 ml-2">
-                        <Clock size={10} /> {new Date(announcement.timestamp).toLocaleDateString('pt-BR')}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {announcement.isPinned && <Pin size={16} className="text-ministral-500 fill-ministral-500 rotate-45" />}
+                        <h3 className={`font-bold text-lg ${theme.accent}`}>{announcement.title}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {isAdmin && onTogglePin && (
+                            <button 
+                                onClick={() => onTogglePin(announcement.id, !!announcement.isPinned)}
+                                className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${announcement.isPinned ? 'bg-ministral-100 text-ministral-600 dark:bg-ministral-900/30' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'}`}
+                                title={announcement.isPinned ? "Desafixar" : "Fixar no topo"}
+                            >
+                                <Pin size={10} className={announcement.isPinned ? 'fill-current' : ''} /> {announcement.isPinned ? 'Fixado' : 'Fixar'}
+                            </button>
+                        )}
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full">
+                            <Clock size={10} /> {new Date(announcement.timestamp).toLocaleDateString('pt-BR')}
+                        </span>
+                    </div>
                 </div>
                 
                 {!isCollapsed && (

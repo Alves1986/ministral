@@ -331,7 +331,8 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
         type: announcement.type,
         expiration_date: announcement.expirationDate,
         author_name: authorName,
-        external_link: announcement.externalLink
+        external_link: announcement.externalLink,
+        is_pinned: announcement.isPinned || false
     };
 
     const { error } = await sb.from('announcements').insert(payload);
@@ -339,13 +340,14 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
     if (error) {
         console.error("[Notifications] Error creating announcement:", error);
         
-        // Fallback: Se falhar por causa do external_link (coluna inexistente ou cache de schema)
+        // Fallback: Se falhar por causa do external_link ou is_pinned (coluna inexistente ou cache de schema)
         const isMissingColumn = error.code === 'PGRST204' || 
                                error.message?.includes('external_link') || 
+                               error.message?.includes('is_pinned') ||
                                error.message?.includes('não existe');
 
         if (isMissingColumn) {
-             console.warn("[Notifications] Column 'external_link' issue. Baking link into message.");
+             console.warn("[Notifications] Column 'external_link' or 'is_pinned' issue. Baking link into message.");
              
              let bakedMessage = announcement.message;
              if (announcement.externalLink) {
@@ -383,7 +385,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
     if (error) {
         // Se falhar por cache de schema (PGRST204) ou coluna faltando, tenta o básico
-        const isSchemaError = error.code === 'PGRST204' || error.message?.includes('external_link');
+        const isSchemaError = error.code === 'PGRST204' || error.message?.includes('external_link') || error.message?.includes('is_pinned');
         if (isSchemaError) {
             console.warn("[Notifications] Schema cache error on fetch, retrying with basic columns.");
             const { data: retryData, error: retryError } = await sb.from('announcements')
@@ -402,6 +404,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
                 timestamp: a.created_at,
                 expirationDate: a.expiration_date,
                 author: a.author_name || 'Admin',
+                isPinned: false,
                 readBy: [],
                 likedBy: []
             }));
@@ -432,6 +435,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
             expirationDate: a.expiration_date,
             author: a.author_name || 'Admin',
             externalLink: a.external_link,
+            isPinned: a.is_pinned || false,
             readBy: myInteractions
                 .filter((i: any) => i.interaction_type === 'read')
                 .map((i: any) => ({
@@ -448,6 +452,24 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
                 }))
         };
     });
+};
+
+export const toggleAnnouncementPinSQL = async (id: string, orgId: string, isPinned: boolean) => {
+    const sb = getSupabase();
+    if (!sb) throw new Error("No Supabase client");
+
+    const { error } = await sb.from('announcements')
+        .update({ is_pinned: isPinned })
+        .eq('id', id)
+        .eq('organization_id', orgId);
+
+    if (error) {
+         if (error.code === 'PGRST204' || error.message?.includes('is_pinned') || error.message?.includes('não existe')) {
+             console.warn("[Notifications] Column 'is_pinned' issue. Cannot pin announcement without schema update.");
+             throw new Error("MISSING_COLUMN");
+         }
+         throw error;
+    }
 };
 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {

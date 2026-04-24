@@ -552,6 +552,20 @@ const InnerApp = () => {
             await Supabase.interactAnnouncementSQL(id, activeUser!.id!, activeUser!.name, 'like', orgId!);
             await queryClient.invalidateQueries({ queryKey: ['announcements'] });
         }} 
+        onTogglePin={async (id, isPinned) => {
+            try {
+                await Supabase.toggleAnnouncementPinSQL(id, orgId!, !isPinned);
+                await queryClient.invalidateQueries({ queryKey: ['announcements'] });
+                addToast(!isPinned ? "Aviso fixado no topo." : "Aviso desafixado.", "success");
+            } catch (error: any) {
+                console.error("Failed to pin:", error);
+                if (error.message === "MISSING_COLUMN") {
+                    addToast("Para usar o alfinete, execute no Supabase SQL Editor: ALTER TABLE public.announcements ADD COLUMN is_pinned BOOLEAN DEFAULT false;", "error");
+                } else {
+                    addToast("Erro ao fixar aviso.", "error");
+                }
+            }
+        }}
     />
   ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData]);
 

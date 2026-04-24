@@ -99,6 +99,7 @@ export interface Announcement {
   expirationDate?: string; 
   author: string;
   externalLink?: string;
+  isPinned?: boolean;
   readBy: { userId: string; name: string; timestamp: string }[];
   likedBy: { userId: string; name: string; timestamp: string }[]; 
   organizationId?: string;
