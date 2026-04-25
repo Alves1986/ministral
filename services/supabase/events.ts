@@ -71,6 +71,7 @@ export const deleteMinistryEvent = async (ministryId: string, orgId: string, eve
 export const updateMinistryEvent = async (
  ministryId: string,
  orgId: string,
+ eventId: string | null,
  oldIso: string,
  newTitle: string,
  newIso: string,
@@ -86,30 +87,35 @@ export const updateMinistryEvent = async (
  
  if (!oldDate || !oldTime) return;
  
- // Buscar a regra do evento pelo date + time + org
- const { data: rule, error: fetchError } = await sb
-   .from('event_rules')
-   .select('id, ministry_id')
-   .eq('organization_id', orgId)
-   .eq('ministry_id', ministryId)
-   .eq('date', oldDate)
-   .eq('time', oldTime)
-   .maybeSingle();
- 
- if (fetchError) throw fetchError;
- if (!rule) {
-   console.warn('[updateMinistryEvent] Regra nao encontrada para', oldIso);
-   return;
+ let ruleIdToUpdate = eventId ? eventId.split('|')[0] : null;
+
+ if (!ruleIdToUpdate) {
+   // Buscar a regra do evento pelo date + time + org
+   const { data: rule, error: fetchError } = await sb
+     .from('event_rules')
+     .select('id, ministry_id')
+     .eq('organization_id', orgId)
+     .eq('ministry_id', ministryId)
+     .eq('date', oldDate)
+     .eq('time', oldTime)
+     .maybeSingle();
+   
+   if (fetchError) throw fetchError;
+   if (!rule) {
+     console.warn('[updateMinistryEvent] Regra nao encontrada para', oldIso);
+     return;
+   }
+   ruleIdToUpdate = rule.id;
  }
  
  const { error: updateError } = await sb
    .from('event_rules')
    .update({
      title: newTitle,
-     date: newDate,
+     ...(applyToAll ? {} : { date: newDate }),
      time: newTime
    })
-   .eq('id', rule.id)
+   .eq('id', ruleIdToUpdate)
    .eq('organization_id', orgId);
  
  if (updateError) throw updateError;

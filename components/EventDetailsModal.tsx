@@ -11,7 +11,7 @@ interface Props {
   schedule: ScheduleMap;
   roles: Role[];
   allMembers?: TeamMemberProfile[]; // Added to lookup avatars
-  onSave: (oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; 
+  onSave: (eventId: string, oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; 
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
@@ -277,7 +277,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                 <div className="flex flex-col gap-3">
                     {canEdit && (
                         <button 
-                            onClick={() => onSave(event.iso, title, time, applyToAll)} 
+                            onClick={() => onSave(event.id || '', event.iso, title, time, applyToAll)} 
                             className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-ministral-500/20 active:scale-95 transition-all"
                         >
                             <Save size={18} /> Salvar Alterações
