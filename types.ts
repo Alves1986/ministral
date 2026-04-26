@@ -274,3 +274,13 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
   'infantil': ['Lanche', 'Professor 03–06', 'Professor 07–11'],
   'default': ["Membro"]
 };
+
+export interface WhatsAppSettings {
+    id: string;
+    org_id: string;
+    enabled: boolean;
+    send_days_before: number;
+    send_time: string;
+    ministry_settings: Record<string, boolean>;
+    updated_at: string;
+}

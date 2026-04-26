@@ -1,6 +1,26 @@
 import { getSupabase, serviceOrgId } from './client';
-import { TeamMemberProfile, SwapRequest } from '../../types';
+import { TeamMemberProfile, SwapRequest, WhatsAppSettings } from '../../types';
 import { notifySuperAdmins } from './notifications';
+
+export const fetchWhatsAppSettings = async (orgId: string): Promise<WhatsAppSettings | null> => {
+    const sb = getSupabase();
+    if (!sb) return null;
+    const { data } = await sb.from('whatsapp_settings').select('*').eq('org_id', orgId).maybeSingle();
+    return data || null;
+};
+
+export const upsertWhatsAppSettings = async (orgId: string, settings: Partial<WhatsAppSettings>) => {
+    const sb = getSupabase();
+    if (!sb) return;
+    const { error } = await sb.from('whatsapp_settings').upsert({
+        org_id: orgId,
+        enabled: settings.enabled ?? true,
+        send_days_before: settings.send_days_before ?? 0,
+        send_time: settings.send_time ?? '09:00:00',
+        ministry_settings: settings.ministry_settings ?? {}
+    }, { onConflict: 'org_id' });
+    if (error) throw error;
+};
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string): Promise<SwapRequest[]> => {
     const sb = getSupabase();

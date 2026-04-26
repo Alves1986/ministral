@@ -549,6 +549,7 @@ const InnerApp = () => {
         }} 
         ministryConfig={{ ...ministryConfig, ...integrations }} 
         organization={organization} 
+        ministries={availableMinistries}
     />
   ), [ministryTitle, ministryId, themeMode, availableMinistries, availabilityWindow, isAdmin, orgId, handleEnableNotifications, ministryConfig, integrations, organization, refreshData, refreshSession, setAvailableMinistries, addToast]);
 

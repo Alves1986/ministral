@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight, CreditCard, Zap, CheckCircle2, MessageCircle, ExternalLink, X, Image as ImageIcon, Upload } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
-import { ThemeMode, Organization } from '../types';
+import { ThemeMode, Organization, MinistryDef } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 import { getSystemLogo } from '../utils/branding';
+import { WhatsAppNotificationSettings } from './WhatsAppNotificationSettings';
 
 interface Props {
   initialTitle: string;
@@ -24,6 +25,7 @@ interface Props {
   organization: Organization | null;
   onSaveIntegrations?: (spotifyId?: string, spotifySecret?: string, youtubeKey?: string, quickAccessItems?: string[]) => Promise<void>;
   onSaveOrgLogo?: (file: File | null) => Promise<string | null>;
+  ministries?: MinistryDef[];
 }
 
 const MEMBER_TABS = [
@@ -49,7 +51,7 @@ export const SettingsScreen: React.FC<Props> = ({
     initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, 
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
     onSaveAvailabilityWindow, availabilityWindow, isAdmin = false, orgId,
-    onSaveEnabledTabs, ministryConfig, organization, onSaveIntegrations, onSaveOrgLogo
+    onSaveEnabledTabs, ministryConfig, organization, onSaveIntegrations, onSaveOrgLogo, ministries
 }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
@@ -63,6 +65,7 @@ export const SettingsScreen: React.FC<Props> = ({
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'geral' | 'admin' | 'whatsapp'>('geral');
   const { addToast } = useToast();
 
   const toLocalInput = (isoString?: string) => {
@@ -214,12 +217,36 @@ export const SettingsScreen: React.FC<Props> = ({
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-10">
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
-        <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-          <Settings className="text-zinc-500"/> Configurações
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+            <Settings className="text-zinc-500"/> Configurações
+          </h2>
+          {isAdmin && (
+            <div className="bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl flex items-center shadow-inner">
+              <button
+                onClick={() => setActiveTab('geral')}
+                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === 'geral' ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+              >
+                Geral
+              </button>
+              <button
+                onClick={() => setActiveTab('admin')}
+                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === 'admin' ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+              >
+                Administrador
+              </button>
+              <button
+                onClick={() => setActiveTab('whatsapp')}
+                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === 'whatsapp' ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+              >
+                WhatsApp
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {isAdmin && (
+      {activeTab === 'admin' && isAdmin && (
       <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden relative group">
           <div className={`relative px-6 py-8 transition-colors duration-500 ${status ? 'bg-gradient-to-br from-secondaryHover via-secondary to-ministral-dark' : 'bg-gradient-to-br from-zinc-700 via-zinc-800 to-black'}`}>
               <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -282,7 +309,7 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
       )}
 
-      {isAdmin && onSaveEnabledTabs && (
+      {activeTab === 'admin' && isAdmin && onSaveEnabledTabs && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><ShieldCheck size={16}/> Abas Visíveis para Membros</h3>
         <p className="text-xs text-zinc-500 mb-6">Escolha quais abas estarão disponíveis para os membros deste ministério. As abas de Perfil e Configurações são sempre visíveis.</p>
@@ -315,8 +342,7 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
       )}
 
-
-
+      {activeTab === 'admin' && isAdmin && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Zap size={16}/> Acesso Rápido (Dashboard)</h3>
         <p className="text-xs text-zinc-500 mb-6">Escolha quais atalhos aparecerão na seção de Acesso Rápido da página inicial.</p>
@@ -354,9 +380,12 @@ export const SettingsScreen: React.FC<Props> = ({
             })}
         </div>
       </div>
+      )}
 
-      <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Monitor size={16}/> Aparência</h3>
+      {activeTab === 'geral' && (
+        <>
+          <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Monitor size={16}/> Aparência</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Tema</label>
@@ -394,8 +423,10 @@ export const SettingsScreen: React.FC<Props> = ({
             </div>
         </div>
       </div>
+      </>
+      )}
 
-      {isAdmin && isEnterprise && onSaveOrgLogo && (
+      {activeTab === 'admin' && isAdmin && isEnterprise && onSaveOrgLogo && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><ImageIcon size={16}/> Logo da Organização</h3>
         
@@ -471,6 +502,15 @@ export const SettingsScreen: React.FC<Props> = ({
               </div>
         </div>
       </div>
+      )}
+
+      {/* WhatsApp Notifications Settings */}
+      {activeTab === 'whatsapp' && isAdmin && orgId && ministries && (
+        <WhatsAppNotificationSettings
+          orgId={orgId}
+          ministries={ministries}
+          onShowToast={addToast}
+        />
       )}
 
       <div className="flex justify-center gap-4 pt-4">
