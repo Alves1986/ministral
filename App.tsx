@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, lazy } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from './store/appStore';
 import { useSession, SessionProvider } from './context/SessionContext';
@@ -33,33 +33,35 @@ import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ToolsMenu } from './components/ToolsMenu';
-import { ScheduleEditorV2 } from './components/ScheduleEditorV2';
-import { SuperAdminDashboard } from './components/SuperAdminDashboard';
-import { AvailabilityScreen } from './components/AvailabilityScreen';
-import { SwapRequestsScreen } from './components/SwapRequestsScreen';
-import { RankingScreen } from './components/RankingScreen';
-import { RepertoireScreen } from './components/RepertoireScreen';
-import { AnnouncementsScreen } from './components/AnnouncementsScreen';
-import { ProfileScreen } from './components/ProfileScreen';
-import { SettingsScreen } from './components/SettingsScreen';
-import { MembersScreen } from './components/MembersScreen';
-import { EventsScreen } from './components/EventsScreen';
-import { ScheduleRulesScreen } from './components/ScheduleRulesScreen';
-import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
-import { MonthlyReportScreen } from './components/MonthlyReportScreen';
-import { AdvancedAIScreen } from './components/AdvancedAIScreen';
-import { HistoryScreen } from './components/HistoryScreen';
-import { AlertsManager } from './components/AlertsManager';
-import { InstallBanner } from './components/InstallBanner';
-import { InstallModal } from './components/InstallModal';
-import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { EventDetailsModal } from './components/EventDetailsModal';
-import { StatsModal } from './components/StatsModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { PlanScreen } from './components/PlanScreen';
 
-import { RegisterOrganizationScreen } from './components/RegisterOrganizationScreen';
+const ScheduleEditorV2 = lazy(() => import('./components/ScheduleEditorV2').then(m => ({ default: m.ScheduleEditorV2 })));
+const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
+const AvailabilityScreen = lazy(() => import('./components/AvailabilityScreen').then(m => ({ default: m.AvailabilityScreen })));
+const SwapRequestsScreen = lazy(() => import('./components/SwapRequestsScreen').then(m => ({ default: m.SwapRequestsScreen })));
+const RankingScreen = lazy(() => import('./components/RankingScreen').then(m => ({ default: m.RankingScreen })));
+const RepertoireScreen = lazy(() => import('./components/RepertoireScreen').then(m => ({ default: m.RepertoireScreen })));
+const AnnouncementsScreen = lazy(() => import('./components/AnnouncementsScreen').then(m => ({ default: m.AnnouncementsScreen })));
+const ProfileScreen = lazy(() => import('./components/ProfileScreen').then(m => ({ default: m.ProfileScreen })));
+const SettingsScreen = lazy(() => import('./components/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
+const MembersScreen = lazy(() => import('./components/MembersScreen').then(m => ({ default: m.MembersScreen })));
+const EventsScreen = lazy(() => import('./components/EventsScreen').then(m => ({ default: m.EventsScreen })));
+const ScheduleRulesScreen = lazy(() => import('./components/ScheduleRulesScreen').then(m => ({ default: m.ScheduleRulesScreen })));
+const AvailabilityReportScreen = lazy(() => import('./components/AvailabilityReportScreen').then(m => ({ default: m.AvailabilityReportScreen })));
+const MonthlyReportScreen = lazy(() => import('./components/MonthlyReportScreen').then(m => ({ default: m.MonthlyReportScreen })));
+const AdvancedAIScreen = lazy(() => import('./components/AdvancedAIScreen').then(m => ({ default: m.AdvancedAIScreen })));
+const HistoryScreen = lazy(() => import('./components/HistoryScreen').then(m => ({ default: m.HistoryScreen })));
+const AlertsManager = lazy(() => import('./components/AlertsManager').then(m => ({ default: m.AlertsManager })));
+const InstallBanner = lazy(() => import('./components/InstallBanner').then(m => ({ default: m.InstallBanner })));
+const InstallModal = lazy(() => import('./components/InstallModal').then(m => ({ default: m.InstallModal })));
+const JoinMinistryModal = lazy(() => import('./components/JoinMinistryModal').then(m => ({ default: m.JoinMinistryModal })));
+const EventsModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.EventsModal })));
+const AvailabilityModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.AvailabilityModal })));
+const RolesModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.RolesModal })));
+const EventDetailsModal = lazy(() => import('./components/EventDetailsModal').then(m => ({ default: m.EventDetailsModal })));
+const StatsModal = lazy(() => import('./components/StatsModal').then(m => ({ default: m.StatsModal })));
+const ConfirmationModal = lazy(() => import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal })));
+const PlanScreen = lazy(() => import('./components/PlanScreen').then(m => ({ default: m.PlanScreen })));
+const RegisterOrganizationScreen = lazy(() => import('./components/RegisterOrganizationScreen').then(m => ({ default: m.RegisterOrganizationScreen })));
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[50vh]">
@@ -888,7 +890,6 @@ const InnerApp = () => {
                 />
             )}
             </div>
-        </Suspense>
 
         <InstallBanner isVisible={showInstallBanner} onInstall={() => (window as any).deferredPrompt.prompt()} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle} />
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
@@ -941,6 +942,7 @@ const InnerApp = () => {
         }} currentUser={activeUser!} ministryId={ministryId} canEdit={isAdmin} />}
         <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} monthName={getMonthName(currentMonth)} />
         <ConfirmationModal isOpen={!!confirmModalData} onClose={() => setConfirmModalData(null)} data={confirmModalData} onConfirm={async () => { if (confirmModalData) { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, confirmModalData.key); refreshData(); setConfirmModalData(null); addToast("Presença confirmada!", "success"); }}} />
+        </Suspense>
     </DashboardLayout>
     </>
   );
