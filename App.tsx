@@ -816,7 +816,7 @@ const InnerApp = () => {
             
             {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && announcementsScreen}
             
-            {currentTab === 'profile' && <ProfileScreen user={activeUser!} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); refreshData(); }} availableRoles={roles} />}
+            {currentTab === 'profile' && <ProfileScreen user={activeUser!} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); await refreshSession(); refreshData(); }} availableRoles={roles} />}
             {currentTab === 'history' && <HistoryScreen user={activeUser!} />}
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && settingsScreen}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && status === 'ready' && ministryId.length === 36 && membersScreen}

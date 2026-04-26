@@ -47,11 +47,19 @@ export const updateUserProfile = async (
             byteArray[i] = byteCharacters.charCodeAt(i);
         }
         const blob = new Blob([byteArray], { type: mimeType });
-        const fileName = `avatars/${user.id}_${Date.now()}.jpg`;
+        // Using user.id as the folder name. This is the standard Supabase RLS pattern: 
+        // (storage.foldername(name))[1] == auth.uid()
+        const fileName = `${user.id}/${Date.now()}.jpg`;
         const { data: uploadData, error: uploadError } = await sb.storage
             .from('avatars')
             .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
-        if (!uploadError && uploadData) {
+        
+        if (uploadError) {
+            console.error('Avatar upload error:', uploadError);
+            throw new Error('Falha ao enviar arquivo para o Supabase: ' + uploadError.message);
+        }
+
+        if (uploadData) {
             const { data: urlData } = sb.storage.from('avatars').getPublicUrl(fileName);
             finalAvatarUrl = urlData.publicUrl;
         }
