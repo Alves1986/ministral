@@ -440,7 +440,7 @@ export const SettingsScreen: React.FC<Props> = ({
                       className="w-full h-full object-contain p-1" 
                       onError={(e) => {
                         const fallback = getSystemLogo(themeMode === 'dark' ? 'dark' : 'light');
-                        if (e.currentTarget.src !== fallback) {
+                        if (!e.currentTarget.src.endsWith(fallback)) {
                           e.currentTarget.src = fallback;
                         }
                       }}

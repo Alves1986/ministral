@@ -200,8 +200,9 @@ export const DashboardLayout: React.FC<Props> = ({
                     alt="Logo" 
                     className="w-full h-full object-contain"
                     onError={(e) => {
-                      if (e.currentTarget.src !== getSystemLogo(theme)) {
-                        e.currentTarget.src = getSystemLogo(theme);
+                      const fallback = getSystemLogo(theme);
+                      if (!e.currentTarget.src.endsWith(fallback)) {
+                        e.currentTarget.src = fallback;
                       }
                     }}
                     referrerPolicy="no-referrer"
@@ -348,8 +349,9 @@ export const DashboardLayout: React.FC<Props> = ({
                         alt="Logo" 
                         className="w-full h-full object-contain"
                         onError={(e) => {
-                          if (e.currentTarget.src !== getSystemLogo(theme)) {
-                            e.currentTarget.src = getSystemLogo(theme);
+                          const fallback = getSystemLogo(theme);
+                          if (!e.currentTarget.src.endsWith(fallback)) {
+                            e.currentTarget.src = fallback;
                           }
                         }}
                         referrerPolicy="no-referrer"

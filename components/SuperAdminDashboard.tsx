@@ -264,8 +264,9 @@ export const SuperAdminDashboard: React.FC = () => {
                                                     alt={org.name}
                                                     className='w-7 h-7 rounded-lg object-contain bg-white border border-zinc-100 dark:border-zinc-700 p-0.5 shrink-0'
                                                     onError={(e) => { 
-                                                        if (e.currentTarget.src !== getSystemLogo('light')) {
-                                                            e.currentTarget.src = getSystemLogo('light');
+                                                        const fallback = getSystemLogo('light');
+                                                        if (!e.currentTarget.src.endsWith(fallback)) {
+                                                            e.currentTarget.src = fallback;
                                                         }
                                                     }}
                                                 />
