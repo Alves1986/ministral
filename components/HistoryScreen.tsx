@@ -184,6 +184,12 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
                           <CalendarDays size={14} className="text-zinc-400" />
                           <span className="text-xs font-medium">{date.toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
                         </div>
+                        {item.event_rules?.time && (
+                          <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+                            <Clock size={14} className="text-zinc-400" />
+                            <span className="text-xs font-medium">{item.event_rules.time.slice(0, 5)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
