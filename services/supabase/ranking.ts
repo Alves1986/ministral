@@ -67,7 +67,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             : Promise.resolve({ data: [], error: null }),
         sb.from('swap_requests').select('taken_by_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('status', 'completed').not('taken_by_id', 'is', null),
         sb.from('member_availability').select('user_id, available_date, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        sb.from('schedule_assignments').select('member_id, event_date, confirmed').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', false),
+        sb.from('schedule_assignments').select('member_id, event_date, confirmed, event_rules(time)').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', false),
         sb.from('ministry_members').select('profile_id, created_at').eq('ministry_id', ministryId).eq('organization_id', orgId),
         sb.from('profiles').select('id, avatar_url, whatsapp, birth_date').in('id', userIds).eq('organization_id', orgId)
     ]) as any;
@@ -160,7 +160,15 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         }
 
         // 5. CHECK-IN ESQUECIDO
-        const misses = checkinMissesData.filter((a: any) => a.member_id === m.id && !a.confirmed && new Date(a.event_date) < now);
+        const misses = checkinMissesData.filter((a: any) => {
+            if (a.member_id !== m.id || a.confirmed) return false;
+            const timeStr = a.event_rules?.time || '23:59:59';
+            const eventDateTime = new Date(`${a.event_date}T${timeStr}`);
+            
+            // Add 120 minutes to allow the user checking in late (as NextEventCard permits)
+            const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
+            return checkinClosedTime < now;
+        });
         points += misses.length * GC.checkin_miss;
         misses.forEach((a: any) => {
             history.push({

@@ -20,7 +20,7 @@ type TimeStatus = 'early' | 'open' | 'closed';
 
 export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
-  const [minutesToOpen, setMinutesToOpen] = useState(0);
+  const [countdownString, setCountdownString] = useState('');
   
   // Use data directly passed from the new hook structure in App.tsx
   // The prop `event` now comes as `nextEvent` from `useMinistryData` which has `{ event, members }` structure.
@@ -50,9 +50,24 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
         isClosed = diffInMinutes > 120; // 2 hours after
     }
 
-    if (diffInMinutes < -60) {
+    // Opens 30 minutes before
+    if (diffInMinutes < -30) {
       setTimeStatus('early');
-      setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
+      const openTime = new Date(eventDate.getTime() - 30 * 60 * 1000);
+      let msUntilOpen = openTime.getTime() - now.getTime();
+      if (msUntilOpen < 0) msUntilOpen = 0;
+
+      const totalSeconds = Math.floor(msUntilOpen / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      if (h > 0) {
+          setCountdownString(`${pad(h)}:${pad(m)}:${pad(s)}`);
+      } else {
+          setCountdownString(`${pad(m)}:${pad(s)}`);
+      }
     } else if (isClosed) {
       setTimeStatus('closed');
     } else {
@@ -62,7 +77,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
 
   useEffect(() => {
     checkTimeWindow();
-    const interval = setInterval(checkTimeWindow, 60000);
+    const interval = setInterval(checkTimeWindow, 1000);
     return () => clearInterval(interval);
   }, [eventData]);
 
@@ -115,7 +130,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
           case 'early':
               return (
                   <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-black/40 text-white/40 rounded-[1.5rem] text-xs font-black uppercase tracking-widest cursor-not-allowed border border-white/5">
-                      <Clock size={18} /> Check-in em {minutesToOpen} min
+                      <Clock size={18} /> Libera em {countdownString}
                   </button>
               );
           case 'closed':
