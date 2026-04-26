@@ -383,7 +383,7 @@ export const fetchNextEventCardData = async (
 
     const now = Date.now();
     const candidates = Object.values(groups)
-        .filter((c: any) => !c.excluded && c.dateObj.getTime() >= now - 5 * 60 * 60 * 1000)
+        .filter((c: any) => !c.excluded && c.dateObj.getTime() >= now - 1 * 60 * 60 * 1000)
         .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
 
     let nextEvent = candidates[0];
@@ -404,7 +404,7 @@ export const fetchNextEventCardData = async (
         const nextOcc = sortedOccurrences.find(occ => {
             const eventTime = new Date(occ.iso).getTime();
             const key = `${occ.ruleId}|${occ.date}`;
-            return !exclusions.has(key) && eventTime >= now - 5 * 60 * 60 * 1000;
+            return !exclusions.has(key) && eventTime >= now - 1 * 60 * 60 * 1000;
         });
 
         if (!nextOcc) return null;

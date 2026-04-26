@@ -40,15 +40,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
     // If single, valid until 23:59 of that day.
     // If weekly/recurring, valid for 2 hours after start.
     
-    let isClosed = false;
-    
-    if (isSingle) {
-        const endOfDay = new Date(eventDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        isClosed = now > endOfDay;
-    } else {
-        isClosed = diffInMinutes > 120; // 2 hours after
-    }
+    let isClosed = diffInMinutes > 60; // 1 hour after
 
     // Opens 30 minutes before
     if (diffInMinutes < -30) {
