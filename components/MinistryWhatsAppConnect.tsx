@@ -9,8 +9,6 @@ interface Props {
 }
 
 export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, ministryName }) => {
-  console.log('MinistryWhatsAppConnect props:', { ministryId, orgId, ministryName });
-
   const [status, setStatus] = useState<'idle' | 'loading' | 'qr' | 'connected'>('idle');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
@@ -30,16 +28,13 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         .eq('id', ministryId)
         .single()
         .then(({ data, error }) => {
-          console.log('Ministry data:', data);
-          console.log('Ministry error:', error);
-          console.log('ministryId being searched:', ministryId);
           if (data?.label) {
             setResolvedMinistryName(data.label);
           }
         })
         .catch(err => console.error("Error fetching ministry name:", err));
     }
-  }, [ministryId, ministryName, supabase]);
+  }, [ministryId, ministryName]);
 
   useEffect(() => {
     checkConnection();
