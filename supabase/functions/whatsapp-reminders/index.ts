@@ -37,6 +37,19 @@ serve(async (req: Request) => {
 
     if (orgErr) throw orgErr;
 
+    // Busca quais os whatsapp individuais das igrejas
+    const { data: mnWhatsapps, error: mnErr } = await supabase
+      .from('ministry_whatsapp')
+      .select('*')
+      .eq('connected', true);
+
+    const ministryMap = new Map();
+    if (mnWhatsapps) {
+      mnWhatsapps.forEach((mw: any) => {
+        ministryMap.set(mw.ministry_id, mw.instance_name);
+      });
+    }
+
     for (const orgSetting of orgSettings) {
       // 2. Usar o send_time para ver se bate. Para precisão de fuso local,
       // considere usar a hora do banco de dados (que tem timezone) para garantir segurança.
@@ -94,7 +107,8 @@ serve(async (req: Request) => {
             msg = `*Lembrete de Escala!*\n\nOlá ${profile.name},\nVocê está escalado(a) para o dia ${dayStr} em *${ministry.name}*.\nFunção: ${assignment.role}`;
         }
 
-        const endpoint = `${evolutionApiUrl}/message/sendText/${instanceName}`;
+        const currentInstance = ministryMap.get(assignment.ministry_id) || instanceName;
+        const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
         try {
           const reqEvolution = await fetch(endpoint, {
             method: 'POST',

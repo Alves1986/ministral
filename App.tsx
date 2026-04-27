@@ -1009,8 +1009,8 @@ const SupabaseHealthCheck: React.FC<{ children: React.ReactNode }> = ({ children
 const queryClientInstance = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2, // 2 minutes cache validity
-      gcTime: 1000 * 60 * 10, // 10 minutes garbage collection
+      staleTime: 1000 * 60 * 5, // 5 minutes cache validity
+      gcTime: 1000 * 60 * 15, // 15 minutes garbage collection
       retry: 1,
       refetchOnWindowFocus: false,
     },

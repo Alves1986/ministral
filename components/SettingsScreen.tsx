@@ -6,6 +6,7 @@ import { ThemeMode, Organization, MinistryDef } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 import { getSystemLogo } from '../utils/branding';
 import { WhatsAppNotificationSettings } from './WhatsAppNotificationSettings';
+import { MinistryWhatsAppConnect } from './MinistryWhatsAppConnect';
 
 interface Props {
   initialTitle: string;
@@ -505,12 +506,23 @@ export const SettingsScreen: React.FC<Props> = ({
       )}
 
       {/* WhatsApp Notifications Settings */}
-      {activeTab === 'whatsapp' && isAdmin && orgId && ministries && (
-        <WhatsAppNotificationSettings
-          orgId={orgId}
-          ministries={ministries}
-          onShowToast={addToast}
-        />
+      {activeTab === 'whatsapp' && isAdmin && orgId && (
+        <div className="space-y-6">
+          {ministries && (
+            <WhatsAppNotificationSettings
+              orgId={orgId}
+              ministries={ministries}
+              onShowToast={addToast}
+            />
+          )}
+          {ministryId && (
+            <MinistryWhatsAppConnect
+              ministryId={ministryId}
+              orgId={orgId}
+              ministryName={ministries?.find(m => m.id === ministryId)?.label || initialTitle}
+            />
+          )}
+        </div>
       )}
 
       <div className="flex justify-center gap-4 pt-4">
