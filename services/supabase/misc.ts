@@ -16,8 +16,7 @@ export const upsertWhatsAppSettings = async (orgId: string, settings: Partial<Wh
         org_id: orgId,
         enabled: settings.enabled ?? true,
         send_days_before: settings.send_days_before ?? 0,
-        send_time: settings.send_time ?? '09:00:00',
-        ministry_settings: settings.ministry_settings ?? {}
+        send_time: settings.send_time ?? '09:00:00'
     }, { onConflict: 'org_id' });
     if (error) throw error;
 };

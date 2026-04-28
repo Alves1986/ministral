@@ -285,7 +285,7 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
                 <p className="font-bold text-green-900 dark:text-green-100 text-lg">Conectado</p>
                 <div className="flex items-center gap-2 mt-0.5">
                     <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{phoneNumber || instanceName}</p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{ministryName || resolvedMinistryName || phoneNumber || instanceName}</p>
                 </div>
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Save, Loader2, MessageCircle } from 'lucide-react';
 import { fetchWhatsAppSettings, upsertWhatsAppSettings } from '../services/supabase/misc';
 import { WhatsAppSettings, MinistryDef } from '../types';
+import { WhatsAppTestPanel } from './WhatsAppTestPanel';
 
 interface Props {
   orgId: string;
@@ -31,7 +32,6 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministrie
             enabled: true,
             send_days_before: 0,
             send_time: '09:00',
-            ministry_settings: {},
             updated_at: ''
           });
         }
@@ -51,8 +51,7 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministrie
       await upsertWhatsAppSettings(orgId, {
         enabled: settings.enabled,
         send_days_before: settings.send_days_before,
-        send_time: settings.send_time + ':00',
-        ministry_settings: settings.ministry_settings
+        send_time: settings.send_time + ':00'
       });
       onShowToast?.("Configurações de WhatsApp salvas com sucesso!", "success");
     } catch (e) {
@@ -129,37 +128,6 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministrie
                 />
               </div>
             </div>
-
-            {/* Configurações por Ministério */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold dark:text-white mb-4">Ministérios Ativos</h3>
-              <div className="space-y-3">
-                {ministries.map(min => {
-                  // If not explicitly set to false, we assume true by default if "enabled" is true globally
-                  const minEnabled = settings.ministry_settings[min.id] !== false;
-                  return (
-                    <div key={min.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                      <span className="text-sm font-medium dark:text-slate-200">{min.label}</span>
-                      <button
-                        onClick={() => setSettings(s => {
-                          if (!s) return s;
-                          return {
-                            ...s,
-                            ministry_settings: {
-                              ...s.ministry_settings,
-                              [min.id]: !minEnabled
-                            }
-                          };
-                        })}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${minEnabled ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-700'}`}
-                      >
-                        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${minEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </>
         )}
 
@@ -174,6 +142,10 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministrie
           </button>
         </div>
       </div>
+      
+      {settings.enabled && (
+        <WhatsAppTestPanel orgId={orgId} onShowToast={onShowToast} />
+      )}
     </div>
   );
 };

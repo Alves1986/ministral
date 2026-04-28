@@ -63,13 +63,6 @@ serve(async (req: Request) => {
       targetDateObj.setDate(targetDateObj.getDate() + sendDaysBefore);
       const targetDate = targetDateObj.toISOString().split('T')[0];
 
-      // Busca na DB as escalas dos ministérios habilitados dessa org
-      const ministries = Object.entries(orgSetting.ministry_settings || {})
-        .filter(([_, enabled]) => enabled)
-        .map(([id]) => id);
-
-      if (ministries.length === 0) continue;
-
       const { data: assignments, error: assigErr } = await supabase
         .from('schedule_assignments')
         .select(`
@@ -81,8 +74,7 @@ serve(async (req: Request) => {
           ministries:ministry_id ( name )
         `)
         .eq('organization_id', orgSetting.org_id)
-        .eq('event_date', targetDate)
-        .in('ministry_id', ministries);
+        .eq('event_date', targetDate);
 
       if (assigErr) throw assigErr;
       if (!assignments || assignments.length === 0) continue;

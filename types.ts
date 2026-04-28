@@ -281,6 +281,5 @@ export interface WhatsAppSettings {
     enabled: boolean;
     send_days_before: number;
     send_time: string;
-    ministry_settings: Record<string, boolean>;
     updated_at: string;
 }
