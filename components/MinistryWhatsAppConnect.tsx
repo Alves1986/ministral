@@ -132,6 +132,16 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
     }
   }, [pollCount, instanceName, status]);
 
+  useEffect(() => {
+    if (status === 'loading') {
+      const timeout = setTimeout(() => {
+        setStatus('idle');
+        setError('Tempo esgotado. Verifique sua conexão e tente novamente.');
+      }, 15000);
+      return () => clearTimeout(timeout);
+    }
+  }, [status]);
+
   const handleConnect = async () => {
     if (!supabase) return;
     setStatus('loading');
@@ -153,7 +163,13 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         body: { ministry_id: ministryId, org_id: orgId, instance_name: generatedInstanceName }
       });
       
-      if (error) throw error;
+      console.log('whatsapp-connect response:', data, error);
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Erro ao chamar Edge Function');
+      }
+      
       if (data?.qrcode) {
         setQrCode(data.qrcode);
         setInstanceName(data.instanceName);
@@ -162,10 +178,14 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         // Already connected
         setStatus('connected');
         checkConnection();
+      } else if (data?.error) {
+        throw new Error(data.error);
       } else {
-          throw new Error("Não foi possível gerar o QR Code");
+        console.error('Resposta inesperada:', data);
+        throw new Error("QR Code não foi gerado. Verifique os logs da Edge Function.");
       }
     } catch (err: any) {
+      console.error('handleConnect error:', err);
       setError(err.message || "Erro ao conectar. Tente novamente.");
       setStatus('idle');
     }
@@ -212,9 +232,23 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
              Atenção: Ao conectar um WhatsApp aqui, o ministério utilizará esta conexão exclusiva.<br/>
              Ele será usado para enviar os lembretes e notificações.
            </p>
+
+           {!supabase ? (
+              <div className="mb-4 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1.5 border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/10 px-2.5 py-1 rounded-md">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  Conexão com servidor indisponível
+              </div>
+           ) : (
+              <div className="mb-5 text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                  Servidor online
+              </div>
+           )}
+
            <button
             onClick={handleConnect}
-            className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm"
+            disabled={!supabase}
+            className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm"
            >
             <QrCode className="w-5 h-5" />
             <span>Conectar WhatsApp</span>
