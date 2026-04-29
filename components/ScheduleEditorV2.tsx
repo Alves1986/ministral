@@ -12,7 +12,8 @@ import {
     MemberV2,
     OccurrenceV2,
     fetchAvailabilityForEditor,
-    fetchConflictRules
+    fetchConflictRules,
+    fetchGlobalConflictsV2
 } from '../services/scheduleServiceV2';
 import { 
     Loader2, 
@@ -95,8 +96,15 @@ const isConflict = (
     eventRuleId: string,
     eventDate: string,
     currentAssignments: AssignmentV2[],
-    rules: { blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] }
+    rules: { blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] },
+    globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]> = {}
 ) => {
+    // 0. Check Global Conflicts (Cross-Ministry)
+    const crossMinistryEvents = globalConflicts[memberId]?.filter(c => c.date === eventDate);
+    if (crossMinistryEvents && crossMinistryEvents.length > 0) {
+        return { conflict: true, existingRole: 'Outro Ministério', type: 'global' };
+    }
+
     // 1. Check Role Conflicts for the SAME member
     const memberRolesInEvent = currentAssignments
         .filter(a => a.member_id === memberId && a.event_rule_id === eventRuleId && a.event_date === eventDate)
@@ -151,6 +159,7 @@ interface ScheduleCellProps {
     conflictRules: { blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] };
     assignments: AssignmentV2[];
     memberCounts: Record<string, number>;
+    globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]>;
 }
 
 const ScheduleCell: React.FC<ScheduleCellProps> = ({ 
@@ -164,7 +173,8 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     eventTime,
     conflictRules,
     assignments,
-    memberCounts
+    memberCounts,
+    globalConflicts
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -211,7 +221,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     const unavailableMembers: MemberV2[] = [];
 
     roleMembers.forEach(m => {
-        const conflictCheck = isConflict(m.id, role, occurrence.ruleId, occurrence.date, assignments, conflictRules);
+        const conflictCheck = isConflict(m.id, role, occurrence.ruleId, occurrence.date, assignments, conflictRules, globalConflicts);
         if (conflictCheck.conflict) {
             conflictMembers.push({ member: m, existingRole: conflictCheck.existingRole!, type: conflictCheck.type });
         } else {
@@ -498,6 +508,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
     const [availability, setAvailability] = useState<Record<string, Record<string, string>>>({});
     const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [] });
+    const [globalConflicts, setGlobalConflicts] = useState<Record<string, { date: string, ministryId: string, role: string }[]>>({});
 
     // -- DERIVED STATE --
     const memberCounts = assignments.reduce((acc, curr) => {
@@ -526,16 +537,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const loadData = async () => {
         setLoading(true);
         try {
-            const [membersData, rules, availData, conflictRulesData] = await Promise.all([
+            const [membersData, rules, availData, conflictRulesData, globalData] = await Promise.all([
                 fetchMembersV2(ministryId, orgId),
                 fetchRulesV2(ministryId, orgId),
                 fetchAvailabilityForEditor(ministryId, orgId),
-                fetchConflictRules(ministryId, orgId)
+                fetchConflictRules(ministryId, orgId),
+                fetchGlobalConflictsV2(ministryId, orgId, currentMonth)
             ]);
 
             setMembers(membersData);
             setAvailability(availData);
             setConflictRules(conflictRulesData);
+            setGlobalConflicts(globalData);
 
             // Gerar ocorrências do mês
             const [yearStr, monthStrPart] = currentMonth.split('-');
@@ -595,6 +608,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         setShowConfirmAI(false);
         setIsGeneratingAI(true);
         try {
+            // Construct AI Availability that also blocks out cross-ministry days
+            const aiAvailability = JSON.parse(JSON.stringify(availability));
+            Object.entries(globalConflicts).forEach(([memberId, conflicts]) => {
+                if (!aiAvailability[memberId]) {
+                    aiAvailability[memberId] = {};
+                }
+                conflicts.forEach(c => {
+                    // Mark as unavailable for the specific date if they have a cross-ministry event
+                    aiAvailability[memberId][c.date] = 'unavailable';
+                });
+            });
+
             const input = {
                 occurrences: occurrences.map(o => ({
                     date: o.date,
@@ -608,7 +633,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     name: m.name,
                     functions: m.ministry_functions || []
                 })),
-                availability: availability,
+                availability: aiAvailability,
                 existingAssignments: assignments.map(a => ({
                     event_rule_id: a.event_rule_id,
                     event_date: a.event_date,
@@ -922,6 +947,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     conflictRules={conflictRules}
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
+                                                    globalConflicts={globalConflicts}
                                                 />
                                             </td>
                                         );
@@ -987,6 +1013,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     conflictRules={conflictRules}
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
+                                                    globalConflicts={globalConflicts}
                                                 />
                                             </div>
                                         );

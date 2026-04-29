@@ -50,6 +50,39 @@ export const fetchAvailabilityForEditor = async (ministryId: string, orgId: stri
   return map;
 };
 
+export const fetchGlobalConflictsV2 = async (ministryId: string, orgId: string, month: string) => {
+  const sb = getSupabase();
+  if (!sb || ministryId.length !== 36) return {};
+  
+  const [yearStr, mStr] = month.split('-');
+  const year = parseInt(yearStr);
+  const m = parseInt(mStr);
+  const lastDay = new Date(year, m, 0).getDate();
+  const startDate = `${month}-01`;
+  const endDate = `${month}-${lastDay}`;
+
+  const { data } = await sb.from('schedule_assignments')
+    .select('member_id, ministry_id, event_date, role, profiles(name)')
+    .eq('organization_id', orgId)
+    .neq('ministry_id', ministryId)
+    .gte('event_date', startDate)
+    .lte('event_date', endDate);
+
+  const conflicts: Record<string, { date: string, ministryId: string, role: string }[]> = {};
+  data?.forEach((row: any) => {
+    const memberId = row.member_id;
+    if (memberId) {
+      if (!conflicts[memberId]) conflicts[memberId] = [];
+      conflicts[memberId].push({
+        date: row.event_date,
+        ministryId: row.ministry_id,
+        role: row.role
+      });
+    }
+  });
+  return conflicts;
+};
+
 export const fetchConflictRules = async (ministryId: string, orgId: string) => {
   const sb = getSupabase();
   if (!sb || ministryId.length !== 36) return { blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [] };
