@@ -304,6 +304,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           id: gen.id,
           iso: gen.iso,
           title: gen.title,
+          date: gen.date,
+          time: gen.time,
           dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
       })).sort((a, b) => a.iso.localeCompare(b.iso));
   }, [generatedEvents, assignmentsQuery.data]);

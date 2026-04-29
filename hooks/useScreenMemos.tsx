@@ -1,13 +1,13 @@
-import React, { useMemo } from 'react';
-import { lazy } from 'react';
+import React, { useMemo, lazy } from 'react';
+import * as Supabase from '../services/supabase';
+import { QueryClient } from '@tanstack/react-query';
+import { User, RepertoireItem, SwapRequest, CustomEvent, ScheduleMap, Announcement, AvailabilityMap, AvailabilityNotesMap, TeamMemberProfile } from '../types';
 
 const AvailabilityScreen = lazy(() => import('../components/AvailabilityScreen').then(m => ({ default: m.AvailabilityScreen })));
 const SwapRequestsScreen = lazy(() => import('../components/SwapRequestsScreen').then(m => ({ default: m.SwapRequestsScreen })));
 const AnnouncementsScreen = lazy(() => import('../components/AnnouncementsScreen').then(m => ({ default: m.AnnouncementsScreen })));
 const RepertoireScreen = lazy(() => import('../components/RepertoireScreen').then(m => ({ default: m.RepertoireScreen })));
-import * as Supabase from '../services/supabase';
-import { QueryClient } from '@tanstack/react-query';
-import { User, RepertoireItem, SwapRequest, CustomEvent, ScheduleMap, Announcement, AvailabilityMap, AvailabilityNotesMap, TeamMemberProfile } from '../types';
+
 
 export interface ScreenMemosProps {
   availability: AvailabilityMap;
@@ -24,7 +24,7 @@ export interface ScreenMemosProps {
   
   schedule: ScheduleMap;
   swapRequests: SwapRequest[];
-  events: { id: string; iso: string; title: string; dateDisplay: string }[];
+  events: (CustomEvent & { dateDisplay: string })[];
   addToast: (msg: string, type: 'success'|'error'|'info'|'warning') => void;
   refreshData: () => void;
   
@@ -59,8 +59,9 @@ export function useScreenMemos(props: ScreenMemosProps) {
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 
+        events={events}
     />
-  ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, availabilityWindow, ministryId, queryClient]);
+  ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, availabilityWindow, ministryId, queryClient, events]);
 
   const swapsScreen = useMemo(() => (
     <SwapRequestsScreen 

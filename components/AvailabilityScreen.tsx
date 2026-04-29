@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile } from '../types';
+import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile, CustomEvent } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
@@ -15,6 +15,7 @@ interface Props {
   onSaveAvailability: (ministryId: string, userId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>; 
   availabilityWindow?: { start?: string, end?: string };
   ministryId: string;
+  events?: (CustomEvent & { dateDisplay?: string })[];
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
@@ -28,7 +29,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
   currentUser,
   onSaveAvailability,
   availabilityWindow,
-  ministryId
+  ministryId,
+  events = []
 }) => {
   const { addToast } = useToast();
   
@@ -36,6 +38,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [selectedMemberId, setSelectedMemberId] = useState<string>(""); 
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
+  const [dayModalOpen, setDayModalOpen] = useState<number | null>(null);
   
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -163,6 +166,44 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
       
       setTempDates(newDates);
+  };
+
+  const handleToggleSpecificEvent = (eventTime: string, isSunday: boolean, day: number) => {
+      if (isSaveLocked) return;
+      setSaveState('dirty');
+
+      const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      let period = dateBase;
+      if (isSunday) {
+          const hour = parseInt(eventTime.split(':')[0], 10);
+          period = hour < 12 ? `${dateBase}_M` : `${dateBase}_N`;
+      }
+
+      setTempDates(prev => {
+          let updated = [...prev];
+          
+          if (updated.includes(dateBase) && isSunday) {
+             // If they had full day, and now they toggle one event, ideally we break down the full day into chunks.
+             // But simpler is: remove FULL DAY, and add the OTHER period if toggling 'off'
+             // Actually, if dateBase is there, it means available. Removing means we should add the *other* period.
+             updated = updated.filter(d => d !== dateBase);
+             const otherPeriod = period.endsWith('_M') ? `${dateBase}_N` : `${dateBase}_M`;
+             updated.push(otherPeriod);
+             return updated;
+          }
+
+          if (updated.includes(period)) {
+              updated = updated.filter(d => d !== period);
+          } else {
+              updated.push(period);
+              // Check if now they have both M and N, we can upgrade to full day
+              if (updated.includes(`${dateBase}_M`) && updated.includes(`${dateBase}_N`)) {
+                  updated = updated.filter(d => d !== `${dateBase}_M` && d !== `${dateBase}_N`);
+                  updated.push(dateBase);
+              }
+          }
+          return updated;
+      });
   };
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -346,7 +387,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     {blanks.map((_, i) => <div key={`blank-${i}`} />)}
                     {days.map(day => {
                         const status = getDayStatus(day);
-                        let btnClass = "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 border-zinc-200 dark:border-zinc-700";
+                        const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+                        const dayEvents = events.filter(e => e.iso.startsWith(dateBase));
+                        
+                        let btnClass = "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800";
+                        // If day has events but user marked FULL availability, or they are just available
+                        const isSunday = new Date(year, month - 1, day).getDay() === 0;
+
+                        const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-rose-500', 'bg-cyan-500'];
+                        const getEventColor = (title: string) => {
+                            let hash = 0;
+                            for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+                            return colors[Math.abs(hash) % colors.length];
+                        };
+
                         let content = <span className="text-xs md:text-sm font-bold">{day}</span>;
 
                         if (status === 'full') {
@@ -375,13 +429,33 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             );
                         }
 
+                        let dots = null;
+                        if (dayEvents.length > 0) {
+                            dots = (
+                                <div className="flex gap-1 mt-1 flex-wrap justify-center max-w-[80%]">
+                                    {dayEvents.map(e => <div key={e.id} className={`w-1.5 h-1.5 rounded-full ${getEventColor(e.title)} ${status !== 'none' ? 'ring-1 ring-white/50' : ''}`} title={e.title} />)}
+                                </div>
+                            );
+                        }
+
                         return (
                             <button
                                 key={day}
-                                onClick={() => handleToggleDate(day)}
-                                className={`aspect-square rounded-lg md:rounded-xl border flex flex-col items-center justify-center transition-all active:scale-90 ${btnClass}`}
+                                onClick={() => {
+                                    if (!canEdit) {
+                                        addToast("O período de envio está fechado.", "warning");
+                                        return;
+                                    }
+                                    if (dayEvents.length > 0) {
+                                        setDayModalOpen(day);
+                                    } else {
+                                        handleToggleDate(day);
+                                    }
+                                }}
+                                className={`aspect-square rounded-lg md:rounded-xl border flex flex-col items-center justify-center transition-all active:scale-90 ${btnClass} relative`}
                             >
                                 {content}
+                                {dots}
                             </button>
                         );
                     })}
@@ -415,6 +489,110 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 />
             </div>
         </div>
+
+        {/* Modal de Eventos do Dia */}
+        {dayModalOpen !== null && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl relative">
+                    <button 
+                        onClick={() => setDayModalOpen(null)} 
+                        className="absolute right-4 top-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+                    >
+                        ✕
+                    </button>
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-1">
+                        Dia {String(dayModalOpen).padStart(2, '0')}
+                    </h3>
+                    <p className="text-sm text-zinc-500 mb-6">Confirme sua disponibilidade para os eventos listados.</p>
+                    
+                    <div className="space-y-3">
+                        {events.filter(e => e.iso.startsWith(`${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`)).map(ev => {
+                            const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                            const isSunday = new Date(year, month - 1, dayModalOpen).getDay() === 0;
+                            const hour = parseInt(ev.iso.split('T')[1].split(':')[0]);
+                            const hasFull = tempDates.includes(dateBase);
+                            const hasMorning = tempDates.includes(`${dateBase}_M`);
+                            const hasNight = tempDates.includes(`${dateBase}_N`);
+                            
+                            let isAvailable = false;
+                            if (hasFull) isAvailable = true;
+                            else if (isSunday) {
+                                if (hour < 14 && hasMorning) isAvailable = true;
+                                if (hour >= 14 && hasNight) isAvailable = true;
+                            }
+
+                            const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-rose-500', 'bg-cyan-500'];
+                            let hash = 0;
+                            for (let i = 0; i < ev.title.length; i++) hash = ev.title.charCodeAt(i) + ((hash << 5) - hash);
+                            const color = colors[Math.abs(hash) % colors.length];
+
+                            return (
+                                <div key={ev.id} className="flex items-center justify-between p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-3 h-3 rounded-full ${color}`} />
+                                        <div>
+                                            <p className="font-bold text-zinc-900 dark:text-zinc-100 text-sm leading-tight mb-0.5">{ev.title}</p>
+                                            <p className="text-xs text-zinc-500 font-medium">{ev.iso.split('T')[1].slice(0,5)}</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            if (isSaveLocked) return;
+                                            setSaveState('dirty');
+                                            
+                                            let newDates = [...tempDates];
+                                            if (isAvailable) {
+                                                // remove
+                                                if (isSunday) {
+                                                    if (hour < 14) newDates = newDates.filter(d => d !== `${dateBase}_M` && d !== dateBase);
+                                                    else newDates = newDates.filter(d => d !== `${dateBase}_N` && d !== dateBase);
+                                                } else {
+                                                    newDates = newDates.filter(d => d !== dateBase);
+                                                }
+                                            } else {
+                                                // add
+                                                if (isSunday) {
+                                                    if (hour < 14 && !newDates.includes(`${dateBase}_M`)) newDates.push(`${dateBase}_M`);
+                                                    else if (hour >= 14 && !newDates.includes(`${dateBase}_N`)) newDates.push(`${dateBase}_N`);
+                                                } else {
+                                                    if (!hasFull) newDates.push(dateBase);
+                                                }
+                                            }
+                                            setTempDates(newDates);
+                                        }}
+                                        className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                                            isAvailable 
+                                            ? 'bg-secondary text-white' 
+                                            : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-300 dark:hover:bg-zinc-600'
+                                        }`}
+                                    >
+                                        {isAvailable ? '✔ Selecionado' : 'Marcar'}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                        <button 
+                            onClick={() => {
+                                handleToggleDate(dayModalOpen);
+                            }}
+                            className="w-full py-2.5 rounded-xl text-zinc-500 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <RefreshCw size={14} /> Ciclo Geral do Dia (D/M/N)
+                        </button>
+                    </div>
+
+                    <button 
+                        onClick={() => setDayModalOpen(null)}
+                        className="w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3.5 rounded-xl font-bold mt-4 hover:opacity-90 transition-opacity"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        )}
 
         {/* Floating Action Bar */}
         <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${saveState !== 'idle' ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
@@ -454,6 +632,59 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 )}
             </div>
         </div>
+
+        {/* DAY EVENTS MODAL */}
+        {dayModalOpen && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDayModalOpen(null)}>
+                <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-sm flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+                            Eventos do dia {dayModalOpen}
+                        </h3>
+                        <button onClick={() => setDayModalOpen(null)} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                            <span className="sr-only">Fechar</span>
+                            &times;
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {(() => {
+                            const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                            const dayEvents = (events || []).filter(e => e.iso.startsWith(dateBase));
+                            const dateObj = new Date(year, month - 1, dayModalOpen);
+                            const isSunday = dateObj.getDay() === 0;
+
+                            if (dayEvents.length === 0) return <p className="text-sm text-zinc-500">Nenhum evento neste dia.</p>;
+
+                            return dayEvents.map(event => {
+                                const hour = parseInt(event.time.split(':')[0], 10);
+                                const period = isSunday ? (hour < 12 ? `${dateBase}_M` : `${dateBase}_N`) : dateBase;
+                                const isAvailable = tempDates.includes(dateBase) || tempDates.includes(period);
+
+                                const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-rose-500', 'bg-cyan-500'];
+                                let hash = 0;
+                                for (let i = 0; i < event.title.length; i++) hash = event.title.charCodeAt(i) + ((hash << 5) - hash);
+                                const eventColor = colors[Math.abs(hash) % colors.length];
+
+                                return (
+                                    <label key={event.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isAvailable ? 'bg-secondary/10 border-secondary ring-1 ring-secondary' : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                                        <input type="checkbox" className="hidden" checked={isAvailable} onChange={() => handleToggleSpecificEvent(event.time, isSunday, dayModalOpen)} />
+                                        <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border ${isAvailable ? 'bg-secondary border-secondary text-white' : 'border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'}`}>
+                                            {isAvailable && <Check size={14} strokeWidth={3} />}
+                                        </div>
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${eventColor}`}></div>
+                                        <div className="flex-1">
+                                            <p className={`font-bold text-sm ${isAvailable ? 'text-secondary dark:text-secondary' : 'text-zinc-700 dark:text-zinc-300'}`}>{event.title}</p>
+                                            <p className="text-xs text-zinc-500">{event.time}</p>
+                                        </div>
+                                    </label>
+                                );
+                            });
+                        })()}
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
