@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { QrCode, X, CheckCircle2, RotateCw, Loader2, MessageCircle } from 'lucide-react';
 import { getSupabase } from '../services/supabase/client';
 
@@ -17,8 +17,15 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
   const [pollCount, setPollCount] = useState(0);
   const [showAlreadyConnected, setShowAlreadyConnected] = useState(false);
   const [resolvedMinistryName, setResolvedMinistryName] = useState<string | null>(null);
+  // CORREÇÃO: ref para evitar setState em componente desmontado
+  const isMounted = useRef(true);
 
   const supabase = getSupabase();
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!ministryName && ministryId && supabase) {
@@ -27,8 +34,8 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         .select('*')
         .eq('id', ministryId)
         .single()
-        .then(({ data, error }) => {
-          if (data?.label) {
+        .then(({ data }) => {
+          if (isMounted.current && data?.label) {
             setResolvedMinistryName(data.label);
           }
         })
@@ -49,6 +56,7 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         .eq('ministry_id', ministryId)
         .single();
       
+      if (!isMounted.current) return; // CORREÇÃO: ignorar se desmontado
       if (error && error.code !== 'PGRST116') throw error;
       
       if (data) {
@@ -57,9 +65,7 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
           setStatus('connected');
           setPhoneNumber(data.phone_number);
         } else {
-          // If instance exists but not connected, we should probably check its status or allow reconnect
-          // For simplicity, we just mark as idle so they can connect again
-          if (status !== 'qr') setStatus('idle'); // keep qr if currently showing
+          if (status !== 'qr') setStatus('idle');
         }
       } else {
         if (status !== 'qr') setStatus('idle');
@@ -78,6 +84,8 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
         .eq('instance_name', instName)
         .single();
 
+      if (!isMounted.current) return false; // CORREÇÃO: guard após await
+
       if (dbData?.connected) {
         setStatus('connected');
         if (dbData.phone_number) setPhoneNumber(dbData.phone_number);
@@ -87,12 +95,15 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
       const { data, error } = await supabase.functions.invoke('whatsapp-status', {
         body: { instance_name: instName }
       });
+
+      if (!isMounted.current) return false; // CORREÇÃO: guard após segundo await
+
       if (error) throw error;
       
       if (data?.state === 'open') {
         setStatus('connected');
         if (data.phone) setPhoneNumber(data.phone);
-        checkConnection(); // Refresh DB state
+        checkConnection();
         return true;
       }
     } catch (err) {
@@ -150,14 +161,12 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
       const finalName = ministryName || resolvedMinistryName;
       const safeName = finalName
         ? finalName
-            .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/[^a-z0-9-]/g, '')
-            .substring(0, 20)
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .substring(0, 25)
         : ministryId.substring(0, 8);
-      const generatedInstanceName = `min-${safeName}-${orgId.substring(0, 6)}`;
+      const generatedInstanceName = `${safeName}-${orgId.substring(0, 5)}`;
 
       const { data, error } = await supabase.functions.invoke('whatsapp-connect', {
         body: { ministry_id: ministryId, org_id: orgId, instance_name: generatedInstanceName }

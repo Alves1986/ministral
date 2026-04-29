@@ -47,6 +47,16 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom'],
+            'query-vendor': ['@tanstack/react-query'],
+            'supabase-vendor': ['@supabase/supabase-js'],
+            'ui-vendor': ['lucide-react']
+          }
+        }
+      }
     },
     publicDir: 'public',
     test: {

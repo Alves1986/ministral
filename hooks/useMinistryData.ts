@@ -191,7 +191,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [queryClient]);
 
   const userId = currentUser?.id ?? '';
-  const allowedMids = currentUser?.allowedMinistries ?? (mid ? [mid] : []);
+  const allowedMids = useMemo(() => {
+      return currentUser?.allowedMinistries ?? (mid ? [mid] : []);
+  }, [currentUser?.allowedMinistries, mid]);
   const isAdminFlag = !!(currentUser?.access_role === 'admin' || currentUser?.isOrgAdmin || currentUser?.isSuperAdmin);
 
   // 1. Canais que NÃO dependem do mês (Estáveis)

@@ -15,9 +15,22 @@ export const WhatsAppTestPanel: React.FC<Props> = ({ orgId, onShowToast }) => {
 
   const supabase = getSupabase();
 
+  // Validação simples de telefone antes de chamar a Edge Function
+  const isValidPhone = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    // Com ou sem código de país: 10 ou 11 dígitos (BR), ou 12-13 com 55
+    const bare = digits.startsWith('55') ? digits.slice(2) : digits;
+    return bare.length === 10 || bare.length === 11;
+  };
+
   const handleSendMessage = async () => {
     if (!testPhone) {
       onShowToast?.('Por favor, informe o número de teste.', 'error');
+      return;
+    }
+
+    if (!isValidPhone(testPhone)) {
+      onShowToast?.('Número inválido. Use o formato (11) 99999-9999.', 'error');
       return;
     }
     
@@ -29,11 +42,23 @@ export const WhatsAppTestPanel: React.FC<Props> = ({ orgId, onShowToast }) => {
         body: {
           mode: 'message',
           phone: testPhone,
-          message: testMessage
+          message: testMessage,
+          org_id: orgId
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        let errMsg = error.message;
+        if (error.context && typeof error.context.json === 'function') {
+          try {
+            const errBody = await error.context.json();
+            if (errBody.error) errMsg = errBody.error;
+          } catch (e) {
+            // ignore
+          }
+        }
+        throw new Error(errMsg);
+      }
       onShowToast?.('Mensagem de teste enviada com sucesso!', 'success');
     } catch (e: any) {
       console.error('Error sending test message:', e);
@@ -56,7 +81,9 @@ export const WhatsAppTestPanel: React.FC<Props> = ({ orgId, onShowToast }) => {
       });
       
       if (error) throw error;
-      onShowToast?.(`Simulação concluída! ${data?.sent || 0} enviados, ${data?.skipped || 0} ignorados.`, 'success');
+      const { sent = 0, skipped = 0, errors = 0 } = data || {};
+      const type = errors > 0 ? 'error' : 'success';
+      onShowToast?.(`Simulação concluída! ${sent} enviados, ${skipped} ignorados, ${errors} erros.`, type);
     } catch (e: any) {
       console.error('Error simulating reminders:', e);
       onShowToast?.(`Erro na simulação: ${e.message}`, 'error');

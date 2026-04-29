@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
-import { AvailabilityScreen } from '../components/AvailabilityScreen';
-import { SwapRequestsScreen } from '../components/SwapRequestsScreen';
-import { AnnouncementsScreen } from '../components/AnnouncementsScreen';
-import { RepertoireScreen } from '../components/RepertoireScreen';
+import { lazy } from 'react';
+
+const AvailabilityScreen = lazy(() => import('../components/AvailabilityScreen').then(m => ({ default: m.AvailabilityScreen })));
+const SwapRequestsScreen = lazy(() => import('../components/SwapRequestsScreen').then(m => ({ default: m.SwapRequestsScreen })));
+const AnnouncementsScreen = lazy(() => import('../components/AnnouncementsScreen').then(m => ({ default: m.AnnouncementsScreen })));
+const RepertoireScreen = lazy(() => import('../components/RepertoireScreen').then(m => ({ default: m.RepertoireScreen })));
 import * as Supabase from '../services/supabase';
 import { QueryClient } from '@tanstack/react-query';
 import { User, RepertoireItem, SwapRequest, CustomEvent, ScheduleMap, Announcement, AvailabilityMap, AvailabilityNotesMap, TeamMemberProfile } from '../types';

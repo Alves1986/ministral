@@ -3,3 +3,4 @@ dist
 .env
 check_schema.ts
 test-rpc.js
+.ev.example
