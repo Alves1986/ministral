@@ -70,12 +70,19 @@ const getMemberAvailStatus = (
     eventTime: string,
     availability: Record<string, Record<string, string>>
 ): 'available' | 'unavailable' => {
+    const monthKey = `${date.substring(0, 7)}-01`;
+    if (availability[memberId]?.[monthKey] === 'BLK') {
+        return 'unavailable'; // Mês inteiro bloqueado
+    }
+
     const memberAvail = availability[memberId]?.[date];
     if (!memberAvail) return 'unavailable'; // nao marcou o dia
     if (memberAvail === 'all') return 'available'; // dia todo: disponivel sempre
+    
     // Verificar se e domingo (0 = domingo)
     const weekday = new Date(date + 'T12:00:00').getDay();
-    if (weekday !== 0) return 'available'; // nao e domingo: qualquer nota = disponivel
+    if (weekday !== 0 && memberAvail !== 'BLK') return 'available'; // nao e domingo: qualquer nota = disponivel
+    
     // Domingo: cruzar periodo marcado com horario do evento
     const hour = parseInt(eventTime.split(':')[0], 10);
     const eventPeriod = hour < 12 ? 'M' : 'N'; // manha ou noite
@@ -769,6 +776,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const disponiveisNoMes = members.filter(m => {
         const memberAvail = availability[m.id];
         if (!memberAvail) return false;
+        const monthKey = `${currentMonth}-01`;
+        if (memberAvail[monthKey] === 'BLK') return false;
         return Object.keys(memberAvail).some(date => date.startsWith(currentMonth));
     }).length;
 

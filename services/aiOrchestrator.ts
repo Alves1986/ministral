@@ -175,7 +175,7 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     Gere uma escala de ministério equilibrada e otimizada para as ocorrências abaixo seguindo RIGOROSAMENTE as regras de negócio.
     
     CRITÉRIOS DE DISPONIBILIDADE E PREENCHIMENTO:
-    1. EXCLUSIVIDADE DE DISPONIBILIDADE: Um membro SÓ pode ser escalado se ele tiver marcado disponibilidade EXPLICITAMENTE no objeto 'availability' para aquela data (YYYY-MM-DD). Se não houver registro para ele naquela data (id dele não consta como chave), ou se o valor para a data for 'unavailable', ele NÃO PODE SER ESCALADO em hipótese alguma.
+    1. EXCLUSIVIDADE DE DISPONIBILIDADE: Um membro SÓ pode ser escalado se ele tiver marcado disponibilidade EXPLICITAMENTE no objeto 'availability' para aquela data (YYYY-MM-DD). Se não houver registro para ele naquela data (id dele não consta como chave), ou se o valor para a data for 'unavailable', ele NÃO PODE SER ESCALADO em hipótese alguma. ATENÇÃO: Se o objeto availability contiver a chave "YYYY-MM-01" com o valor "BLK", significa que o membro NÃO ESTÁ DISPONÍVEL no mês inteiro e não pode ser escalado em NENHUM dia desse mês.
     2. DEIXAR VAZIO SE NECESSÁRIO: Se para uma determinada função em uma data não houver NENHUM membro disponível que possua aquela função em seu perfil (functions), você DEVE deixar essa vaga vazia. Não tente "inventar" uma escala ou colocar alguém indisponível. É preferível uma escala incompleta do que uma que viole as disponibilidades.
     3. RESPEITO ÀS FUNÇÕES: Um membro só pode ser escalado em uma função (role) que esteja listada em seu array 'functions'.
     
