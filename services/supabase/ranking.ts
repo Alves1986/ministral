@@ -237,7 +237,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             type: 'announcement_like' 
         }));
 
-        if (points < 0) points = 0;
+        // Excluded: if (points < 0) points = 0;
         history.sort((a, b) => b.date.localeCompare(a.date));
 
         return {

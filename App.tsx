@@ -398,6 +398,7 @@ const InnerApp = () => {
                     }
                 }} 
                 ministryId={ministryId} 
+                ministryName={ministryTitle}
                 currentUser={activeUser!} 
             />
         </div>
@@ -939,7 +940,7 @@ const InnerApp = () => {
                 addToast("Erro ao solicitar troca: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
             }
-        }} currentUser={activeUser!} ministryId={ministryId} canEdit={isAdmin} />}
+        }} currentUser={activeUser!} ministryId={ministryId} ministryName={ministryTitle} canEdit={isAdmin} />}
         <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} monthName={getMonthName(currentMonth)} />
         <ConfirmationModal isOpen={!!confirmModalData} onClose={() => setConfirmModalData(null)} data={confirmModalData} onConfirm={async () => { if (confirmModalData) { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, confirmModalData.key); refreshData(); setConfirmModalData(null); addToast("Presença confirmada!", "success"); }}} />
         </Suspense>

@@ -15,12 +15,13 @@ interface Props {
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
+  ministryName?: string | null;
   canEdit?: boolean; 
 }
 
 export const EventDetailsModal: React.FC<Props> = ({ 
     isOpen, onClose, event, schedule, roles, allMembers = [], 
-    onSave, onSwapRequest, currentUser, ministryId, canEdit = false 
+    onSave, onSwapRequest, currentUser, ministryId, ministryName, canEdit = false 
 }) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
@@ -113,8 +114,8 @@ export const EventDetailsModal: React.FC<Props> = ({
       `Escala: ${title}`,
       event.iso,
       userAssignment 
-        ? `Você está escalado como: ${userAssignment.display}.\nMinistério: ${ministryId?.toUpperCase()}`
-        : `Evento do ministério ${ministryId?.toUpperCase()}`
+        ? `Você está escalado como: ${userAssignment.display}.\nMinistério: ${ministryName || ministryId?.toUpperCase()}`
+        : `Evento do ministério ${ministryName || ministryId?.toUpperCase()}`
   );
 
   const getMemberForRole = (roleObj: any) => {

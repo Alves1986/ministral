@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Save, Loader2, MessageCircle } from 'lucide-react';
 import { fetchWhatsAppSettings, upsertWhatsAppSettings } from '../services/supabase/misc';
 import { WhatsAppSettings, MinistryDef } from '../types';
-import { WhatsAppTestPanel } from './WhatsAppTestPanel';
 
 interface Props {
   orgId: string;
@@ -142,10 +141,6 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministrie
           </button>
         </div>
       </div>
-      
-      {settings.enabled && (
-        <WhatsAppTestPanel orgId={orgId} onShowToast={onShowToast} />
-      )}
     </div>
   );
 };

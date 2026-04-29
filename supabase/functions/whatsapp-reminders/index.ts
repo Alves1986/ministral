@@ -13,8 +13,6 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
 serve(async (req: Request) => {
   try {
     // ── 1. Autenticação do cron via secret header ─────────────────────────
-    // Configure WHATSAPP_CRON_SECRET nas Supabase Edge Function Secrets
-    // e inclua o mesmo valor no header 'x-cron-secret' do cron job SQL.
     const cronSecret = Deno.env.get("WHATSAPP_CRON_SECRET");
     if (cronSecret) {
       const incomingSecret = req.headers.get("x-cron-secret");
@@ -45,13 +43,29 @@ serve(async (req: Request) => {
       throw new Error("Credenciais da Evolution API não configuradas.");
     }
 
-    // ── 4. Hora atual em horário de Brasília ──────────────────────────────
-    // Converte UTC → America/Sao_Paulo para evitar o bug de meia-noite
-    const nowUTC  = new Date();
-    const nowBR   = new Date(nowUTC.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-    const hh = String(nowBR.getHours()).padStart(2, "0");
-    const mm = String(nowBR.getMinutes()).padStart(2, "0");
-    const currentMinuteStr = `${hh}:${mm}:00`;
+    // ── 4. Hora atual em horário de Brasília (ROBUSTEZ NO TIMEZONE) ─────────
+    const nowUTC = new Date();
+    
+    // Formatador para obter as partes da data em Brasília com segurança
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", second: "numeric",
+      hour12: false
+    });
+    
+    // Obter as partes individuais
+    const yyNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric" }).format(nowUTC));
+    const mmNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", month: "numeric" }).format(nowUTC));
+    const ddNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", day: "numeric" }).format(nowUTC));
+    
+    let hhNowStr = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(nowUTC);
+    if (hhNowStr === "24") hhNowStr = "0"; // Tratar caso de 24h
+    const hhNow = Number(hhNowStr);
+    const minNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", minute: "numeric" }).format(nowUTC));
+
+    const currentMinuteStr = `${String(hhNow).padStart(2, "0")}:${String(minNow).padStart(2, "0")}`;
+    const currentTimeInMinutes = hhNow * 60 + minNow;
 
     // ── 5. Busca organizações com WhatsApp habilitado ─────────────────────
     const { data: orgSettings, error: orgErr } = await supabase
@@ -73,7 +87,6 @@ serve(async (req: Request) => {
       .eq("connected", true);
 
     if (mnErr) {
-      // Logar mas não abortar — fallback para instância global
       console.error("[whatsapp-reminders] Erro ao buscar ministry_whatsapp:", mnErr);
     }
 
@@ -87,23 +100,31 @@ serve(async (req: Request) => {
     const results: any[] = [];
 
     for (const orgSetting of orgSettings) {
-      // ── 7. Verificação do horário configurado (CORREÇÃO CRÍTICA) ─────────
+      // ── 7. Verificação do horário configurado (JANELA DE TOLERÂNCIA) ─────────
       const rawTime = orgSetting.send_time || "09:00:00";
-      // Considera apenas hora e minuto para a comparação
-      const configuredMinuteStr = rawTime.length >= 5 ? rawTime.substring(0, 5) + ":00" : "09:00:00";
-      if (configuredMinuteStr !== currentMinuteStr) {
-        results.push({ org_id: orgSetting.org_id, skipped: true, reason: `send_time ${configuredMinuteStr} ≠ hora atual ${currentMinuteStr}` });
+      const [confHStr, confMStr] = rawTime.split(":");
+      const configuredTimeInMinutes = Number(confHStr) * 60 + Number(confMStr);
+      
+      // Verifica se a hora atual está dentro da janela de 5 minutos após o horário configurado
+      let diff = currentTimeInMinutes - configuredTimeInMinutes;
+      // Ajuste para casos em que cruza a meia-noite (ex: configurado 23:58, mudou para 00:02)
+      if (diff < -1000) diff += 1440; 
+      
+      if (diff < 0 || diff > 5) {
+        results.push({ org_id: orgSetting.org_id, skipped: true, reason: `Fora da janela de 5m (configurado: ${rawTime}, atual: ${currentMinuteStr})` });
         continue;
       }
 
       // ── 8. Data-alvo no fuso de Brasília (CORREÇÃO DE TIMEZONE) ─────────
       const sendDaysBefore = orgSetting.send_days_before || 0;
-      const targetBR = new Date(nowBR);
-      targetBR.setDate(targetBR.getDate() + sendDaysBefore);
-      const yy  = targetBR.getFullYear();
-      const mm  = String(targetBR.getMonth() + 1).padStart(2, "0");
-      const dd  = String(targetBR.getDate()).padStart(2, "0");
-      const targetDate = `${yy}-${mm}-${dd}`;
+      
+      // Cria uma data UTC que representa a meia-noite da data local brasileira para facilitar adição segura
+      const targetDateObj = new Date(Date.UTC(yyNow, mmNow - 1, ddNow + sendDaysBefore));
+      
+      const yy  = targetDateObj.getUTCFullYear();
+      const mmStr  = String(targetDateObj.getUTCMonth() + 1).padStart(2, "0");
+      const ddStr  = String(targetDateObj.getUTCDate()).padStart(2, "0");
+      const targetDate = `${yy}-${mmStr}-${ddStr}`;
 
       // ── 9. Busca assignments do dia alvo ──────────────────────────────────
       const { data: assignments, error: assigErr } = await supabase
@@ -149,8 +170,9 @@ serve(async (req: Request) => {
         const eventTitle = firstAssig.event_rules?.title || "Culto";
         const eventTimeStr = firstAssig.event_rules?.time ? firstAssig.event_rules.time.substring(0, 5) : "00:00";
         
-        const displayDate = new Date(`${firstAssig.event_date}T12:00:00`);
-        const dateStr = displayDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+        // Formatar data usando a targetDate corretamente
+        const [tY, tM, tD] = targetDate.split('-');
+        const dateStr = `${tD}/${tM}/${tY}`;
 
         // Monta a lista de membros e funções
         let membersList = "";
@@ -183,7 +205,7 @@ serve(async (req: Request) => {
             continue;
           }
 
-          // Deduplicação no banco de dados
+          // Deduplicação no banco de dados (VERIFICA O LOG)
           const { data: alreadySent } = await supabase
             .from("whatsapp_sent_log")
             .select("id")

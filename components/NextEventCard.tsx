@@ -13,12 +13,13 @@ interface Props {
   members: TeamMemberProfile[];
   onConfirm: (key: string) => void;
   ministryId: string | null;
+  ministryName?: string | null;
   currentUser: UserType | null;
 }
 
 type TimeStatus = 'early' | 'open' | 'closed';
 
-export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
+export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, attendance, roles, members, onConfirm, ministryId, ministryName, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [countdownString, setCountdownString] = useState('');
   
@@ -83,7 +84,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
       const googleCalUrl = generateGoogleCalendarUrl(
           `Escala: ${eventData.title}`,
           eventData.iso,
-          `Você está escalado como: ${role}.\nMinistério: ${ministryId?.toUpperCase()}`
+          `Você está escalado como: ${role}.\nMinistério: ${ministryName || ministryId?.toUpperCase()}`
       );
 
       if (isConfirmed) {

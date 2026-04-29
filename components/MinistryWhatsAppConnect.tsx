@@ -29,17 +29,22 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
 
   useEffect(() => {
     if (!ministryName && ministryId && supabase) {
-      supabase
-        .from('organization_ministries')
-        .select('*')
-        .eq('id', ministryId)
-        .single()
-        .then(({ data }) => {
+      const fetchMinistry = async () => {
+        try {
+          const { data } = await supabase
+            .from('organization_ministries')
+            .select('*')
+            .eq('id', ministryId)
+            .single();
           if (isMounted.current && data?.label) {
             setResolvedMinistryName(data.label);
           }
-        })
-        .catch(err => console.error("Error fetching ministry name:", err));
+        } catch (err) {
+          console.error("Error fetching ministry name:", err);
+        }
+      };
+      
+      fetchMinistry();
     }
   }, [ministryId, ministryName]);
 

@@ -227,7 +227,7 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                             <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{displayList[1].name}</p>
                             <span className="flex items-center justify-center gap-1">
                                 <GloryIcon size={14}/>
-                                <span className="text-zinc-500 text-xs font-bold">{displayList[1].points}</span>
+                                <span className={`text-xs font-bold ${displayList[1].points < 0 ? 'text-red-500' : 'text-zinc-500'}`}>{displayList[1].points}</span>
                             </span>
                         </div>
                         <div className="h-16 md:h-24 w-full bg-gradient-to-t from-zinc-200 to-zinc-100 dark:from-zinc-800 dark:to-zinc-700 rounded-t-lg mt-2 opacity-80 group-hover:opacity-100 transition-opacity"></div>
@@ -252,7 +252,7 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                             <p className="font-bold text-zinc-900 dark:text-white text-sm md:text-base line-clamp-1">{displayList[0].name}</p>
                             <span className="flex items-center justify-center gap-1">
                                 <GloryIcon size={14}/>
-                                <span className="text-accent font-black text-sm md:text-lg">{displayList[0].points}</span>
+                                <span className={`font-black text-sm md:text-lg ${displayList[0].points < 0 ? 'text-red-500' : 'text-accent'}`}>{displayList[0].points}</span>
                             </span>
                         </div>
                         <div className="h-24 md:h-32 w-full bg-gradient-to-t from-accent/20 to-accent/5 dark:from-accent/20 dark:to-accent/5 rounded-t-xl mt-2 border-x border-t border-accent/30 dark:border-accent/30 relative overflow-hidden group-hover:opacity-100 transition-opacity">
@@ -278,7 +278,7 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                             <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{displayList[2].name}</p>
                             <span className="flex items-center justify-center gap-1">
                                 <GloryIcon size={14}/>
-                                <span className="text-zinc-500 text-xs font-bold">{displayList[2].points}</span>
+                                <span className={`text-xs font-bold ${displayList[2].points < 0 ? 'text-red-500' : 'text-zinc-500'}`}>{displayList[2].points}</span>
                             </span>
                         </div>
                         <div className="h-12 md:h-16 w-full bg-gradient-to-t from-orange-100 to-white dark:from-orange-900/30 dark:to-zinc-800 rounded-t-lg mt-2 opacity-80 group-hover:opacity-100 transition-opacity"></div>
@@ -301,7 +301,7 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                         <p className="text-white/80 text-xs font-bold uppercase flex items-center gap-1">
                             Seus GloryCoins <Coins size={10} className="opacity-70"/>
                         </p>
-                        <h3 className="text-2xl font-bold flex items-center gap-2">
+                        <h3 className={`text-2xl font-bold flex items-center gap-2 ${myData.points < 0 ? 'text-red-300' : ''}`}>
                             {myData.points}
                             <span className="text-base font-medium opacity-80">GloryCoins</span>
                         </h3>
@@ -360,7 +360,9 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
 
                             <div className="flex items-center gap-1.5">
                                 <GloryIcon size={16}/>
-                                <span className="font-black text-zinc-700 dark:text-zinc-300">{user.points}</span>
+                                <span className={`font-black ${user.points < 0 ? 'text-red-500' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                    {user.points}
+                                </span>
                             </div>
                         </div>
                     ))}
