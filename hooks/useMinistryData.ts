@@ -171,7 +171,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       }
 
       // 1. Reseta as queries para o estado inicial (limpa cache e refetch se enabled)
-      await queryClient.invalidateQueries({ 
+      queryClient.invalidateQueries({ 
           predicate: (query) => 
               query.queryKey[0] === 'event_rules' || 
               query.queryKey[0] === 'settings' || 

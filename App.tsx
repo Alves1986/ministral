@@ -353,23 +353,14 @@ const InnerApp = () => {
                     <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
                         Olá, <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
                         <button 
-                            onClick={async () => {
-                                setIsRefreshing(true);
-                                try {
-                                    await refreshData();
-                                    addToast("Dados atualizados com sucesso!", "success");
-                                } catch (err) {
-                                    console.error("Erro ao atualizar dados:", err);
-                                    addToast("Erro ao atualizar dados.", "error");
-                                } finally {
-                                    setIsRefreshing(false);
-                                }
+                            onClick={() => {
+                                refreshData();
+                                addToast("Atualização solicitada...", "info");
                             }}
                             className="p-2 text-zinc-400 hover:text-secondary hover:bg-secondary/10 rounded-full transition-all duration-500"
                             title="Atualizar dados do sistema"
-                            disabled={isRefreshing}
                         >
-                            <RefreshCw size={20} className={isRefreshing ? "animate-spin text-secondary dark:text-white" : ""} />
+                            <RefreshCw size={20} />
                         </button>
                     </h1>
                     <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
@@ -680,31 +671,6 @@ const InnerApp = () => {
           currentTab={isTabValid ? currentTab : 'dashboard'}
           onTabChange={async (tab) => {
               setCurrentTab(tab);
-              
-              // Mapa de keys relacionadas a cada aba para invalidação inteligente
-              const tabQueryMap: Record<string, string[]> = {
-                  'members': ['members'],
-                  'calendar': ['assignments', 'rules'],
-                  'schedule-editor': ['assignments', 'rules', 'members'],
-                  'announcements': ['announcements'],
-                  'availability': ['availability', 'availabilityV2'],
-                  'repertoire': ['repertoire'],
-                  'repertoire-manager': ['repertoire'],
-                  'ranking': ['ranking'],
-                  'dashboard': ['nextEvent', 'assignments', 'announcements'],
-                  'swaps': ['swaps'],
-                  'history': ['audit'],
-                  'event-rules': ['rules'],
-                  'settings': ['settings']
-              };
-
-              const keysToInvalidate = tabQueryMap[tab];
-              if (keysToInvalidate) {
-                  // Invalidação via predicate para ser mais preciso
-                  queryClient.invalidateQueries({
-                      predicate: (query) => keysToInvalidate.includes(query.queryKey[0] as string)
-                  });
-              }
           }}
           mainNavItems={MAIN_NAV}
           managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
