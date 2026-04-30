@@ -77,8 +77,8 @@ const getMemberAvailStatus = (
     }
 
     const memberAvail = availability[memberId]?.[date];
-    // Se não marcou disponibilidade para o dia, vamos assumir 'available' por padrão!
-    if (!memberAvail) return 'available'; // nao marcou o dia = disponivel
+    // Se não marcou disponibilidade para o dia
+    if (!memberAvail) return 'unavailable'; 
     
     // Se marcou que não pode, entao 'unavailable'
     if (memberAvail === 'unavailable') return 'unavailable';
@@ -102,7 +102,9 @@ const isConflict = (
     eventDate: string,
     currentAssignments: AssignmentV2[],
     rules: { blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] },
-    globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]> = {}
+    globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]> = {},
+    allOccurrences: OccurrenceV2[] = [],
+    eventTime: string = ''
 ) => {
     // 0. Check Global Conflicts (Cross-Ministry)
     const crossMinistryEvents = globalConflicts[memberId]?.filter(c => c.date === eventDate);
@@ -148,6 +150,30 @@ const isConflict = (
             return { conflict: true, existingRole: 'Bloqueio de Membro', type: 'member' };
         }
     }
+
+    // 3. Check Sunday Turn Conflict (Morning vs Evening)
+    const dateObj = new Date(eventDate + 'T12:00:00');
+    if (dateObj.getDay() === 0 && eventTime) {
+        const hour = parseInt(eventTime.split(':')[0], 10);
+        const isMorning = hour < 12;
+
+        const otherAssignmentsThisDay = currentAssignments.filter(a => 
+            a.member_id === memberId && 
+            a.event_date === eventDate && 
+            a.event_rule_id !== eventRuleId
+        );
+
+        for (const oAssign of otherAssignmentsThisDay) {
+            const matchingOcc = allOccurrences.find(occ => occ.ruleId === oAssign.event_rule_id && occ.date === eventDate);
+            if (matchingOcc) {
+                const assignedHour = parseInt(matchingOcc.time.split(':')[0], 10);
+                const assignedMorning = assignedHour < 12;
+                if (isMorning !== assignedMorning) {
+                    return { conflict: true, existingRole: 'Culto Diferente', type: 'sundayTurn' };
+                }
+            }
+        }
+    }
     
     return { conflict: false };
 };
@@ -165,6 +191,7 @@ interface ScheduleCellProps {
     assignments: AssignmentV2[];
     memberCounts: Record<string, number>;
     globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]>;
+    allOccurrences: OccurrenceV2[];
 }
 
 const ScheduleCell: React.FC<ScheduleCellProps> = ({ 
@@ -179,7 +206,8 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     conflictRules,
     assignments,
     memberCounts,
-    globalConflicts
+    globalConflicts,
+    allOccurrences
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -226,7 +254,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     const unavailableMembers: MemberV2[] = [];
 
     roleMembers.forEach(m => {
-        const conflictCheck = isConflict(m.id, role, occurrence.ruleId, occurrence.date, assignments, conflictRules, globalConflicts);
+        const conflictCheck = isConflict(m.id, role, occurrence.ruleId, occurrence.date, assignments, conflictRules, globalConflicts, allOccurrences, eventTime);
         if (conflictCheck.conflict) {
             conflictMembers.push({ member: m, existingRole: conflictCheck.existingRole!, type: conflictCheck.type });
         } else {
@@ -809,10 +837,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
 
     const disponiveisNoMes = members.filter(m => {
         const memberAvail = availability[m.id];
-        if (!memberAvail) return true; // Se não tem registro, tá disponível
+        if (!memberAvail) return false;
         const monthKey = `${currentMonth}-01`;
-        if (memberAvail[monthKey] === 'BLK') return false; // Bloqueado no mês
-        return true; 
+        if (memberAvail[monthKey] === 'BLK') return false;
+        return Object.keys(memberAvail).some(date => date.startsWith(currentMonth));
     }).length;
 
     const alertas = assignments.filter(a => {
@@ -957,6 +985,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
                                                     globalConflicts={globalConflicts}
+                                                    allOccurrences={occurrences}
                                                 />
                                             </td>
                                         );
@@ -1023,6 +1052,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
                                                     globalConflicts={globalConflicts}
+                                                    allOccurrences={occurrences}
                                                 />
                                             </div>
                                         );

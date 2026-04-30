@@ -4,11 +4,9 @@
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 function getApiKey(): string {
-  // Browser (Vite)
   if (typeof window !== 'undefined') {
     return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
   }
-  // Node / SSR
   if (typeof process !== 'undefined' && process.env) {
     return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
   }
@@ -27,14 +25,20 @@ export enum AI_TASKS {
   SCALE_GENERATION = 'SCALE_GENERATION'
 }
 
-// Modelos disponíveis — usados pelo AdvancedAIScreen e aqui como fallback
 export const OPENROUTER_MODELS = [
-  { id: 'minimax/minimax-m2.5:free',  name: 'MiniMax M2.5 (Equilibrado)',   description: 'Modelo versátil e confiável para uso geral.' },
-  { id: 'openai/gpt-oss-120b:free',   name: 'GPT OSS 120B (Lógica)',        description: 'Focado em decisões complexas, análise e raciocínio.' },
-  { id: 'z-ai/glm-4.5-air:free',      name: 'GLM-4.5 Air (Velocidade)',     description: 'Resposta ultra-rápida para tarefas de escrita.' },
+  {
+    id: 'deepseek/deepseek-r1:free',
+    name: 'DeepSeek R1 (Lógica)',
+    description: 'Melhor raciocínio lógico. Ideal para análises, sugestões e explicações complexas.'
+  },
+  {
+    id: 'google/gemini-2.0-flash-thinking-exp:free',
+    name: 'Gemini Flash Thinking (Fallback)',
+    description: 'Fallback rápido com raciocínio estruturado quando o DeepSeek estiver indisponível.'
+  },
 ];
 
-export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id; // minimax-m2.5:free
+export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id;
 
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
@@ -53,11 +57,9 @@ interface AIContext {
   current_event?: unknown;
 }
 
-// ─── Tasks que precisam retornar JSON puro ───────────────────────────────────
 const JSON_TASKS = new Set([
   AI_TASKS.MINISTRY_HEALTH,
   AI_TASKS.GENERATE_NOTICE,
-  AI_TASKS.SCALE_GENERATION,
   AI_TASKS.TEXT_REWRITE,
 ]);
 
@@ -65,7 +67,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.MINISTRY_HEALTH]: (data) => `
     Analise a saúde do ministério com base nos dados fornecidos.
     DADOS: ${JSON.stringify(data)}
-
     REGRAS DE RESPOSTA:
     Retorne OBRIGATORIAMENTE um JSON puro seguindo a estrutura solicitada.
     ESTRUTURA:
@@ -81,7 +82,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     Analise a organização das escalas.
     Verifique: sobrecarga, repetição, falta de membros e equilíbrio geral.
     DADOS: ${JSON.stringify(data)}
-
     Retorne análise clara + melhorias.
     PADRÃO DE RESPOSTA:
     - Título
@@ -90,25 +90,20 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   `,
   [AI_TASKS.GENERATE_NOTICE]: (data) => `
     Crie um aviso unificado e organizado para o grupo do WhatsApp do ministério.
-    
     DIRETRIZES:
     1. Trate todo evento como "Culto" no título da mensagem (ex: "Escala para o Culto - ${data.evento}").
     2. Liste os membros e suas funções de forma clara e visualmente agradável com emojis.
     3. Inclua OBRIGATORIAMENTE ao final da mensagem o seguinte bloco de orientações:
-
-    ⚠️ *Orientações:* 
+    ⚠️ *Orientações:*
     1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.
     2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
     3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.
-
     Vamos juntos servir com excelência! 🚀
-
     INFORMAÇÕES:
     Evento: ${data.evento}
     Data: ${data.data}
     Horário: ${data.horario}
     Membros e Funções: ${data.funcoes}
-
     REGRAS DE RESPOSTA:
     Retorne APENAS um objeto JSON.
     ESTRUTURA:
@@ -118,7 +113,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     Explique de forma clara como a escala foi gerada.
     Inclua critérios, equilíbrio e limitações.
     DADOS: ${JSON.stringify(data)}
-
     PADRÃO DE RESPOSTA (Markdown):
     - Título
     - Critérios usados
@@ -133,7 +127,7 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     return `
       ${styles[data.tone as string] || styles.professional}
       TEXTO: "${data.text}"
-      REGRAS: 
+      REGRAS:
       - Retorne APENAS um objeto JSON válido, sem explicações ou markdown externo.
       - A chave deve ser "html".
       - O valor DEVE ser o texto em formato HTML simples (use tags como <p>, <b>, <i>, <br>). SEM markdown como ** ou *.
@@ -146,7 +140,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.SCALE_SUGGESTION]: (data) => `
     Analise os dados e sugira melhorias antes da geração da escala.
     DADOS: ${JSON.stringify(data)}
-
     PADRÃO DE RESPOSTA (Markdown):
     - Título
     - Pontos principais
@@ -155,7 +148,6 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.MEMBER_ANALYSIS]: (data) => `
     Analise os membros e identifique: mais ativos, sobrecarregados e ausentes.
     DADOS: ${JSON.stringify(data)}
-
     PADRÃO DE RESPOSTA (Markdown):
     - Título
     - Pontos principais
@@ -164,66 +156,14 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.PREVENTIVE_ALERT]: (data) => `
     Detecte problemas como: falta de membros, conflitos de função e sobrecarga.
     DADOS: ${JSON.stringify(data)}
-
     PADRÃO DE RESPOSTA (Markdown):
     - Título
     - Pontos principais
     - Sugestões práticas
   `,
-  [AI_TASKS.SCALE_GENERATION]: (data) => {
-    // Extrair apenas as datas relevantes (do mês corrente das ocorrências)
-    const relevantDates = new Set<string>(data.occurrences.map((o: any) => o.date));
-    const trimmedAvailability: Record<string, Record<string, string>> = {};
-    for (const [memberId, dateMap] of Object.entries(data.availability as Record<string, Record<string, string>>)) {
-      const trimmed: Record<string, string> = {};
-      for (const [dateKey, val] of Object.entries(dateMap)) {
-        // Manter BLK mensal (YYYY-MM-01) e apenas datas relevantes
-        if (dateKey.endsWith('-01') || relevantDates.has(dateKey)) {
-          trimmed[dateKey] = val;
-        }
-      }
-      if (Object.keys(trimmed).length > 0) {
-        trimmedAvailability[memberId] = trimmed;
-      }
-    }
-
-    return `
-    Gere uma escala de ministério equilibrada e otimizada para as ocorrências abaixo seguindo RIGOROSAMENTE as regras de negócio.
-    
-    CRITÉRIOS DE DISPONIBILIDADE E PREENCHIMENTO:
-    1. DISPONIBILIDADE: Se um membro estiver explicitamente marcado como 'unavailable' ou 'BLK' para o mês (YYYY-MM-01) ou dia, ele NÃO PODE SER ESCALADO em hipótese alguma. Se ele não tiver registro de disponibilidade, CONSIDERE-O DISPONÍVEL por padrão e pode usá-lo para preencher a escala. Tente equilibrar a frequência entre membros.
-    2. DEIXAR VAZIO SE NECESSÁRIO: Se para uma determinada função em uma data não houver NENHUM membro que possua aquela função em seu perfil (functions) ou todos estiverem indisponíveis, DEIXE VAZIO. Não invente IDs.
-    3. RESPEITO ÀS FUNÇÕES: Um membro só pode ser escalado em uma função (role) que esteja listada em seu array 'functions'.
-    
-    REGRAS DE CONFLITO (RULES):
-    Use os dados de 'rules' para evitar conflitos:
-    - blockGroups: Listas de funções que NÃO podem ser feitas pela mesma pessoa no mesmo evento.
-    - memberBlocks: Pares de IDs de membros que NÃO podem ser escalados juntos no mesmo evento.
-    - memberPrefers: Pares de IDs de membros que devem ser escalados juntos sempre que possível.
-    
-    REGRA DE DOMINGO (IMUTÁVEL):
-    - Domingos podem ter até dois eventos no mesmo dia: um pela manhã (hora < 12:00) e um à noite (hora >= 18:00).
-    - Um membro que já foi escalado em um evento de domingo de MANHÃ NÃO PODE ser escalado no evento de domingo à NOITE do mesmo dia, independentemente de sua disponibilidade declarada.
-    - Para identificar isso: compare o campo 'time' das ocorrências. Se duas ocorrências caírem na mesma data (event_date igual) e uma tiver time < "12:00" e a outra time >= "18:00", trate-as como conflito de turno para o mesmo membro.
-    - Esta regra se aplica em ambas as direções: escalado de manhã → bloqueado à noite; escalado à noite → bloqueado de manhã.
-    
-    DADOS DE ENTRADA:
-    - Ocorrências: ${JSON.stringify(data.occurrences)}
-    - Funções Requeridas: ${JSON.stringify(data.roles)}
-    - Membros: ${JSON.stringify(data.members)}
-    - Disponibilidade (apenas datas relevantes): ${JSON.stringify(trimmedAvailability)}
-    - Escala Atual (NÃO SOBREPOR): ${JSON.stringify(data.existingAssignments)}
-    - Regras de Conflito: ${JSON.stringify(data.rules)}
-    
-    REGRAS DE RESPOSTA:
-    Retorne APENAS um array JSON. Não inclua texto explicativo, markdown ou blocos de código.
-    ESTRUTURA DOS ITENS:
-    { "event_rule_id": "ruleId da ocorrência", "event_date": "YYYY-MM-DD da ocorrência", "role": "função escalada", "member_id": "id do membro" }
-  `;
-  },
+  [AI_TASKS.SCALE_GENERATION]: (_data) => '',
 };
 
-// ─── Core fetch ──────────────────────────────────────────────────────────────
 async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('VITE_OPENROUTER_API_KEY não configurada.');
@@ -232,7 +172,7 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
 
   const body: any = {
     model,
-    max_tokens: taskType === AI_TASKS.SCALE_GENERATION ? 8192 : 4096,
+    max_tokens: 4096,
     messages: [
       {
         role: 'system',
@@ -244,7 +184,7 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 segundos
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
     const res = await fetch(OPENROUTER_URL, {
@@ -270,7 +210,7 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
     return content;
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`Timeout: modelo ${model} não respondeu em 25s.`);
+      throw new Error(`Timeout: modelo ${model} não respondeu em 45s.`);
     }
     throw err;
   } finally {
@@ -278,26 +218,27 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
   }
 }
 
-// ─── Trylist — tenta modelos em sequência até um funcionar ──────────────────
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const order = preferredModel
-    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
-    : OPENROUTER_MODELS.map(m => m.id);
-
+  if (preferredModel) {
+    return await callOpenRouter(prompt, taskType, preferredModel);
+  }
   let lastErr: Error = new Error('Todos os modelos falharam.');
-  for (const model of order) {
+  for (const m of OPENROUTER_MODELS) {
     try {
-      return await callOpenRouter(prompt, taskType, model);
+      return await callOpenRouter(prompt, taskType, m.id);
     } catch (err: any) {
-      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
+      console.warn(`[runAI] Modelo ${m.id} falhou: ${err.message}`);
       lastErr = err;
     }
   }
   throw lastErr;
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
+  if (taskType === AI_TASKS.SCALE_GENERATION) {
+    return generateScheduleLocally(payload);
+  }
+
   let actualContext = context as AIContext;
   let actualPayload = payload;
 
@@ -313,14 +254,12 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 
   const fullPrompt = `
     ${GLOBAL_PERSONALITY}
-    
     CONTEXTO DA ORGANIZAÇÃO:
     - Organização: ${actualContext.organization_name}
     - Ministério: ${actualContext.ministry_name}
     - Total de Membros: ${actualContext.total_members}
     - Membros Ativos: ${actualContext.active_members}
     - Funções: ${(actualContext.roles || []).join(', ')}
-    
     TAREFA:
     ${promptGenerator(actualPayload)}
   `;
@@ -337,15 +276,11 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
   try {
     const cleaned = content.trim();
-
-    // Tenta extrair bloco ```json ... ``` ou ``` ... ```
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
       const parsed = JSON.parse(jsonBlockMatch[1].trim());
       return extractByTask(parsed, taskType);
     }
-
-    // Tenta encontrar o primeiro [ ou { na resposta (ignora texto de "thinking" antes do JSON)
     const arrayStart = cleaned.indexOf('[');
     const objectStart = cleaned.indexOf('{');
     let jsonStart = -1;
@@ -356,13 +291,11 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
     } else if (objectStart !== -1) {
       jsonStart = objectStart;
     }
-
     if (jsonStart !== -1) {
       const jsonStr = cleaned.slice(jsonStart);
       const parsed = JSON.parse(jsonStr);
       return extractByTask(parsed, taskType);
     }
-
     return cleaned;
   } catch {
     console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', content.slice(0, 200));
@@ -371,22 +304,6 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
 }
 
 function extractByTask(parsed: any, taskType: AI_TASKS): any {
-  if (taskType === AI_TASKS.SCALE_GENERATION) {
-    let arr = null;
-    if (Array.isArray(parsed)) arr = parsed;
-    else if (parsed.assignments && Array.isArray(parsed.assignments)) arr = parsed.assignments;
-    else if (parsed.escala && Array.isArray(parsed.escala)) arr = parsed.escala;
-    else if (parsed.schedule && Array.isArray(parsed.schedule)) arr = parsed.schedule;
-    
-    if (arr) {
-      return arr.map((item: any) => ({
-        event_rule_id: item.event_rule_id || item.rule_id || item.ruleId || item.event_rule || '',
-        event_date: item.event_date || item.date || item.eventDate || '',
-        role: item.role || item.funcao || '',
-        member_id: item.member_id || item.memberId || item.member || ''
-      }));
-    }
-  }
   if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
     if (taskType === AI_TASKS.GENERATE_NOTICE) {
       if (parsed.message) return [{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: parsed.message }];
@@ -396,14 +313,136 @@ function extractByTask(parsed: any, taskType: AI_TASKS): any {
   return parsed;
 }
 
-export async function generateScheduleWithAI(data: any, preferredModel?: string): Promise<any[]> {
-  const context: AIContext = {
-    organization_name: 'Geral',
-    ministry_name: 'Geral',
-    total_members: data.members?.length || 0,
-    active_members: data.members?.length || 0,
-    roles: data.roles || []
+interface ScheduleInput {
+  occurrences: { date: string; time: string; ruleId: string; title: string }[];
+  roles: string[];
+  members: { id: string; name: string; functions: string[] }[];
+  availability: Record<string, Record<string, string>>;
+  existingAssignments: { event_rule_id: string; event_date: string; role: string; member_id: string }[];
+  rules?: {
+    blockGroups?: string[][];
+    memberBlocks?: string[][];
+    memberPrefers?: string[][];
+    allowExceptions?: string[][];
   };
-  const result = await runAI(AI_TASKS.SCALE_GENERATION, context, data, preferredModel);
-  return Array.isArray(result) ? result : [];
+}
+
+interface Assignment {
+  event_rule_id: string;
+  event_date: string;
+  role: string;
+  member_id: string;
+}
+
+function generateScheduleLocally(data: ScheduleInput): Assignment[] {
+  const result: Assignment[] = [];
+  const assignCount: Record<string, number> = {};
+  data.members.forEach(m => { assignCount[m.id] = 0; });
+
+  const allAssignments = (): Assignment[] => [...data.existingAssignments, ...result];
+
+  function isMemberAvailable(memberId: string, date: string, time: string): boolean {
+    const avail = data.availability[memberId];
+    if (!avail) return false;
+    const monthKey = `${date.substring(0, 7)}-01`;
+    if (avail[monthKey] === 'BLK') return false;
+    const dayVal = avail[date];
+    if (!dayVal) return false;
+    if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
+    if (dayVal === 'all') return true;
+    const hour = parseInt(time.split(':')[0], 10);
+    if (dayVal === 'M') return hour < 12;
+    if (dayVal === 'N') return hour >= 18;
+    if (dayVal === 'T') return hour >= 12 && hour < 18;
+    return true;
+  }
+
+  function hasSundayTurnConflict(memberId: string, date: string, time: string): boolean {
+    const weekday = new Date(date + 'T12:00:00').getDay();
+    if (weekday !== 0) return false;
+    const hour = parseInt(time.split(':')[0], 10);
+    const isMorning = hour < 12;
+    return allAssignments().some(a => {
+      if (a.member_id !== memberId || a.event_date.slice(0, 10) !== date) return false;
+      const occ = data.occurrences.find(o => o.ruleId === a.event_rule_id && o.date === a.event_date.slice(0, 10));
+      if (!occ) return false;
+      const assignedHour = parseInt(occ.time.split(':')[0], 10);
+      return isMorning !== (assignedHour < 12);
+    });
+  }
+
+  function hasBlockGroupConflict(memberId: string, role: string, ruleId: string, date: string): boolean {
+    if (!data.rules?.blockGroups?.length) return false;
+    const memberInEvent = allAssignments().filter(
+      a => a.member_id === memberId && a.event_rule_id === ruleId && a.event_date.slice(0, 10) === date
+    );
+    for (const group of data.rules.blockGroups) {
+      if (group.includes(role) && memberInEvent.some(a => group.includes(a.role))) return true;
+    }
+    return false;
+  }
+
+  function hasMemberBlockConflict(memberId: string, ruleId: string, date: string): boolean {
+    if (!data.rules?.memberBlocks?.length) return false;
+    const membersInEvent = allAssignments()
+      .filter(a => a.event_rule_id === ruleId && a.event_date.slice(0, 10) === date)
+      .map(a => a.member_id);
+    for (const block of data.rules.memberBlocks) {
+      if (block.includes(memberId)) {
+        const blocked = block.find(id => id !== memberId);
+        if (blocked && membersInEvent.includes(blocked)) return true;
+      }
+    }
+    return false;
+  }
+
+  function getPreferredPartners(memberId: string): string[] {
+    if (!data.rules?.memberPrefers?.length) return [];
+    return data.rules.memberPrefers
+      .filter(pair => pair.includes(memberId))
+      .map(pair => pair.find(id => id !== memberId)!)
+      .filter(Boolean);
+  }
+
+  for (const occ of data.occurrences) {
+    for (const role of data.roles) {
+      const alreadyFilled = allAssignments().some(
+        a => a.event_rule_id === occ.ruleId && a.event_date.slice(0, 10) === occ.date && a.role === role
+      );
+      if (alreadyFilled) continue;
+
+      const eligible = data.members.filter(m => {
+        if (!m.functions.includes(role)) return false;
+        if (!isMemberAvailable(m.id, occ.date, occ.time)) return false;
+        if (hasSundayTurnConflict(m.id, occ.date, occ.time)) return false;
+        if (hasBlockGroupConflict(m.id, role, occ.ruleId, occ.date)) return false;
+        if (hasMemberBlockConflict(m.id, occ.ruleId, occ.date)) return false;
+        return true;
+      });
+
+      if (eligible.length === 0) continue;
+
+      const membersInEvent = allAssignments()
+        .filter(a => a.event_rule_id === occ.ruleId && a.event_date.slice(0, 10) === occ.date)
+        .map(a => a.member_id);
+
+      let chosen = eligible.find(m =>
+        getPreferredPartners(m.id).some(p => membersInEvent.includes(p))
+      );
+
+      if (!chosen) {
+        eligible.sort((a, b) => (assignCount[a.id] || 0) - (assignCount[b.id] || 0));
+        chosen = eligible[0];
+      }
+
+      result.push({ event_rule_id: occ.ruleId, event_date: occ.date, role, member_id: chosen.id });
+      assignCount[chosen.id] = (assignCount[chosen.id] || 0) + 1;
+    }
+  }
+
+  return result;
+}
+
+export async function generateScheduleWithAI(data: any, model?: string): Promise<Assignment[]> {
+  return Promise.resolve(generateScheduleLocally(data));
 }
