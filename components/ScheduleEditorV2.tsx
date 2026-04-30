@@ -657,7 +657,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             });
 
             if (newAssignments.length === 0) {
-                addToast('A IA não encontrou novas atribuições válidas para preencher.', 'info');
+                addToast(`A IA retornou: ${JSON.stringify(aiAssignments).substring(0, 150)}...`, 'info');
                 setIsGeneratingAI(false);
                 return;
             }

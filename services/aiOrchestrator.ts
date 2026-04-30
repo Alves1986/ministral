@@ -372,10 +372,20 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
 
 function extractByTask(parsed: any, taskType: AI_TASKS): any {
   if (taskType === AI_TASKS.SCALE_GENERATION) {
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed.assignments && Array.isArray(parsed.assignments)) return parsed.assignments;
-    if (parsed.escala && Array.isArray(parsed.escala)) return parsed.escala;
-    if (parsed.schedule && Array.isArray(parsed.schedule)) return parsed.schedule;
+    let arr = null;
+    if (Array.isArray(parsed)) arr = parsed;
+    else if (parsed.assignments && Array.isArray(parsed.assignments)) arr = parsed.assignments;
+    else if (parsed.escala && Array.isArray(parsed.escala)) arr = parsed.escala;
+    else if (parsed.schedule && Array.isArray(parsed.schedule)) arr = parsed.schedule;
+    
+    if (arr) {
+      return arr.map((item: any) => ({
+        event_rule_id: item.event_rule_id || item.rule_id || item.ruleId || item.event_rule || '',
+        event_date: item.event_date || item.date || item.eventDate || '',
+        role: item.role || item.funcao || '',
+        member_id: item.member_id || item.memberId || item.member || ''
+      }));
+    }
   }
   if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
     if (taskType === AI_TASKS.GENERATE_NOTICE) {

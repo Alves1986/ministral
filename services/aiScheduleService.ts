@@ -12,10 +12,7 @@ interface ScheduleInput {
  
 export const generateAISchedule = async (input: ScheduleInput, model?: string) => {
   try {
-    const result: any = await generateScheduleWithAI({
-      ...input,
-      model
-    });
+    const result: any = await generateScheduleWithAI(input, model);
     return Array.isArray(result) ? result : (result.assignments || []);
   } catch (error) {
     console.error('[aiScheduleService] Error generating schedule:', error);
