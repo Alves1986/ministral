@@ -77,7 +77,12 @@ const getMemberAvailStatus = (
     }
 
     const memberAvail = availability[memberId]?.[date];
-    if (!memberAvail) return 'unavailable'; // nao marcou o dia
+    // Se não marcou disponibilidade para o dia, vamos assumir 'available' por padrão!
+    if (!memberAvail) return 'available'; // nao marcou o dia = disponivel
+    
+    // Se marcou que não pode, entao 'unavailable'
+    if (memberAvail === 'unavailable') return 'unavailable';
+
     if (memberAvail === 'all') return 'available'; // dia todo: disponivel sempre
     
     // Verificar se e domingo (0 = domingo)
@@ -646,9 +651,13 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
             const aiAssignments = await generateAISchedule(input, savedModel || undefined);
             
+            // Garantir que todos tem .slice
+            const safeAi = Array.isArray(aiAssignments) ? aiAssignments.filter(a => a && typeof a.event_date === 'string' && a.role && a.event_rule_id) : [];
+            
             // Filtrar apenas o que NÃO está preenchido
-            const newAssignments = aiAssignments.filter((ai: any) => {
+            const newAssignments = safeAi.filter((ai: any) => {
                 const alreadyExists = assignments.some(a => 
+                    a.event_date && typeof a.event_date === 'string' &&
                     a.event_date.slice(0, 10) === ai.event_date.slice(0, 10) && 
                     a.role === ai.role && 
                     a.event_rule_id === ai.event_rule_id
@@ -800,10 +809,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
 
     const disponiveisNoMes = members.filter(m => {
         const memberAvail = availability[m.id];
-        if (!memberAvail) return false;
+        if (!memberAvail) return true; // Se não tem registro, tá disponível
         const monthKey = `${currentMonth}-01`;
-        if (memberAvail[monthKey] === 'BLK') return false;
-        return Object.keys(memberAvail).some(date => date.startsWith(currentMonth));
+        if (memberAvail[monthKey] === 'BLK') return false; // Bloqueado no mês
+        return true; 
     }).length;
 
     const alertas = assignments.filter(a => {
