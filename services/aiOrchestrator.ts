@@ -29,13 +29,12 @@ export enum AI_TASKS {
 
 // Modelos disponíveis — usados pelo AdvancedAIScreen e aqui como fallback
 export const OPENROUTER_MODELS = [
-  { id: 'z-ai/glm-4.5-air:free',          name: 'GLM-4.5 Air (Velocidade)',        description: 'Resposta ultra-rápida para tarefas de escrita e avisos.' },
-  { id: 'openai/gpt-oss-120b:free',        name: 'GPT OSS 120B (Lógica)',           description: 'Focado em decisões complexas, análise e raciocínio.' },
-  { id: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', name: 'Nemotron Embed VL (Análise)', description: 'Otimizado para análise de dados e embeddings.' },
-  { id: 'minimax/minimax-m2.5:free',       name: 'MiniMax M2.5 (Equilibrado)',      description: 'Modelo versátil e confiável para uso geral.' },
+  { id: 'minimax/minimax-m2.5:free',  name: 'MiniMax M2.5 (Equilibrado)',   description: 'Modelo versátil e confiável para uso geral.' },
+  { id: 'openai/gpt-oss-120b:free',   name: 'GPT OSS 120B (Lógica)',        description: 'Focado em decisões complexas, análise e raciocínio.' },
+  { id: 'z-ai/glm-4.5-air:free',      name: 'GLM-4.5 Air (Velocidade)',     description: 'Resposta ultra-rápida para tarefas de escrita.' },
 ];
 
-export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id; // glm-4.5-air:free
+export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id; // minimax-m2.5:free
 
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
@@ -171,7 +170,24 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - Pontos principais
     - Sugestões práticas
   `,
-  [AI_TASKS.SCALE_GENERATION]: (data) => `
+  [AI_TASKS.SCALE_GENERATION]: (data) => {
+    // Extrair apenas as datas relevantes (do mês corrente das ocorrências)
+    const relevantDates = new Set<string>(data.occurrences.map((o: any) => o.date));
+    const trimmedAvailability: Record<string, Record<string, string>> = {};
+    for (const [memberId, dateMap] of Object.entries(data.availability as Record<string, Record<string, string>>)) {
+      const trimmed: Record<string, string> = {};
+      for (const [dateKey, val] of Object.entries(dateMap)) {
+        // Manter BLK mensal (YYYY-MM-01) e apenas datas relevantes
+        if (dateKey.endsWith('-01') || relevantDates.has(dateKey)) {
+          trimmed[dateKey] = val;
+        }
+      }
+      if (Object.keys(trimmed).length > 0) {
+        trimmedAvailability[memberId] = trimmed;
+      }
+    }
+
+    return `
     Gere uma escala de ministério equilibrada e otimizada para as ocorrências abaixo seguindo RIGOROSAMENTE as regras de negócio.
     
     CRITÉRIOS DE DISPONIBILIDADE E PREENCHIMENTO:
@@ -195,7 +211,7 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - Ocorrências: ${JSON.stringify(data.occurrences)}
     - Funções Requeridas: ${JSON.stringify(data.roles)}
     - Membros: ${JSON.stringify(data.members)}
-    - Disponibilidade: ${JSON.stringify(data.availability)}
+    - Disponibilidade (apenas datas relevantes): ${JSON.stringify(trimmedAvailability)}
     - Escala Atual (NÃO SOBREPOR): ${JSON.stringify(data.existingAssignments)}
     - Regras de Conflito: ${JSON.stringify(data.rules)}
     
@@ -203,7 +219,8 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     Retorne APENAS um array JSON. Não inclua texto explicativo, markdown ou blocos de código.
     ESTRUTURA DOS ITENS:
     { "event_rule_id": "ruleId da ocorrência", "event_date": "YYYY-MM-DD da ocorrência", "role": "função escalada", "member_id": "id do membro" }
-  `
+  `;
+  },
 };
 
 // ─── Core fetch ──────────────────────────────────────────────────────────────
@@ -215,7 +232,7 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
 
   const body: any = {
     model,
-    max_tokens: 4096,
+    max_tokens: taskType === AI_TASKS.SCALE_GENERATION ? 8192 : 4096,
     messages: [
       {
         role: 'system',
@@ -226,26 +243,39 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
     ],
   };
 
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
-      'X-Title': 'Ministral',
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 segundos
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `OpenRouter error ${res.status}`);
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
+        'X-Title': 'Ministral',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `OpenRouter error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    if (!content) throw new Error('OpenRouter retornou resposta vazia.');
+    return content;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Timeout: modelo ${model} não respondeu em 25s.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '';
-  if (!content) throw new Error('OpenRouter retornou resposta vazia.');
-  return content;
 }
 
 // ─── Trylist — tenta modelos em sequência até um funcionar ──────────────────
@@ -307,31 +337,53 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
   try {
     const cleaned = content.trim();
-    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    const jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
 
-    if (jsonStr.startsWith('{') || jsonStr.startsWith('[')) {
+    // Tenta extrair bloco ```json ... ``` ou ``` ... ```
+    const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (jsonBlockMatch) {
+      const parsed = JSON.parse(jsonBlockMatch[1].trim());
+      return extractByTask(parsed, taskType);
+    }
+
+    // Tenta encontrar o primeiro [ ou { na resposta (ignora texto de "thinking" antes do JSON)
+    const arrayStart = cleaned.indexOf('[');
+    const objectStart = cleaned.indexOf('{');
+    let jsonStart = -1;
+    if (arrayStart !== -1 && objectStart !== -1) {
+      jsonStart = Math.min(arrayStart, objectStart);
+    } else if (arrayStart !== -1) {
+      jsonStart = arrayStart;
+    } else if (objectStart !== -1) {
+      jsonStart = objectStart;
+    }
+
+    if (jsonStart !== -1) {
+      const jsonStr = cleaned.slice(jsonStart);
       const parsed = JSON.parse(jsonStr);
-
-      if (taskType === AI_TASKS.SCALE_GENERATION) {
-        if (Array.isArray(parsed)) return parsed;
-        if (parsed.assignments && Array.isArray(parsed.assignments)) return parsed.assignments;
-        if (parsed.escala && Array.isArray(parsed.escala)) return parsed.escala;
-      }
-
-      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        if (taskType === AI_TASKS.GENERATE_NOTICE) {
-          if (parsed.message) return [{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: parsed.message }];
-        }
-        if ('messages' in parsed) return parsed.messages;
-      }
-      return parsed;
+      return extractByTask(parsed, taskType);
     }
 
     return cleaned;
   } catch {
+    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', content.slice(0, 200));
     return content;
   }
+}
+
+function extractByTask(parsed: any, taskType: AI_TASKS): any {
+  if (taskType === AI_TASKS.SCALE_GENERATION) {
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed.assignments && Array.isArray(parsed.assignments)) return parsed.assignments;
+    if (parsed.escala && Array.isArray(parsed.escala)) return parsed.escala;
+    if (parsed.schedule && Array.isArray(parsed.schedule)) return parsed.schedule;
+  }
+  if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+    if (taskType === AI_TASKS.GENERATE_NOTICE) {
+      if (parsed.message) return [{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: parsed.message }];
+    }
+    if ('messages' in parsed) return parsed.messages;
+  }
+  return parsed;
 }
 
 export async function generateScheduleWithAI(data: any, preferredModel?: string): Promise<any[]> {
