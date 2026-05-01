@@ -107,7 +107,7 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     Crie um aviso unificado e organizado para o grupo do WhatsApp do ministério.
     DIRETRIZES:
     1. Trate todo evento como "Culto" no título da mensagem (ex: "Escala para o Culto - ${data.evento}").
-    2. Liste os membros e suas funções de forma clara e visualmente agradável com emojis.
+    2. Liste os membros e suas funções de forma clara e visualmente agradável com emojis. ATENÇÃO: MOSTRE SOMENTE as funções e membros que estão na lista 'Membros e Funções'. Não invente funções secundárias e ignore qualquer função que não tenha um membro escalado.
     3. Inclua OBRIGATORIAMENTE ao final da mensagem o seguinte bloco de orientações:
     ⚠️ *Orientações:*
     1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.

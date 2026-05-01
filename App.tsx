@@ -799,6 +799,7 @@ const InnerApp = () => {
                     orgName={organization?.name || ''}
                     ministryName={ministryTitle}
                     currentMonth={currentMonth} 
+                    onMonthChange={setCurrentMonth}
                     members={publicMembers} 
                     availability={availabilityByName} 
                     schedule={schedule} 

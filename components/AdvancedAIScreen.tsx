@@ -20,6 +20,7 @@ import {
   ChevronDown,
   AlertCircle as AlertCircleIcon
 } from 'lucide-react';
+import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
 import { runAI, AI_TASKS, OPENROUTER_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
@@ -37,6 +38,7 @@ interface Props {
   swapRequests: any[];         // NOVO: historico de trocas
   events: any[];
   roles: string[];
+  onMonthChange?: (month: string) => void;
   onScheduleGenerated: (assignments: any[]) => void;
 }
 
@@ -53,6 +55,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   swapRequests, 
   events, 
   roles, 
+  onMonthChange,
   onScheduleGenerated
 }) => {
   const [loading, setLoading] = useState(false);
@@ -328,17 +331,34 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   
       {/* HEADER */}
       <div className='bg-gradient-to-br from-ministral-500 to-ministral-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden'>
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black mb-2 flex items-center gap-3">
-            <Sparkles size={32} className="text-ministral-100" />
-            IA Avançada
-          </h2>
-          <p className="text-ministral-50 max-w-2xl text-sm leading-relaxed">
-            Utilize nossa inteligência artificial orquestrada para gerir seu ministério.
-            Análise de saúde, geração de escalas e comunicação automatizada.
-          </p>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-3xl font-black mb-2 flex items-center gap-3">
+              <Sparkles size={32} className="text-ministral-100" />
+              IA Avançada
+            </h2>
+            <p className="text-ministral-50 max-w-2xl text-sm leading-relaxed">
+              Utilize nossa inteligência artificial orquestrada para gerir seu ministério.
+              Análise de saúde, geração de escalas e comunicação automatizada.
+            </p>
+          </div>
+          
+          {onMonthChange && (
+            <div className="flex flex-col gap-2 bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl w-full md:w-auto self-start">
+              <p className="text-xs font-bold uppercase tracking-wider text-ministral-100 mb-1">Mês de Referência</p>
+              <div className="flex items-center justify-between gap-4">
+                  <button onClick={() => onMonthChange(adjustMonth(currentMonth, -1))} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors">
+                    <ChevronRight className="rotate-180" size={18} />
+                  </button>
+                  <span className="text-lg font-black min-w-[120px] text-center capitalize">{getMonthName(currentMonth)}</span>
+                  <button onClick={() => onMonthChange(adjustMonth(currentMonth, 1))} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors">
+                    <ChevronRight size={18} />
+                  </button>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-10">
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-10 pointer-events-none">
           <Sparkles size={200} />
         </div>
       </div>
