@@ -10,18 +10,69 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
   return '55' + digits;
 }
 
+const ROLE_EMOJIS: Record<string, string> = {
+  proje: "🎬",
+  ilumina: "💡",
+  luz: "💡",
+  transmiss: "🎥",
+  camera: "🎥",
+  câmera: "🎥",
+  foto: "📸",
+  vocal: "🎤",
+  ministro: "🎤",
+  viol: "🎸",
+  guitar: "🎸",
+  bater: "🥁",
+  teclad: "🎹",
+  som: "🎛️",
+  áudio: "🎛️",
+  audio: "🎛️"
+};
+
+function getEmojiForRole(role: string): string {
+  const rLow = role.toLowerCase();
+  for (const [key, emoji] of Object.entries(ROLE_EMOJIS)) {
+    if (rLow.includes(key)) return emoji;
+  }
+  return "🔹";
+}
+
+const DEFAULT_ORIENTATIONS = `⚠️ *Orientações:*
+1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.
+2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
+3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.
+
+Vamos juntos servir com excelência! 🚀`;
+
+async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }) {
+  const { timeout = 8000 } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  const response = await fetch(resource, {
+    ...options,
+    signal: controller.signal
+  });
+  clearTimeout(id);
+  return response;
+}
+
 serve(async (req: Request) => {
   try {
     // ── 1. Autenticação do cron via secret header ─────────────────────────
     const cronSecret = Deno.env.get("WHATSAPP_CRON_SECRET");
-    if (cronSecret) {
-      const incomingSecret = req.headers.get("x-cron-secret");
-      if (incomingSecret !== cronSecret) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+    if (!cronSecret) {
+      return new Response(JSON.stringify({ error: "Missing cron secret configuration" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const incomingSecret = req.headers.get("x-cron-secret");
+    if (incomingSecret !== cronSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // ── 2. Inicialização do cliente Supabase ──────────────────────────────
@@ -46,23 +97,23 @@ serve(async (req: Request) => {
     // ── 4. Hora atual em horário de Brasília (ROBUSTEZ NO TIMEZONE) ─────────
     const nowUTC = new Date();
     
-    // Formatador para obter as partes da data em Brasília com segurança
-    const formatter = new Intl.DateTimeFormat("en-US", {
+    // Obter as partes em Brasília de uma vez
+    const tzParts = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Sao_Paulo",
       year: "numeric", month: "numeric", day: "numeric",
       hour: "numeric", minute: "numeric", second: "numeric",
       hour12: false
-    });
+    }).formatToParts(nowUTC);
+
+    const parts = Object.fromEntries(tzParts.map(p => [p.type, p.value]));
     
-    // Obter as partes individuais
-    const yyNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric" }).format(nowUTC));
-    const mmNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", month: "numeric" }).format(nowUTC));
-    const ddNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", day: "numeric" }).format(nowUTC));
+    const yyNow = Number(parts.year);
+    const mmNow = Number(parts.month);
+    const ddNow = Number(parts.day);
     
-    let hhNowStr = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(nowUTC);
-    if (hhNowStr === "24") hhNowStr = "0"; // Tratar caso de 24h
-    const hhNow = Number(hhNowStr);
-    const minNow = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", minute: "numeric" }).format(nowUTC));
+    let hhNow = Number(parts.hour);
+    if (hhNow === 24) hhNow = 0;
+    const minNow = Number(parts.minute);
 
     const currentMinuteStr = `${String(hhNow).padStart(2, "0")}:${String(minNow).padStart(2, "0")}`;
     const currentTimeInMinutes = hhNow * 60 + minNow;
@@ -108,7 +159,8 @@ serve(async (req: Request) => {
       // Verifica se a hora atual está dentro da janela de 5 minutos após o horário configurado
       let diff = currentTimeInMinutes - configuredTimeInMinutes;
       // Ajuste para casos em que cruza a meia-noite (ex: configurado 23:58, mudou para 00:02)
-      if (diff < -1000) diff += 1440; 
+      if (diff < -720) diff += 1440; 
+      else if (diff > 720) diff -= 1440;
       
       if (diff < 0 || diff > 5) {
         results.push({ org_id: orgSetting.org_id, skipped: true, reason: `Fora da janela de 5m (configurado: ${rawTime}, atual: ${currentMinuteStr})` });
@@ -118,8 +170,8 @@ serve(async (req: Request) => {
       // ── 8. Data-alvo no fuso de Brasília (CORREÇÃO DE TIMEZONE) ─────────
       const sendDaysBefore = orgSetting.send_days_before || 0;
       
-      // Cria uma data UTC que representa a meia-noite da data local brasileira para facilitar adição segura
-      const targetDateObj = new Date(Date.UTC(yyNow, mmNow - 1, ddNow + sendDaysBefore));
+      // Cria uma data representando o meio dia para evitar problemas de timezone/DST em contas
+      const targetDateObj = new Date(Date.UTC(yyNow, mmNow - 1, ddNow + sendDaysBefore, 12, 0, 0));
       
       const yy  = targetDateObj.getUTCFullYear();
       const mmStr  = String(targetDateObj.getUTCMonth() + 1).padStart(2, "0");
@@ -144,7 +196,7 @@ serve(async (req: Request) => {
         .eq("event_date", targetDate);
 
       if (assigErr) {
-        console.error("[whatsapp-reminders] Erro ao buscar assignments:", assigErr);
+        results.push({ org_id: orgSetting.org_id, error: assigErr.message });
         continue;
       }
 
@@ -158,8 +210,8 @@ serve(async (req: Request) => {
       // ── 10. Agrupar assignments por evento e ministério ───────────────────
       const eventsMap = new Map<string, any[]>();
       for (const assignment of assignments) {
-        if (!assignment.event_rule_id) continue;
-        const key = `${assignment.ministry_id}_${assignment.event_rule_id}`;
+        const ruleId = assignment.event_rule_id || \`fallback_\${assignment.event_date}\`;
+        const key = \`\${assignment.ministry_id}_\${ruleId}\`;
         if (!eventsMap.has(key)) eventsMap.set(key, []);
         eventsMap.get(key)!.push(assignment);
       }
@@ -167,37 +219,28 @@ serve(async (req: Request) => {
       // ── 11. Processar cada evento separadamente ───────────────────────────
       for (const [key, evAssignments] of eventsMap.entries()) {
         const firstAssig = evAssignments[0];
+        if (!firstAssig) continue;
         const eventTitle = firstAssig.event_rules?.title || "Culto";
         const eventTimeStr = firstAssig.event_rules?.time ? firstAssig.event_rules.time.substring(0, 5) : "00:00";
         
         // Formatar data usando a targetDate corretamente
         const [tY, tM, tD] = targetDate.split('-');
-        const dateStr = `${tD}/${tM}/${tY}`;
+        const dateStr = \`\${tD}/\${tM}/\${tY}\`;
 
         // Monta a lista de membros e funções
         let membersList = "";
         for (const a of evAssignments) {
           const memberName = a.profiles?.name || "Desconhecido";
-          const role = a.role;
-          let emoji = "🔹";
-          const rLow = role.toLowerCase();
-          if (rLow.includes("proje")) emoji = "🎬";
-          else if (rLow.includes("ilumina") || rLow.includes("luz")) emoji = "💡";
-          else if (rLow.includes("transmiss") || rLow.includes("camera") || rLow.includes("câmera")) emoji = "🎥";
-          else if (rLow.includes("foto")) emoji = "📸";
-          else if (rLow.includes("vocal") || rLow.includes("ministro")) emoji = "🎤";
-          else if (rLow.includes("viol") || rLow.includes("guitar")) emoji = "🎸";
-          else if (rLow.includes("bater")) emoji = "🥁";
-          else if (rLow.includes("teclad")) emoji = "🎹";
-          else if (rLow.includes("som") || rLow.includes("áudio") || rLow.includes("audio")) emoji = "🎛️";
-
-          membersList += `${emoji} ${memberName} - ${role}\n`;
+          const emoji = getEmojiForRole(a.role);
+          membersList += \`\${emoji} \${memberName} - \${a.role}\\n\`;
         }
 
-        const msg = `📢 *Escala para o ${eventTitle}* 📢\n\n📅 *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n\n👤 *Membros e Funções:*\n\n${membersList}\n⚠️ *Orientações:*\n1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.\n2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.\n3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.\n\nVamos juntos servir com excelência! 🚀`;
+        const msg = \`📢 *Escala para o \${eventTitle}* 📢\\n\\n📅 *Data:* \${dateStr}\\n⏰ *Horário:* \${eventTimeStr}\\n\\n👤 *Membros e Funções:*\\n\\n\${membersList}\\n\${DEFAULT_ORIENTATIONS}\`;
 
         const sentToPhones = new Set<string>();
+        const processedMembers = new Set<string>();
 
+        // Dedup em memória
         for (const a of evAssignments) {
           const profile = a.profiles;
           if (!profile || !profile.whatsapp) {
@@ -205,7 +248,13 @@ serve(async (req: Request) => {
             continue;
           }
 
-          // Deduplicação no banco de dados (VERIFICA O LOG)
+          if (processedMembers.has(a.member_id)) {
+            skipped++;
+            continue;
+          }
+          processedMembers.add(a.member_id);
+
+          // Deduplicação no banco de dados
           const { data: alreadySent } = await supabase
             .from("whatsapp_sent_log")
             .select("id")
@@ -222,55 +271,71 @@ serve(async (req: Request) => {
           const formattedPhone = formatBrazilPhone(profile.whatsapp);
           if (!formattedPhone) {
             skipped++;
-            console.warn(`[whatsapp-reminders] Número inválido: "${profile.whatsapp}"`);
+            console.warn(\`[whatsapp-reminders] Número inválido: "\${profile.whatsapp}"\`);
             continue;
           }
 
-          // Se a pessoa tem mais de uma função, não enviamos a mesma mensagem duas vezes
           if (sentToPhones.has(formattedPhone)) {
-             await supabase.from("whatsapp_sent_log").insert({
-               org_id: orgSetting.org_id,
-               member_id: a.member_id,
-               event_date: targetDate,
-             });
+             try {
+               await supabase.from("whatsapp_sent_log").insert({
+                 org_id: orgSetting.org_id,
+                 member_id: a.member_id,
+                 event_date: targetDate,
+               });
+             } catch(e) {}
              skipped++;
              continue;
           }
 
           sentToPhones.add(formattedPhone);
           const currentInstance = ministryMap.get(a.ministry_id) || instanceName;
-          const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
+          const endpoint = \`\${evolutionApiUrl}/message/sendText/\${currentInstance}\`;
 
-          try {
-            const reqEvolution = await fetch(endpoint, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": evolutionApiKey,
-              },
-              body: JSON.stringify({
-                number: formattedPhone,
-                options: { delay: 1200, presence: "composing" },
-                text: msg,
-              }),
-            });
+          // Mitigar race condition no envio: Insere "placeholder" ou aguarda a resposta
+          let success = false;
+          let retries = 2;
 
-            if (!reqEvolution.ok) {
-              const errBody = await reqEvolution.text();
-              throw new Error(`Evolution API ${reqEvolution.status}: ${errBody}`);
+          while (retries > 0 && !success) {
+            try {
+              const reqEvolution = await fetchWithTimeout(endpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": evolutionApiKey,
+                },
+                body: JSON.stringify({
+                  number: formattedPhone,
+                  options: { delay: 1200, presence: "composing" },
+                  text: msg,
+                }),
+                timeout: 5000
+              });
+
+              if (!reqEvolution.ok) {
+                const errBody = await reqEvolution.text();
+                throw new Error(\`Evolution API \${reqEvolution.status}: \${errBody}\`);
+              }
+
+              success = true;
+
+              await supabase.from("whatsapp_sent_log").insert({
+                org_id: orgSetting.org_id,
+                member_id: a.member_id,
+                event_date: targetDate,
+              });
+
+              console.log(\`[whatsapp-reminders] Mensagem unificada enviada para \${profile.name} (\${formattedPhone})\`);
+              sent++;
+            } catch (postErr: any) {
+              retries--;
+              if (retries === 0) {
+                console.error(\`[whatsapp-reminders] Erro ao enviar para \${formattedPhone}:\`, postErr.message);
+                errors++;
+              } else {
+                console.log(\`[whatsapp-reminders] Retentando envio para \${formattedPhone}...\`);
+                await new Promise(r => setTimeout(r, 1000));
+              }
             }
-
-            await supabase.from("whatsapp_sent_log").insert({
-              org_id: orgSetting.org_id,
-              member_id: a.member_id,
-              event_date: targetDate,
-            });
-
-            console.log(`[whatsapp-reminders] Mensagem unificada enviada para ${profile.name} (${formattedPhone})`);
-            sent++;
-          } catch (postErr: any) {
-            console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone}:`, postErr.message);
-            errors++;
           }
         }
       }
@@ -283,7 +348,7 @@ serve(async (req: Request) => {
     });
   } catch (error: any) {
     console.error("[whatsapp-reminders] Erro crítico:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: "Ocorreu um erro interno no processamento do cron." }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
