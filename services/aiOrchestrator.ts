@@ -27,15 +27,30 @@ export enum AI_TASKS {
 
 export const OPENROUTER_MODELS = [
   {
-    id: 'deepseek/deepseek-r1:free',
-    name: 'DeepSeek R1 (Lógica)',
-    description: 'Melhor raciocínio lógico. Ideal para análises, sugestões e explicações complexas.'
+    id: 'openrouter/free',
+    name: 'OpenRouter Free (Recomendado)',
+    description: 'Roteamento automático para o modelo gratuito mais rápido e disponível.'
   },
   {
-    id: 'google/gemini-2.0-flash-thinking-exp:free',
-    name: 'Gemini Flash Thinking (Fallback)',
-    description: 'Fallback rápido com raciocínio estruturado quando o DeepSeek estiver indisponível.'
+    id: 'openai/gpt-oss-120b:free',
+    name: 'GPT OSS 120B (Maior Capacidade)',
+    description: 'Modelo de alta capacidade (120B), geralmente disponível sem muitos limites.'
   },
+  {
+    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    name: 'Nemotron 3 (Raciocínio)',
+    description: 'Excelente para tarefas que precisam de raciocínio lógico.'
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Llama 3.3 (Fallback)',
+    description: 'Rápido e inteligente para análises da escala e textos.'
+  },
+  {
+    id: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 (Fallback)',
+    description: 'Fallback com bom raciocínio e velocidade.'
+  }
 ];
 
 export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id;
@@ -200,8 +215,15 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `OpenRouter error ${res.status}`);
+      const respText = await res.text();
+      let errMsg = `OpenRouter error ${res.status}`;
+      try {
+        const errObj = JSON.parse(respText);
+        errMsg = errObj?.error?.message || errObj?.message || errMsg;
+      } catch (e) {
+        errMsg += ` - ${respText.slice(0, 200)}`;
+      }
+      throw new Error(errMsg);
     }
 
     const data = await res.json();
@@ -219,18 +241,20 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
 }
 
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  if (preferredModel) {
-    return await callOpenRouter(prompt, taskType, preferredModel);
-  }
+  const order = preferredModel
+    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
+    : OPENROUTER_MODELS.map(m => m.id);
+
   let lastErr: Error = new Error('Todos os modelos falharam.');
-  for (const m of OPENROUTER_MODELS) {
+  for (const model of order) {
     try {
-      return await callOpenRouter(prompt, taskType, m.id);
+      return await callOpenRouter(prompt, taskType, model);
     } catch (err: any) {
-      console.warn(`[runAI] Modelo ${m.id} falhou: ${err.message}`);
+      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
       lastErr = err;
     }
   }
+  console.error(`[runAI] Todos os modelos falharam. Último erro:`, lastErr);
   throw lastErr;
 }
 
@@ -274,32 +298,48 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
+  let cleaned = content;
   try {
-    const cleaned = content.trim();
+    // Remover blocos <think> do deepseek-r1 antes de parsear
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleaned = cleaned.trim();
+    
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
       const parsed = JSON.parse(jsonBlockMatch[1].trim());
       return extractByTask(parsed, taskType);
     }
-    const arrayStart = cleaned.indexOf('[');
-    const objectStart = cleaned.indexOf('{');
+    
+    const firstBrace = cleaned.indexOf('{');
+    const firstBracket = cleaned.indexOf('[');
     let jsonStart = -1;
-    if (arrayStart !== -1 && objectStart !== -1) {
-      jsonStart = Math.min(arrayStart, objectStart);
-    } else if (arrayStart !== -1) {
-      jsonStart = arrayStart;
-    } else if (objectStart !== -1) {
-      jsonStart = objectStart;
+    let jsonEnd = -1;
+    
+    if (firstBrace !== -1 && firstBracket !== -1) {
+      if (firstBrace < firstBracket) {
+        jsonStart = firstBrace;
+        jsonEnd = cleaned.lastIndexOf('}') + 1;
+      } else {
+        jsonStart = firstBracket;
+        jsonEnd = cleaned.lastIndexOf(']') + 1;
+      }
+    } else if (firstBrace !== -1) {
+      jsonStart = firstBrace;
+      jsonEnd = cleaned.lastIndexOf('}') + 1;
+    } else if (firstBracket !== -1) {
+      jsonStart = firstBracket;
+      jsonEnd = cleaned.lastIndexOf(']') + 1;
     }
-    if (jsonStart !== -1) {
-      const jsonStr = cleaned.slice(jsonStart);
+
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      const jsonStr = cleaned.slice(jsonStart, jsonEnd);
       const parsed = JSON.parse(jsonStr);
       return extractByTask(parsed, taskType);
     }
     return cleaned;
-  } catch {
-    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', content.slice(0, 200));
-    return content;
+  } catch (err) {
+    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', cleaned.slice(0, 200));
+    return cleaned;
   }
 }
 

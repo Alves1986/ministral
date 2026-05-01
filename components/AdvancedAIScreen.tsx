@@ -262,15 +262,26 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     }
   };
 
+  const getReducedPayload = () => {
+    return {
+      schedule: Object.fromEntries(Object.entries(schedule).filter(([k]) => k.includes(currentMonth))),
+      availability: Object.entries(availability).reduce((acc: any, [mId, av]: [string, any]) => {
+        if (av) {
+          acc[mId] = Object.fromEntries(Object.entries(av).filter(([k]) => k.startsWith(currentMonth)));
+        }
+        return acc;
+      }, {}),
+      members: members.map(m => ({ name: m.name, roles: m.ministry_functions, status: m.status })),
+      events: events.filter(e => e.iso?.startsWith(currentMonth)).map(e => ({ title: e.title, date: e.iso })),
+      roles
+    };
+  };
+
   const handleExplainSchedule = async () => {
     setExplainLoading(true);
     setExplanation('');
     try {
-      const payload = {
-        schedule,
-        availability
-      };
-  
+      const payload = getReducedPayload();
       const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload, selectedModel);
       setExplanation(text);
     } catch (e: any) {
@@ -283,7 +294,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const handleGetScaleSuggestions = async () => {
     setPredictiveLoading(true);
     try {
-      const payload = { schedule, availability, members, events, roles };
+      const payload = getReducedPayload();
       const text = await runAI(AI_TASKS.SCALE_SUGGESTION, getAIContext(), payload, selectedModel);
       setScaleSuggestions(text);
     } catch (e: any) {
@@ -296,7 +307,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const handleGetPreventiveAlerts = async () => {
     setPredictiveLoading(true);
     try {
-      const payload = { schedule, availability, members, events, roles };
+      const payload = getReducedPayload();
       const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload, selectedModel);
       setPreventiveAlerts(text);
     } catch (e: any) {

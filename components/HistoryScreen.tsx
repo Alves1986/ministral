@@ -14,6 +14,7 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'confirmed' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -33,6 +34,16 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
     loadHistory();
   }, [user.id, user.ministryId, user.organizationId]);
 
+  const availableMonths = React.useMemo(() => {
+    const months = new Set<string>();
+    history.forEach(item => {
+      if (item.event_date) {
+        months.add(item.event_date.substring(0, 7)); // YYYY-MM
+      }
+    });
+    return Array.from(months).sort().reverse();
+  }, [history]);
+
   const filteredHistory = history.filter(item => {
     const matchesFilter = 
       filter === 'all' || 
@@ -43,13 +54,19 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
       (item.event_rules?.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.role || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesFilter && matchesSearch;
+    const matchesMonth = selectedMonth === 'all' || (item.event_date && item.event_date.startsWith(selectedMonth));
+
+    return matchesFilter && matchesSearch && matchesMonth;
   });
 
+  const monthlyHistory = selectedMonth === 'all' 
+    ? history 
+    : history.filter(item => item.event_date && item.event_date.startsWith(selectedMonth));
+
   const stats = {
-    total: history.length,
-    confirmed: history.filter(h => h.confirmed).length,
-    pending: history.filter(h => !h.confirmed).length
+    total: monthlyHistory.length,
+    confirmed: monthlyHistory.filter(h => h.confirmed).length,
+    pending: monthlyHistory.filter(h => !h.confirmed).length
   };
 
   return (
@@ -109,7 +126,29 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
               </button>
             </div>
 
-            <div className="mt-8">
+            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-700">
+               <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                  <CalendarDays size={14}/> Mês
+               </h3>
+               <div className="relative">
+                 <select 
+                   value={selectedMonth} 
+                   onChange={e => setSelectedMonth(e.target.value)}
+                   className="w-full pl-4 pr-10 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-ministral-500 transition-all appearance-none cursor-pointer"
+                 >
+                   <option value="all">Todos os meses</option>
+                   {availableMonths.map(month => {
+                      const [year, m] = month.split('-');
+                      const date = new Date(Number(year), Number(m) - 1, 1);
+                      const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                      return <option key={month} value={month}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>
+                   })}
+                 </select>
+                 <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none rotate-90" />
+               </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-700">
               <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                 <Search size={14}/> Busca
               </h3>
