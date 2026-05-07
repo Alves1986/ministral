@@ -49,7 +49,9 @@ export const fetchSwapRequests = async (ministryId: string, orgId: string): Prom
 export const createSwapRequestSQL = async (ministryId: string, orgId: string, request: Partial<SwapRequest>) => {
     const sb = getSupabase();
     if (!sb) return;
-    const { error } = await sb.from('swap_requests').insert({
+
+    // Retorna o ID para passar à Edge Function de notificação
+    const { data: inserted, error } = await sb.from('swap_requests').insert({
         organization_id: orgId,
         ministry_id: ministryId,
         requester_id: request.requesterId,
@@ -58,13 +60,23 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
         event_datetime: request.eventIso,
         event_title: request.eventTitle,
         status: 'pending'
-    });
+    }).select('id').single();
+
     if (error) {
         console.error("Error creating swap request:", error);
         throw error;
     }
 
-    // Notify super admins
+    // Notifica membros com a mesma função via WhatsApp (não-bloqueante)
+    if (inserted?.id) {
+        sb.functions.invoke('whatsapp-swap-notify', {
+            body: { swapRequestId: inserted.id, ministryId, orgId }
+        }).catch(err => {
+            console.warn('[createSwapRequestSQL] whatsapp-swap-notify falhou silenciosamente:', err);
+        });
+    }
+
+    // Notifica admins no app
     await notifySuperAdmins(
         'Novo Pedido de Troca',
         `O usuário ${request.requesterName} solicitou uma troca para o evento "${request.eventTitle}".`,

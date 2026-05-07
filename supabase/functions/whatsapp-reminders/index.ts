@@ -40,7 +40,10 @@ function getEmojiForRole(role: string): string {
 const DEFAULT_ORIENTATIONS = `⚠️ *Orientações:*
 1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.
 2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
-3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.
+
+✅ *Confirme sua presença respondendo esta mensagem:*
+• Digite *1* para CONFIRMAR
+• Digite *2* para RECUSAR
 
 Vamos juntos servir com excelência! 🚀`;
 
@@ -210,8 +213,8 @@ serve(async (req: Request) => {
       // ── 10. Agrupar assignments por evento e ministério ───────────────────
       const eventsMap = new Map<string, any[]>();
       for (const assignment of assignments) {
-        const ruleId = assignment.event_rule_id || \`fallback_\${assignment.event_date}\`;
-        const key = \`\${assignment.ministry_id}_\${ruleId}\`;
+        const ruleId = assignment.event_rule_id || `fallback_${assignment.event_date}`;
+        const key = `${assignment.ministry_id}_${ruleId}`;
         if (!eventsMap.has(key)) eventsMap.set(key, []);
         eventsMap.get(key)!.push(assignment);
       }
@@ -225,17 +228,17 @@ serve(async (req: Request) => {
         
         // Formatar data usando a targetDate corretamente
         const [tY, tM, tD] = targetDate.split('-');
-        const dateStr = \`\${tD}/\${tM}/\${tY}\`;
+        const dateStr = `${tD}/${tM}/${tY}`;
 
         // Monta a lista de membros e funções
         let membersList = "";
         for (const a of evAssignments) {
           const memberName = a.profiles?.name || "Desconhecido";
           const emoji = getEmojiForRole(a.role);
-          membersList += \`\${emoji} \${memberName} - \${a.role}\\n\`;
+          membersList += `${emoji} ${memberName} - ${a.role}\\n`;
         }
 
-        const msg = \`📢 *Escala para o \${eventTitle}* 📢\\n\\n📅 *Data:* \${dateStr}\\n⏰ *Horário:* \${eventTimeStr}\\n\\n👤 *Membros e Funções:*\\n\\n\${membersList}\\n\${DEFAULT_ORIENTATIONS}\`;
+        const msg = `📢 *Escala para o ${eventTitle}* 📢\\n\\n📅 *Data:* ${dateStr}\\n⏰ *Horário:* ${eventTimeStr}\\n\\n👤 *Membros e Funções:*\\n\\n${membersList}\\n${DEFAULT_ORIENTATIONS}`;
 
         const sentToPhones = new Set<string>();
         const processedMembers = new Set<string>();
@@ -271,7 +274,7 @@ serve(async (req: Request) => {
           const formattedPhone = formatBrazilPhone(profile.whatsapp);
           if (!formattedPhone) {
             skipped++;
-            console.warn(\`[whatsapp-reminders] Número inválido: "\${profile.whatsapp}"\`);
+            console.warn(`[whatsapp-reminders] Número inválido: "${profile.whatsapp}"`);
             continue;
           }
 
@@ -289,7 +292,7 @@ serve(async (req: Request) => {
 
           sentToPhones.add(formattedPhone);
           const currentInstance = ministryMap.get(a.ministry_id) || instanceName;
-          const endpoint = \`\${evolutionApiUrl}/message/sendText/\${currentInstance}\`;
+          const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
 
           // Mitigar race condition no envio: Insere "placeholder" ou aguarda a resposta
           let success = false;
@@ -313,7 +316,7 @@ serve(async (req: Request) => {
 
               if (!reqEvolution.ok) {
                 const errBody = await reqEvolution.text();
-                throw new Error(\`Evolution API \${reqEvolution.status}: \${errBody}\`);
+                throw new Error(`Evolution API ${reqEvolution.status}: ${errBody}`);
               }
 
               success = true;
@@ -324,15 +327,29 @@ serve(async (req: Request) => {
                 event_date: targetDate,
               });
 
-              console.log(\`[whatsapp-reminders] Mensagem unificada enviada para \${profile.name} (\${formattedPhone})\`);
+              // Cria ação pendente para o membro confirmar via WhatsApp
+              const expiresAt = new Date(targetDate);
+              expiresAt.setDate(expiresAt.getDate() + 1);
+              await supabase.from("whatsapp_pending_actions").insert({
+                type:            "confirmation",
+                member_id:       a.member_id,
+                phone:           formattedPhone,
+                organization_id: orgSetting.org_id,
+                ministry_id:     a.ministry_id,
+                event_date:      targetDate,
+                event_rule_id:   a.event_rule_id,
+                expires_at:      expiresAt.toISOString(),
+              });
+
+              console.log(`[whatsapp-reminders] Mensagem unificada enviada para ${profile.name} (${formattedPhone})`);
               sent++;
             } catch (postErr: any) {
               retries--;
               if (retries === 0) {
-                console.error(\`[whatsapp-reminders] Erro ao enviar para \${formattedPhone}:\`, postErr.message);
+                console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone}:`, postErr.message);
                 errors++;
               } else {
-                console.log(\`[whatsapp-reminders] Retentando envio para \${formattedPhone}...\`);
+                console.log(`[whatsapp-reminders] Retentando envio para ${formattedPhone}...`);
                 await new Promise(r => setTimeout(r, 1000));
               }
             }
