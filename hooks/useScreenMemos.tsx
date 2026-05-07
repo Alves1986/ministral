@@ -34,6 +34,7 @@ export interface ScreenMemosProps {
   isAdmin: boolean | undefined;
   currentTab: string;
   safeEnabledTabs: string[];
+  integrations: any;
 }
 
 export function useScreenMemos(props: ScreenMemosProps) {
@@ -41,7 +42,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
     availability, availabilityNotes, setAvailability, publicMembers,
     currentMonth, setCurrentMonth, activeUser, orgId, availabilityWindow,
     ministryId, queryClient, schedule, swapRequests, events, addToast,
-    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs
+    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs, integrations
   } = props;
 
   const availabilityScreen = useMemo(() => (
@@ -172,10 +173,10 @@ export function useScreenMemos(props: ScreenMemosProps) {
 
   const repertoireScreen = useMemo(() => (
     <>
-      {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="view" ministryId={ministryId} />}
-      {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} />}
+      {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="view" ministryId={ministryId} integrations={integrations} />}
+      {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} integrations={integrations} />}
     </>
-  ), [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData]);
+  ), [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations]);
 
   return { availabilityScreen, swapsScreen, announcementsScreen, repertoireScreen };
 }

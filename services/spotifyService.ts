@@ -19,26 +19,33 @@ interface SpotifyPlaylist {
 let appToken: string | null = null;
 let tokenExpiry: number = 0;
 
-const getCredentials = () => {
-    let clientId = "";
-    try {
-        // @ts-ignore
-        if (import.meta.env) clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
-    } catch(e) {}
+const getCredentials = (customClientId?: string) => {
+    let clientId = customClientId || "";
+    if (!clientId) {
+        try {
+            // @ts-ignore
+            if (import.meta.env) clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
+        } catch(e) {}
+    }
 
     return { clientId };
 };
 
 // --- 1. AUTENTICAÇÃO DO APLICATIVO (Client Credentials) ---
-export const getClientCredentialsToken = async (): Promise<string | null> => {
-    if (appToken && Date.now() < tokenExpiry) return appToken;
+export const getClientCredentialsToken = async (customClientId?: string, customClientSecret?: string): Promise<string | null> => {
+    // Se passarmos custom, não podemos usar cache do token global do app
+    if (!customClientId && appToken && Date.now() < tokenExpiry) return appToken;
 
     try {
         const response = await fetch('/api/spotify/token', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({ 
+                clientId: customClientId, 
+                clientSecret: customClientSecret 
+            })
         });
 
         const data = await response.json();
@@ -54,8 +61,8 @@ export const getClientCredentialsToken = async (): Promise<string | null> => {
 };
 
 // --- 2. AUTENTICAÇÃO DO USUÁRIO (Implicit Grant) ---
-export const getLoginUrl = () => {
-    const { clientId } = getCredentials();
+export const getLoginUrl = (customClientId?: string) => {
+    const { clientId } = getCredentials(customClientId);
     if (!clientId) return null;
 
     const redirectUri = window.location.origin; // Redireciona para a própria página
@@ -118,9 +125,13 @@ const fetchSpotify = async (endpoint: string, token: string) => {
     const res = await fetch(`https://api.spotify.com/v1${endpoint}`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (res.status === 401) {
-        logoutSpotify();
-        throw new Error("Token expirado");
+    if (!res.ok) {
+        if (res.status === 401) {
+            logoutSpotify();
+            throw new Error("Token do Spotify expirado. Por favor, conecte novamente.");
+        }
+        const err = await res.json();
+        throw new Error(err?.error?.message || `Erro ${res.status} no Spotify`);
     }
     return res.json();
 };
@@ -151,14 +162,17 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
     } catch (e) { return []; }
 };
 
-export const searchSpotifyTracks = async (query: string): Promise<SpotifyTrack[]> => {
+export const searchSpotifyTracks = async (query: string, customClientId?: string, customClientSecret?: string): Promise<SpotifyTrack[]> => {
     let token = getUserToken();
-    if (!token) token = await getClientCredentialsToken();
+    if (!token) token = await getClientCredentialsToken(customClientId, customClientSecret);
 
-    if (!token) return [];
+    if (!token) throw new Error("Para buscar músicas no Spotify, faça o login (botão Conectar) com a sua conta.");
 
     try {
         const data = await fetchSpotify(`/search?q=${encodeURIComponent(query)}&type=track&limit=10`, token);
         return data.tracks?.items || [];
-    } catch (e) { return []; }
+    } catch (e: any) { 
+        console.error("Spotify Search Error:", e);
+        throw e; 
+    }
 };

@@ -12,6 +12,7 @@ import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUt
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
 import { subscribeUserToPush } from './utils/pushUtils';
 import { getSupabase } from './services/supabase/client';
+import { handleLoginCallback } from './services/spotifyService';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -110,6 +111,19 @@ const InnerApp = () => {
 
   // O token deve ser mantido na URL para permitir recarregamento da página
   // A limpeza só deve ocorrer após validação/uso bem-sucedido no InviteScreen
+
+  useEffect(() => {
+    // Processa redirecionamentos do Spotify em qualquer aba logada ou deslogada
+    // Se estourar a URL e tirar o Hash, ele armazena antes que seja limpo.
+    const token = handleLoginCallback();
+    if (token) {
+        // Redireciona para a aba de repertório se for um callback de login
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'repertoire');
+        window.history.replaceState({}, '', url.toString());
+        setCurrentTab('repertoire');
+    }
+  }, []);
 
   const hasInitialSync = React.useRef(false);
 
@@ -444,7 +458,7 @@ const InnerApp = () => {
     availability, availabilityNotes, setAvailability, publicMembers,
     currentMonth, setCurrentMonth, activeUser: activeUser!, orgId: orgId!, availabilityWindow,
     ministryId, queryClient, schedule, swapRequests, events, addToast,
-    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs
+    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs, integrations
   });
 
 
@@ -997,7 +1011,22 @@ const queryClientInstance = new QueryClient({
   },
 });
 
+import { LegalModal } from './components/LegalDocuments';
+
 const App = () => {
+  const docType = new URLSearchParams(window.location.search).get('doc');
+  if (docType === 'terms' || docType === 'privacy') {
+    return (
+      <div className="min-h-screen bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center p-4">
+        <LegalModal 
+          isOpen={true} 
+          type={docType as any} 
+          onClose={() => window.location.href = '/'} 
+        />
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClientInstance}>
       <SupabaseHealthCheck>

@@ -17,9 +17,10 @@ interface Props {
   mode: 'view' | 'manage';
   onItemAdd?: (title: string) => void;
   ministryId?: string | null;
+  integrations?: any;
 }
 
-export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd, ministryId }) => {
+export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd, ministryId, integrations }) => {
   const { addToast, confirmAction } = useToast();
   const queryClient = useQueryClient();
   
@@ -104,35 +105,53 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   const handleLoadPlaylists = async () => {
       setIsLoadingPlaylists(true);
-      const playlists = await getUserPlaylists();
-      setUserPlaylists(playlists);
+      try {
+          const playlists = await getUserPlaylists();
+          setUserPlaylists(playlists);
+      } catch (e: any) {
+          addToast(e.message || "Erro ao carregar playlists.", "error");
+      }
       setIsLoadingPlaylists(false);
   };
 
   const handleOpenPlaylist = async (playlist: any) => {
       setSelectedPlaylist(playlist);
       setIsLoadingPlaylists(true);
-      const tracks = await getPlaylistTracks(playlist.id);
-      setPlaylistTracks(tracks);
+      try {
+          const tracks = await getPlaylistTracks(playlist.id);
+          setPlaylistTracks(tracks);
+      } catch (e: any) {
+          addToast(e.message || "Erro ao carregar faixas.", "error");
+      }
       setIsLoadingPlaylists(false);
   };
 
   const handleSpotifySearch = async () => {
       if (!spotifyQuery.trim() || !ministryId) return;
       setSpotifyLoading(true);
-      const results = await searchSpotifyTracks(spotifyQuery);
-      setSpotifyResults(results);
-      setSpotifyLoading(false);
-      if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
+      try {
+          const results = await searchSpotifyTracks(spotifyQuery);
+          setSpotifyResults(results);
+          if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
+      } catch (e: any) {
+          addToast(e.message || "Erro ao buscar no Spotify.", "error");
+      } finally {
+          setSpotifyLoading(false);
+      }
   };
 
   const handleYouTubeSearch = async () => {
       if (!youtubeQuery.trim()) return;
       setYoutubeLoading(true);
-      const results = await searchYouTubeVideos(youtubeQuery);
-      setYoutubeResults(results);
-      setYoutubeLoading(false);
-      if (results.length === 0) addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
+      try {
+          const results = await searchYouTubeVideos(youtubeQuery);
+          setYoutubeResults(results);
+          if (results.length === 0) addToast("Nenhum vídeo encontrado.", "warning");
+      } catch (e: any) {
+          addToast(e.message || "Erro ao buscar no YouTube.", "error");
+      } finally {
+          setYoutubeLoading(false);
+      }
   };
 
   const handleCifraSearch = async () => {

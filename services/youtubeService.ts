@@ -16,8 +16,8 @@ const getApiKey = () => {
     }
 };
 
-export const searchYouTubeVideos = async (query: string): Promise<YouTubeVideo[]> => {
-    const apiKey = getApiKey();
+export const searchYouTubeVideos = async (query: string, customApiKey?: string): Promise<YouTubeVideo[]> => {
+    const apiKey = customApiKey || getApiKey();
     if (!apiKey) {
         console.warn("YouTube API Key missing");
         return [];
@@ -30,7 +30,7 @@ export const searchYouTubeVideos = async (query: string): Promise<YouTubeVideo[]
         if (!response.ok) {
             const err = await response.json();
             console.error("YouTube API Error:", err);
-            return [];
+            throw new Error(err?.error?.message || "Erro na API do YouTube (verifique sua chave no painel do Google Cloud e permita domínios HTTP).");
         }
 
         const data = await response.json();
