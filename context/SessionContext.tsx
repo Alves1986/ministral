@@ -146,7 +146,27 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             if (orgId && activeChannelRef.current) {
                 activeChannelRef.current.unsubscribe();
-                activeChannelRef.current = null;
+                channel = sb.channel(`sync-org-profile-${sessionUser.id}`)
+                    .on(
+                        'postgres_changes',
+                        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${sessionUser.id}` },
+                        (payload: any) => {
+                            console.log("[SessionProvider] Realtime profile update:", payload);
+                            isProcessingRef.current = false;
+                            processSession(sessionUser);
+                        }
+                    )
+                    .on(
+                        'postgres_changes',
+                        { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` },
+                        (payload: any) => {
+                            console.log("[SessionProvider] Realtime organization update:", payload);
+                            isProcessingRef.current = false;
+                            processSession(sessionUser);
+                        }
+                    )
+                    .subscribe();
+                activeChannelRef.current = channel;
             }
 
             setServiceOrgContext(orgId);
@@ -175,8 +195,11 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     const trialExpired = isTrial && orgDetails.trial_ends_at && new Date() > new Date(orgDetails.trial_ends_at);
                     const isLocked = orgDetails.access_locked;
                     const badStatus = orgDetails.billing_status && !['active', 'trial'].includes(orgDetails.billing_status);
+                    
+                    const isPastDue = orgDetails.billing_status === 'past_due';
+                    const isCanceled = orgDetails.billing_status === 'canceled';
 
-                    if (isLocked || trialExpired || badStatus) {
+                    if (isLocked || trialExpired || badStatus || isPastDue || isCanceled) {
                         if (isMountedRef.current) {
                             setUser({
                                 id: profile.id,

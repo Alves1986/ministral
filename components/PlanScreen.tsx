@@ -1,10 +1,12 @@
-import React from 'react';
-import { Crown, CheckCircle2, XCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Crown, CheckCircle2, XCircle, Loader2, ExternalLink } from 'lucide-react';
 import { Organization } from '../types';
+import { getSupabase } from '../services/supabaseService';
 
 interface PlanScreenProps {
   organization: Organization | null;
   isAdmin: boolean;
+  onRefreshOrg: () => Promise<void>;
 }
 
 const PLANS = {
@@ -59,26 +61,120 @@ const PLANS = {
   }
 };
 
-export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin }) => {
+export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, onRefreshOrg }) => {
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'waiting' | 'confirmed'>('idle');
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      setPaymentStatus('waiting');
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (paymentStatus === 'waiting') {
+      if (organization?.billing_status === 'active') {
+        setPaymentStatus('confirmed');
+      } else {
+        interval = setInterval(async () => {
+          await onRefreshOrg();
+        }, 3000);
+      }
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [paymentStatus, organization?.billing_status, onRefreshOrg]);
+
   const daysLeft = organization?.trial_ends_at
     ? Math.ceil((new Date(organization.trial_ends_at).getTime() - Date.now()) / 86400000)
     : null;
   const isTrialExpired = daysLeft !== null && daysLeft <= 0;
   const isPro = organization?.plan_type === 'pro';
   const isEnterprise = organization?.plan_type === 'enterprise';
-  const checkoutUrl = organization?.checkout_url || null;
 
-  const handleUpgrade = (planType: string) => {
-    if (checkoutUrl && organization?.id) {
-      const url = new URL(checkoutUrl);
-      url.searchParams.set('client_reference_id', organization.id);
-      url.searchParams.set('metadata[plan_type]', planType);
-      window.open(url.toString(), '_blank');
+  const handleUpgrade = async (planType: string) => {
+    if (!organization?.id) return;
+    try {
+      setLoadingCheckout(true);
+      const sb = getSupabase();
+      if (!sb) throw new Error("Supabase client not initialized");
+      
+      const { data: { session } } = await sb.auth.getSession();
+      
+      const res = await sb.functions.invoke('stripe-create-checkout', {
+        body: {
+          orgId: organization.id,
+          planType,
+          userEmail: session?.user?.email || ''
+        }
+      });
+      
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to create checkout session");
+      }
+      
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao redirecionar para o pagamento: ' + err.message);
+    } finally {
+      setLoadingCheckout(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!organization?.id || !organization?.stripe_customer_id) {
+        alert("Sua organização não possui uma assinatura ativa no Stripe.");
+        return;
+    }
+    try {
+      setLoadingPortal(true);
+      const sb = getSupabase();
+      if (!sb) throw new Error("Supabase client not initialized");
+      
+      const res = await sb.functions.invoke('stripe-customer-portal', {
+        body: {
+          orgId: organization.id
+        }
+      });
+      
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to create portal session");
+      }
+      
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao abrir portal do cliente: ' + err.message);
+    } finally {
+      setLoadingPortal(false);
     }
   };
 
   return (
     <div className="max-w-6xl mx-auto pb-20">
+      {paymentStatus === 'waiting' && (
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 rounded-xl flex items-center justify-center gap-3 animate-pulse">
+          <Loader2 className="animate-spin text-blue-500" size={20} />
+          <p className="text-blue-700 dark:text-blue-300 font-bold">⏳ Confirmando seu pagamento…</p>
+        </div>
+      )}
+      {paymentStatus === 'confirmed' && (
+        <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl flex items-center justify-center gap-3">
+          <CheckCircle2 className="text-emerald-500" size={24} />
+          <p className="text-emerald-700 dark:text-emerald-300 font-bold">✅ Pagamento confirmado! Seu plano foi ativado.</p>
+        </div>
+      )}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-ministral-50 dark:bg-ministral-600/20 text-ministral-500 dark:text-ministral-100">
@@ -199,14 +295,25 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin })
             ))}
           </div>
 
-          <div className="mt-auto">
+          <div className="mt-auto flex flex-col gap-3">
             {isPro ? (
-              <button 
-                disabled
-                className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-500/10 text-ministral-600 dark:text-ministral-400 border border-ministral-500/20 cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 size={18} /> Plano Ativo
-              </button>
+              <>
+                <button 
+                  disabled
+                  className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-500/10 text-ministral-600 dark:text-ministral-400 border border-ministral-500/20 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 size={18} /> Plano Ativo
+                </button>
+                {organization?.stripe_customer_id && (
+                    <button 
+                      onClick={handleManageSubscription}
+                      disabled={loadingPortal}
+                      className="w-full py-3 rounded-xl font-bold text-sm bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {loadingPortal ? <Loader2 className="animate-spin" size={18} /> : <ExternalLink size={18} />} Gerenciar Assinatura
+                    </button>
+                )}
+              </>
             ) : isEnterprise ? (
               <button 
                 disabled
@@ -214,17 +321,14 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin })
               >
                 Incluído no Enterprise
               </button>
-            ) : checkoutUrl ? (
+            ) : (
               <button 
                 onClick={() => handleUpgrade('pro')}
-                className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-500 hover:bg-ministral-600 text-white transition-colors shadow-lg shadow-ministral-500/20 active:scale-95"
+                disabled={loadingCheckout}
+                className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-500 hover:bg-ministral-600 text-white transition-colors shadow-lg shadow-ministral-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center"
               >
-                Fazer Upgrade para Pro →
+                {loadingCheckout ? <Loader2 className="animate-spin" size={18} /> : 'Fazer Upgrade para Pro →'}
               </button>
-            ) : (
-              <div className="text-center p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 text-sm font-medium">
-                Entre em contato com o suporte
-              </div>
             )}
           </div>
         </div>
@@ -251,32 +355,40 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin })
             ))}
           </div>
 
-          <div className="mt-auto">
+          <div className="mt-auto flex flex-col gap-3">
             {isEnterprise ? (
-              <button 
-                disabled
-                className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-gold/10 text-ministral-gold border border-ministral-gold/20 cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 size={18} /> Plano Ativo
-              </button>
-            ) : checkoutUrl ? (
+              <>
+                <button 
+                  disabled
+                  className="w-full py-3 rounded-xl font-bold text-sm bg-ministral-gold/10 text-ministral-gold border border-ministral-gold/20 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 size={18} /> Plano Ativo
+                </button>
+                {organization?.stripe_customer_id && (
+                    <button 
+                      onClick={handleManageSubscription}
+                      disabled={loadingPortal}
+                      className="w-full py-3 rounded-xl font-bold text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {loadingPortal ? <Loader2 className="animate-spin" size={18} /> : <ExternalLink size={18} />} Gerenciar Assinatura
+                    </button>
+                )}
+              </>
+            ) : (
               <button 
                 onClick={() => handleUpgrade('enterprise')}
-                className="w-full py-3 rounded-xl font-bold text-sm bg-white hover:bg-zinc-200 text-zinc-900 transition-colors shadow-lg shadow-white/5 active:scale-95"
+                disabled={loadingCheckout}
+                className="w-full py-3 rounded-xl font-bold text-sm bg-white hover:bg-zinc-200 text-zinc-900 transition-colors shadow-lg shadow-white/5 active:scale-95 disabled:opacity-50 flex items-center justify-center"
               >
-                Contratar Enterprise →
+                {loadingCheckout ? <Loader2 className="animate-spin text-zinc-900" size={18} /> : 'Contratar Enterprise →'}
               </button>
-            ) : (
-              <div className="text-center p-3 rounded-xl bg-zinc-800 text-zinc-400 text-sm font-medium">
-                Entre em contato com o suporte
-              </div>
             )}
           </div>
         </div>
       </div>
 
       <div className="mt-12 text-center text-sm text-zinc-500">
-        Dúvidas sobre o plano? Entre em contato com o suporte.
+        Dúvidas sobre o plano? <a href="mailto:contato.ministral@gmail.com" className="text-ministral-500 hover:underline">Entre em contato via contato.ministral@gmail.com</a>
       </div>
     </div>
   );

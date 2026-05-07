@@ -20,6 +20,8 @@ export interface Organization {
   trial_ends_at?: string;
   checkout_url?: string;
   access_locked?: boolean;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
 }
 
 export interface MinistryDef {

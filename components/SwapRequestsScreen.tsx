@@ -32,6 +32,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
 
   const mySchedules = visibleEvents
     .filter(evt => evt.iso.startsWith(currentMonth)) // so eventos do mes atual
+    .filter(evt => new Date(evt.iso) > new Date()) // remover eventos passados
     .map(evt => {
       const myRolesInEvent: string[] = [];
       Object.keys(schedule).forEach(key => {
@@ -48,6 +49,11 @@ export const SwapRequestsScreen: React.FC<Props> = ({
 
   const visibleRequests = requests.filter(req => {
     if (req.status !== 'pending') return false;
+    
+    // Remover eventos passados do mural
+    const evtIso = req.eventIso.split('|')[0];
+    if (new Date(evtIso) <= new Date()) return false;
+
     // Sempre mostrar os proprios pedidos do usuario
     if (req.requesterName === currentUser.name) return true;
     // Admin ve tudo

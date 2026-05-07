@@ -56,28 +56,28 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         interactionsRes,
         swapsAssumedRes,
         availabilityRes,
-        checkinMissesRes,
         ministryMembershipsRes,
         profilesRes
     ] = await Promise.all([
-        sb.from('schedule_assignments').select('member_id, event_date, role, confirmed').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', true).lte('event_date', todayStr),
+        sb.from('schedule_assignments').select('member_id, event_date, role, confirmed, event_rules(time)').eq('organization_id', orgId).eq('ministry_id', ministryId).lte('event_date', todayStr),
         sb.from('swap_requests').select('requester_id, created_at, status').eq('organization_id', orgId).eq('ministry_id', ministryId),
         announcementIds.length > 0 
             ? sb.from('announcement_interactions').select('user_id, interaction_type, created_at').eq('organization_id', orgId).in('user_id', userIds).in('announcement_id', announcementIds)
             : Promise.resolve({ data: [], error: null }),
         sb.from('swap_requests').select('taken_by_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('status', 'completed').not('taken_by_id', 'is', null),
         sb.from('member_availability').select('user_id, available_date, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        sb.from('schedule_assignments').select('member_id, event_date, confirmed, event_rules(time)').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', false),
         sb.from('ministry_members').select('profile_id, created_at').eq('ministry_id', ministryId).eq('organization_id', orgId),
         sb.from('profiles').select('id, avatar_url, whatsapp, birth_date').in('id', userIds).eq('organization_id', orgId)
     ]) as any;
 
-    const assignments = assignmentsRes.data || [];
+    const allAssignments = assignmentsRes.data || [];
+    const assignments = allAssignments.filter((a: any) => a.confirmed === true);
+    const checkinMissesData = allAssignments.filter((a: any) => a.confirmed !== true);
+    
     const swaps = swapsRes.data || [];
     const interactions = interactionsRes.data || [];
     const swapsAssumed = swapsAssumedRes.data || [];
     const availabilities = availabilityRes.data || [];
-    const checkinMissesData = checkinMissesRes.data || [];
     const ministryMemberships = ministryMembershipsRes.data || [];
     const profiles = profilesRes.data || [];
 
@@ -162,10 +162,16 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         // 5. CHECK-IN ESQUECIDO
         const misses = checkinMissesData.filter((a: any) => {
             if (a.member_id !== m.id || a.confirmed) return false;
-            const timeStr = a.event_rules?.time || '23:59:59';
-            const eventDateTime = new Date(`${a.event_date}T${timeStr}`);
+            let timeStr = '23:59:59';
+            if (a.event_rules && typeof a.event_rules === 'object' && !Array.isArray(a.event_rules)) {
+                 timeStr = a.event_rules.time || '23:59:59';
+            } else if (Array.isArray(a.event_rules) && a.event_rules.length > 0) {
+                 timeStr = a.event_rules[0].time || '23:59:59';
+            }
+            if (timeStr.length === 5) timeStr += ':00'; // Append seconds if hh:mm
             
-            // Add 120 minutes to allow the user checking in late (as NextEventCard permits)
+            const eventDateTime = new Date(`${a.event_date}T${timeStr}`);
+            // Add 120 minutes to allow the user checking in late
             const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
             return checkinClosedTime < now;
         });

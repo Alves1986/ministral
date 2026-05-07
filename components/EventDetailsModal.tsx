@@ -285,7 +285,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                         </button>
                     )}
                     
-                    {onSwapRequest && currentUser && userAssignment && (
+                    {onSwapRequest && currentUser && userAssignment && new Date(event.iso) > new Date() && (
                         <button 
                             onClick={() => onSwapRequest(userAssignment.keySuffix, event.iso, title)}
                             className="w-full bg-ministral-gold/10 hover:bg-ministral-gold/20 text-ministral-gold dark:bg-ministral-gold/30 dark:hover:bg-ministral-gold/50 dark:text-ministral-gold font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm"

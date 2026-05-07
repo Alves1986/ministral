@@ -34,6 +34,10 @@ import { BirthdayCard } from './components/BirthdayCard';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ToolsMenu } from './components/ToolsMenu';
 
+import { InstallModal } from './components/InstallModal';
+import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { InstallBanner } from './components/InstallBanner';
+
 const ScheduleEditorV2 = lazy(() => import('./components/ScheduleEditorV2').then(m => ({ default: m.ScheduleEditorV2 })));
 const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
 const AvailabilityScreen = lazy(() => import('./components/AvailabilityScreen').then(m => ({ default: m.AvailabilityScreen })));
@@ -51,9 +55,6 @@ const MonthlyReportScreen = lazy(() => import('./components/MonthlyReportScreen'
 const AdvancedAIScreen = lazy(() => import('./components/AdvancedAIScreen').then(m => ({ default: m.AdvancedAIScreen })));
 const HistoryScreen = lazy(() => import('./components/HistoryScreen').then(m => ({ default: m.HistoryScreen })));
 const AlertsManager = lazy(() => import('./components/AlertsManager').then(m => ({ default: m.AlertsManager })));
-const InstallBanner = lazy(() => import('./components/InstallBanner').then(m => ({ default: m.InstallBanner })));
-const InstallModal = lazy(() => import('./components/InstallModal').then(m => ({ default: m.InstallModal })));
-const JoinMinistryModal = lazy(() => import('./components/JoinMinistryModal').then(m => ({ default: m.JoinMinistryModal })));
 const EventsModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.EventsModal })));
 const AvailabilityModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.AvailabilityModal })));
 const RolesModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.RolesModal })));
@@ -62,6 +63,7 @@ const StatsModal = lazy(() => import('./components/StatsModal').then(m => ({ def
 const ConfirmationModal = lazy(() => import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal })));
 const PlanScreen = lazy(() => import('./components/PlanScreen').then(m => ({ default: m.PlanScreen })));
 const RegisterOrganizationScreen = lazy(() => import('./components/RegisterOrganizationScreen').then(m => ({ default: m.RegisterOrganizationScreen })));
+const PaymentSuccessScreen = lazy(() => import('./components/PaymentSuccessScreen').then(m => ({ default: m.PaymentSuccessScreen })));
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[50vh]">
@@ -604,12 +606,22 @@ const InnerApp = () => {
       return <LoadingScreen />;
   }
 
+  const isPaymentSuccess = new URLSearchParams(window.location.search).get('payment') === 'success';
+
+  if (isPaymentSuccess && organization?.id) {
+      return (
+          <Suspense fallback={<LoadingScreen />}>
+              <PaymentSuccessScreen orgId={organization.id} onRefreshOrg={async () => { await refreshSession(); refreshData(); }} />
+          </Suspense>
+      );
+  }
+
   if (status === 'locked_inactive') {
       return <OrganizationInactiveScreen onLogout={handleLogout} />;
   }
 
   if (status === 'locked_billing') {
-      return <BillingLockScreen checkoutUrl={organization?.checkout_url} onLogout={handleLogout} />;
+      return <BillingLockScreen checkoutUrl={organization?.checkout_url} orgId={organization?.id} onLogout={handleLogout} onRefresh={async () => { await refreshSession(); refreshData(); }} />;
   }
 
   if (status === 'unauthenticated') {
@@ -791,7 +803,7 @@ const InnerApp = () => {
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && status === 'ready' && ministryId.length === 36 && membersScreen}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && status === 'ready' && ministryId.length === 36 && <EventsScreen />}
             {currentTab === 'schedule-rules' && isAdmin && safeEnabledTabs.includes('schedule-rules') && status === 'ready' && ministryId.length === 36 && <ScheduleRulesScreen ministryId={ministryId} orgId={orgId!} availableRoles={roles} members={publicMembers} />}
-            {currentTab === 'plan' && isAdmin && status === 'ready' && <PlanScreen organization={organization} isAdmin={isAdmin} />}
+            {currentTab === 'plan' && isAdmin && status === 'ready' && <PlanScreen organization={organization} isAdmin={isAdmin} onRefreshOrg={async () => { await refreshSession(); }} />}
             {currentTab === 'advanced-ai' && isAdmin && isPro && status === 'ready' && ministryId.length === 36 && (
                 <AdvancedAIScreen 
                     ministryId={ministryId} 
