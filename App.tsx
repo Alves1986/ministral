@@ -13,6 +13,7 @@ import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGener
 import { subscribeUserToPush } from './utils/pushUtils';
 import { getSupabase } from './services/supabase/client';
 import { handleLoginCallback } from './services/spotifyService';
+import { Analytics } from '@vercel/analytics/react';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -1036,6 +1037,7 @@ const App = () => {
           </ToastProvider>
         </SessionProvider>
       </SupabaseHealthCheck>
+      <Analytics />
     </QueryClientProvider>
   );
 };
