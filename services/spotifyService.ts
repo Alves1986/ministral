@@ -31,32 +31,10 @@ const getCredentials = (customClientId?: string) => {
     return { clientId };
 };
 
-// --- 1. AUTENTICAÇÃO DO APLICATIVO (Client Credentials) ---
 export const getClientCredentialsToken = async (customClientId?: string, customClientSecret?: string): Promise<string | null> => {
-    // Se passarmos custom, não podemos usar cache do token global do app
-    if (!customClientId && appToken && Date.now() < tokenExpiry) return appToken;
-
-    try {
-        const response = await fetch('/api/spotify/token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                clientId: customClientId, 
-                clientSecret: customClientSecret 
-            })
-        });
-
-        const data = await response.json();
-        if (data.access_token) {
-            appToken = data.access_token;
-            tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; 
-            return appToken;
-        }
-    } catch (e) {
-        console.error("Erro auth app spotify via server:", e);
-    }
+    // Como a configuração não tem mais backend `/api/`, não é possível mais pegar 
+    // um client_credentials secret em segurança no Frontend.
+    // Usaremos apenas o fluxo OAuth do Usuário!
     return null;
 };
 
@@ -162,9 +140,8 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
     } catch (e) { return []; }
 };
 
-export const searchSpotifyTracks = async (query: string, customClientId?: string, customClientSecret?: string): Promise<SpotifyTrack[]> => {
+export const searchSpotifyTracks = async (query: string): Promise<SpotifyTrack[]> => {
     let token = getUserToken();
-    if (!token) token = await getClientCredentialsToken(customClientId, customClientSecret);
 
     if (!token) throw new Error("Para buscar músicas no Spotify, faça o login (botão Conectar) com a sua conta.");
 
