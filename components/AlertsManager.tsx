@@ -45,33 +45,28 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
     }
 
     setIsSending(true);
-    try {
-        // Usa a data exata selecionada, convertendo para ISO format no final do dia
-        const expDateObj = new Date(expirationDate);
-        expDateObj.setHours(23, 59, 59, 999);
-        const expirationIso = expDateObj.toISOString();
+    
+    // Usa a data exata selecionada, convertendo para ISO format no final do dia
+    const expDateObj = new Date(expirationDate);
+    expDateObj.setHours(23, 59, 59, 999);
+    const expirationIso = expDateObj.toISOString();
 
-        // ALTERAÇÃO 3 — await com timeout explícito para garantir que nunca trave
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Tempo limite excedido ao enviar aviso. Verifique sua conexão.")), 15000)
-        );
-        
-        await Promise.race([
-            onSend(title, message, type, expirationIso, externalLink.trim() || undefined),
-            timeoutPromise
-        ]);
+    // Dispara em background para liberar a tela imediatamente (Sem await)
+    onSend(title, message, type, expirationIso, externalLink.trim() || undefined)
+        .catch(error => {
+            console.error("[AlertsManager] Failed to send announcement:", error);
+            addToast(error?.message || "Aviso enviado, mas houve lentidão na rede.", "warning");
+        });
 
-        setTitle("");
-        setMessage("");
-        setExternalLink("");
-        setType('info');
-        addToast("Aviso enviado para toda a equipe!", "success");
-    } catch (error: any) {
-        console.error("[AlertsManager] Failed to send announcement:", error);
-        addToast(error?.message || 'Falha ao enviar aviso. Tente novamente.', "error");
-    } finally {
-        setIsSending(false);
-    }
+    // Libera a UI instantaneamente
+    setTitle("");
+    setMessage("");
+    setExternalLink("");
+    setType('info');
+    addToast("Aviso enviado para toda a equipe!", "success");
+    
+    // Pequeno delay visual apenas para sensação de clique, mas não trava
+    setTimeout(() => setIsSending(false), 300);
   };
 
   const handlePolish = async (tone: 'professional' | 'exciting' | 'urgent') => {

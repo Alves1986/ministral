@@ -875,7 +875,7 @@ const InnerApp = () => {
                                 .catch(err => console.error("Erro na notificação (secundário):", err));
                             
                             // (c) Invalidação de cache substituindo refreshData
-                            queryClient.invalidateQueries({ queryKey: ['announcements', ministryId, orgId] }).catch(err => console.error("Invalidação falhou:", err));
+                            await queryClient.invalidateQueries({ queryKey: ['announcements', ministryId, orgId] });
                         } catch (err) {
                             console.error("Erro ao processar aviso:", err);
                             throw err;

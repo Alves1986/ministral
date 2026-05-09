@@ -1,0 +1,72 @@
+
+{
+  "name": "Ministral",
+  "short_name": "Ministral",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#1E3A5F",
+  "orientation": "portrait",
+  "categories": ["productivity", "social", "lifestyle"],
+  "description": "Gestão ministerial inteligente para igrejas",
+  "icons": [
+    {
+      "src": "/branding/icon-light.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/icon-light.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/icon-light.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=1080&h=1920",
+      "sizes": "1080x1920",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Tela Inicial"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1920&h=1080",
+      "sizes": "1920x1080",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Painel Desktop"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Minha Escala",
+      "short_name": "Escala",
+      "description": "Ver minha escala do mês",
+      "url": "/?tab=calendar",
+      "icons": [{ "src": "/branding/icon-light.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Avisos",
+      "short_name": "Avisos",
+      "description": "Ver avisos importantes",
+      "url": "/?tab=announcements",
+      "icons": [{ "src": "/branding/icon-light.png", "sizes": "192x192" }]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "auto"
+  },
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
+}

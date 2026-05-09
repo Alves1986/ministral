@@ -108,6 +108,24 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
     // Limpa HTML para notificações (sempre texto simples)
     const cleanMessage = stripHtml(notification.message);
 
+    // -- Disparo da Notificação Push (Web Push) SEMPRE EXECUTA --
+    // Dispara imediatamente em background para não depender do insert no banco de dados local
+    setTimeout(() => {
+        sb.functions.invoke('push-notification', {
+            body: {
+                ministryId: ministryId,
+                title: notification.title,
+                message: cleanMessage,
+                type: notification.type,
+                actionLink: notification.actionLink
+            }
+        }).then(({ error }) => {
+            if (error) console.warn("[Push Notification] Edge function error:", error);
+        }).catch(err => {
+            console.warn("[Push Notification] Failed to trigger push:", err);
+        });
+    }, 50);
+
     const payload: any = {
         organization_id: orgId,
         ministry_id: ministryId,
@@ -124,6 +142,7 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
         
         // Fallback: Se a coluna action_link não existir ou erro de cache de schema
         const isMissingColumn = error.code === 'PGRST204' || 
+                               error.code === '42703' || // Postgres "column does not exist"
                                error.message?.includes('action_link') || 
                                error.message?.includes('não existe');
 
@@ -136,20 +155,6 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
             throw error;
         }
     }
-
-    // -- Disparo da Notificação Push (Web Push) --
-    // Dispara em background para não travar a UI
-    sb.functions.invoke('push-notification', {
-        body: {
-            ministryId: ministryId,
-            title: notification.title,
-            message: cleanMessage,
-            type: notification.type,
-            actionLink: notification.actionLink
-        }
-    }).catch(err => {
-        console.warn("[Push Notification] Failed to trigger push:", err);
-    });
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string, orgId: string) => {
