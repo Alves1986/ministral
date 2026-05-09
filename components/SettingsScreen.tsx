@@ -511,6 +511,7 @@ export const SettingsScreen: React.FC<Props> = ({
           {ministries && (
             <WhatsAppNotificationSettings
               orgId={orgId}
+              ministryId={ministryId}
               ministries={ministries}
               onShowToast={addToast}
             />

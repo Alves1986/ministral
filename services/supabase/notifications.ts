@@ -136,6 +136,20 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
             throw error;
         }
     }
+
+    // -- Disparo da Notificação Push (Web Push) --
+    // Dispara em background para não travar a UI
+    sb.functions.invoke('push-notification', {
+        body: {
+            ministryId: ministryId,
+            title: notification.title,
+            message: cleanMessage,
+            type: notification.type,
+            actionLink: notification.actionLink
+        }
+    }).catch(err => {
+        console.warn("[Push Notification] Failed to trigger push:", err);
+    });
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string, orgId: string) => {

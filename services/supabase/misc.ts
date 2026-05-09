@@ -384,3 +384,61 @@ export const fetchMemberScheduleHistory = async (
     .order('event_date', { ascending: false });
   return data || [];
 };
+
+// ── WhatsApp Scheduled Notifications (per-event) ──────────────────────
+
+export const scheduleWhatsAppNotification = async (
+  orgId: string,
+  ministryId: string,
+  eventRuleId: string,
+  eventDate: string,
+  eventTitle: string,
+  scheduledAt: string,
+  createdBy?: string
+) => {
+    const sb = getSupabase();
+    if (!sb) return;
+
+    // Remove agendamento anterior para o mesmo evento (se houver)
+    await sb.from('whatsapp_scheduled_notifications')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('event_rule_id', eventRuleId)
+        .eq('event_date', eventDate);
+
+    const { error } = await sb.from('whatsapp_scheduled_notifications').insert({
+        org_id: orgId,
+        ministry_id: ministryId,
+        event_rule_id: eventRuleId,
+        event_date: eventDate,
+        event_title: eventTitle,
+        scheduled_at: scheduledAt,
+        status: 'pending',
+        created_by: createdBy || null
+    });
+    if (error) throw error;
+};
+
+export const cancelWhatsAppNotification = async (id: string) => {
+    const sb = getSupabase();
+    if (!sb) return;
+    const { error } = await sb.from('whatsapp_scheduled_notifications')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const fetchScheduledNotifications = async (
+  orgId: string,
+  ministryId: string
+): Promise<{ id: string; event_rule_id: string; event_date: string; event_title: string; scheduled_at: string; status: string }[]> => {
+    const sb = getSupabase();
+    if (!sb) return [];
+    const { data } = await sb.from('whatsapp_scheduled_notifications')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('ministry_id', ministryId)
+        .order('scheduled_at', { ascending: true });
+    return data || [];
+};

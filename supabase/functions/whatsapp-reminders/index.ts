@@ -11,22 +11,25 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
 }
 
 const ROLE_EMOJIS: Record<string, string> = {
-  proje: "🎬",
+  proje: "💻",
   ilumina: "💡",
   luz: "💡",
-  transmiss: "🎥",
+  transmiss: "🖥️",
   camera: "🎥",
   câmera: "🎥",
   foto: "📸",
+  stori: "📱",
   vocal: "🎤",
   ministro: "🎤",
   viol: "🎸",
   guitar: "🎸",
+  baixo: "🎸",
   bater: "🥁",
   teclad: "🎹",
   som: "🎛️",
   áudio: "🎛️",
-  audio: "🎛️"
+  audio: "🎛️",
+  apresenta: "🎙️"
 };
 
 function getEmojiForRole(role: string): string {
@@ -40,10 +43,7 @@ function getEmojiForRole(role: string): string {
 const DEFAULT_ORIENTATIONS = `⚠️ *Orientações:*
 1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.
 2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
-
-✅ *Confirme sua presença respondendo esta mensagem:*
-• Digite *1* para CONFIRMAR
-• Digite *2* para RECUSAR
+3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.
 
 Vamos juntos servir com excelência! 🚀`;
 
@@ -97,44 +97,7 @@ serve(async (req: Request) => {
       throw new Error("Credenciais da Evolution API não configuradas.");
     }
 
-    // ── 4. Hora atual em horário de Brasília (ROBUSTEZ NO TIMEZONE) ─────────
-    const nowUTC = new Date();
-    
-    // Obter as partes em Brasília de uma vez
-    const tzParts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Sao_Paulo",
-      year: "numeric", month: "numeric", day: "numeric",
-      hour: "numeric", minute: "numeric", second: "numeric",
-      hour12: false
-    }).formatToParts(nowUTC);
-
-    const parts = Object.fromEntries(tzParts.map(p => [p.type, p.value]));
-    
-    const yyNow = Number(parts.year);
-    const mmNow = Number(parts.month);
-    const ddNow = Number(parts.day);
-    
-    let hhNow = Number(parts.hour);
-    if (hhNow === 24) hhNow = 0;
-    const minNow = Number(parts.minute);
-
-    const currentMinuteStr = `${String(hhNow).padStart(2, "0")}:${String(minNow).padStart(2, "0")}`;
-    const currentTimeInMinutes = hhNow * 60 + minNow;
-
-    // ── 5. Busca organizações com WhatsApp habilitado ─────────────────────
-    const { data: orgSettings, error: orgErr } = await supabase
-      .from("whatsapp_settings")
-      .select("*")
-      .eq("enabled", true);
-
-    if (orgErr) throw orgErr;
-    if (!orgSettings || orgSettings.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: "Nenhuma org com WhatsApp habilitado." }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // ── 6. Mapa de instâncias por ministério ──────────────────────────────
+    // ── 4. Mapa de instâncias por ministério ──────────────────────────────
     const { data: mnWhatsapps, error: mnErr } = await supabase
       .from("ministry_whatsapp")
       .select("ministry_id, instance_name")
@@ -151,213 +114,199 @@ serve(async (req: Request) => {
       });
     }
 
+    // ── 5. Busca agendamentos pendentes cujo horário já chegou ──────────
+    const nowISO = new Date().toISOString();
+
+    const { data: pendingNotifs, error: pendErr } = await supabase
+      .from("whatsapp_scheduled_notifications")
+      .select("*")
+      .eq("status", "pending")
+      .lte("scheduled_at", nowISO);
+
+    if (pendErr) {
+      console.error("[whatsapp-reminders] Erro ao buscar agendamentos:", pendErr);
+      throw pendErr;
+    }
+
+    if (!pendingNotifs || pendingNotifs.length === 0) {
+      return new Response(JSON.stringify({ success: true, message: "Nenhum agendamento pendente." }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    console.log(`[whatsapp-reminders] Processando ${pendingNotifs.length} agendamento(s)...`);
+
     const results: any[] = [];
 
-    for (const orgSetting of orgSettings) {
-      // ── 7. Verificação do horário configurado (JANELA DE TOLERÂNCIA) ─────────
-      const rawTime = orgSetting.send_time || "09:00:00";
-      const [confHStr, confMStr] = rawTime.split(":");
-      const configuredTimeInMinutes = Number(confHStr) * 60 + Number(confMStr);
-      
-      // Verifica se a hora atual está dentro da janela de 5 minutos após o horário configurado
-      let diff = currentTimeInMinutes - configuredTimeInMinutes;
-      // Ajuste para casos em que cruza a meia-noite (ex: configurado 23:58, mudou para 00:02)
-      if (diff < -720) diff += 1440; 
-      else if (diff > 720) diff -= 1440;
-      
-      if (diff < 0 || diff > 5) {
-        results.push({ org_id: orgSetting.org_id, skipped: true, reason: `Fora da janela de 5m (configurado: ${rawTime}, atual: ${currentMinuteStr})` });
-        continue;
-      }
+    for (const notif of pendingNotifs) {
+      try {
+        const targetDate = notif.event_date;
+        const orgId = notif.org_id;
 
-      // ── 8. Data-alvo no fuso de Brasília (CORREÇÃO DE TIMEZONE) ─────────
-      const sendDaysBefore = orgSetting.send_days_before || 0;
-      
-      // Cria uma data representando o meio dia para evitar problemas de timezone/DST em contas
-      const targetDateObj = new Date(Date.UTC(yyNow, mmNow - 1, ddNow + sendDaysBefore, 12, 0, 0));
-      
-      const yy  = targetDateObj.getUTCFullYear();
-      const mmStr  = String(targetDateObj.getUTCMonth() + 1).padStart(2, "0");
-      const ddStr  = String(targetDateObj.getUTCDate()).padStart(2, "0");
-      const targetDate = `${yy}-${mmStr}-${ddStr}`;
+        // ── 6. Busca assignments do evento ──────────────────────────────────
+        let query = supabase
+          .from("schedule_assignments")
+          .select(`
+            id,
+            member_id,
+            role,
+            event_date,
+            event_rule_id,
+            ministry_id,
+            profiles:member_id ( whatsapp, name ),
+            organization_ministries:ministry_id ( label ),
+            event_rules:event_rule_id ( title, time )
+          `)
+          .eq("organization_id", orgId)
+          .eq("event_date", targetDate);
 
-      // ── 9. Busca assignments do dia alvo ──────────────────────────────────
-      const { data: assignments, error: assigErr } = await supabase
-        .from("schedule_assignments")
-        .select(`
-          id,
-          member_id,
-          role,
-          event_date,
-          event_rule_id,
-          ministry_id,
-          profiles:member_id ( whatsapp, name ),
-          organization_ministries:ministry_id ( label ),
-          event_rules:event_rule_id ( title, time )
-        `)
-        .eq("organization_id", orgSetting.org_id)
-        .eq("event_date", targetDate);
-
-      if (assigErr) {
-        results.push({ org_id: orgSetting.org_id, error: assigErr.message });
-        continue;
-      }
-
-      if (!assignments || assignments.length === 0) {
-        results.push({ org_id: orgSetting.org_id, date: targetDate, sent: 0, reason: "Sem assignments para a data." });
-        continue;
-      }
-
-      let sent = 0, skipped = 0, errors = 0;
-
-      // ── 10. Agrupar assignments por evento e ministério ───────────────────
-      const eventsMap = new Map<string, any[]>();
-      for (const assignment of assignments) {
-        const ruleId = assignment.event_rule_id || `fallback_${assignment.event_date}`;
-        const key = `${assignment.ministry_id}_${ruleId}`;
-        if (!eventsMap.has(key)) eventsMap.set(key, []);
-        eventsMap.get(key)!.push(assignment);
-      }
-
-      // ── 11. Processar cada evento separadamente ───────────────────────────
-      for (const [key, evAssignments] of eventsMap.entries()) {
-        const firstAssig = evAssignments[0];
-        if (!firstAssig) continue;
-        const eventTitle = firstAssig.event_rules?.title || "Culto";
-        const eventTimeStr = firstAssig.event_rules?.time ? firstAssig.event_rules.time.substring(0, 5) : "00:00";
-        
-        // Formatar data usando a targetDate corretamente
-        const [tY, tM, tD] = targetDate.split('-');
-        const dateStr = `${tD}/${tM}/${tY}`;
-
-        // Monta a lista de membros e funções
-        let membersList = "";
-        for (const a of evAssignments) {
-          const memberName = a.profiles?.name || "Desconhecido";
-          const emoji = getEmojiForRole(a.role);
-          membersList += `${emoji} ${memberName} - ${a.role}\\n`;
+        // Se tiver event_rule_id, filtra por ele
+        if (notif.event_rule_id) {
+          query = query.eq("event_rule_id", notif.event_rule_id);
+        }
+        // Se tiver ministry_id, filtra por ele
+        if (notif.ministry_id) {
+          query = query.eq("ministry_id", notif.ministry_id);
         }
 
-        const msg = `📢 *Escala para o ${eventTitle}* 📢\\n\\n📅 *Data:* ${dateStr}\\n⏰ *Horário:* ${eventTimeStr}\\n\\n👤 *Membros e Funções:*\\n\\n${membersList}\\n${DEFAULT_ORIENTATIONS}`;
+        const { data: assignments, error: assigErr } = await query;
 
-        const sentToPhones = new Set<string>();
-        const processedMembers = new Set<string>();
+        if (assigErr) {
+          console.error(`[whatsapp-reminders] Erro ao buscar assignments para notif ${notif.id}:`, assigErr);
+          await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
+          results.push({ notif_id: notif.id, error: assigErr.message });
+          continue;
+        }
 
-        // Dedup em memória
-        for (const a of evAssignments) {
-          const profile = a.profiles;
-          if (!profile || !profile.whatsapp) {
-            skipped++;
-            continue;
+        if (!assignments || assignments.length === 0) {
+          console.log(`[whatsapp-reminders] Nenhum assignment para notif ${notif.id} (date: ${targetDate})`);
+          await supabase.from("whatsapp_scheduled_notifications").update({ status: "sent" }).eq("id", notif.id);
+          results.push({ notif_id: notif.id, date: targetDate, sent: 0, reason: "Sem assignments." });
+          continue;
+        }
+
+        let sent = 0, skipped = 0, errors = 0;
+
+        // ── 7. Agrupar assignments por evento e ministério ───────────────────
+        const eventsMap = new Map<string, any[]>();
+        for (const assignment of assignments) {
+          const ruleId = assignment.event_rule_id || `fallback_${assignment.event_date}`;
+          const key = `${assignment.ministry_id}_${ruleId}`;
+          if (!eventsMap.has(key)) eventsMap.set(key, []);
+          eventsMap.get(key)!.push(assignment);
+        }
+
+        // ── 8. Processar cada evento ──────────────────────────────────────────
+        for (const [key, evAssignments] of eventsMap.entries()) {
+          const firstAssig = evAssignments[0];
+          if (!firstAssig) continue;
+          const eventTitle = firstAssig.event_rules?.title || notif.event_title || "Culto";
+          const eventTimeStr = firstAssig.event_rules?.time ? firstAssig.event_rules.time.substring(0, 5) : "00:00";
+          const ministryLabel = firstAssig.organization_ministries?.label || "Ministério";
+          
+          const [tY, tM, tD] = targetDate.split('-');
+          const dateStr = `${tD}/${tM}/${tY}`;
+
+          // Agrupa membros por função (role)
+          const roleMembers = new Map<string, string[]>();
+          for (const a of evAssignments) {
+            const memberName = a.profiles?.name || "Desconhecido";
+            if (!roleMembers.has(a.role)) roleMembers.set(a.role, []);
+            roleMembers.get(a.role)!.push(memberName);
           }
 
-          if (processedMembers.has(a.member_id)) {
-            skipped++;
-            continue;
-          }
-          processedMembers.add(a.member_id);
-
-          // Deduplicação no banco de dados
-          const { data: alreadySent } = await supabase
-            .from("whatsapp_sent_log")
-            .select("id")
-            .eq("org_id", orgSetting.org_id)
-            .eq("member_id", a.member_id)
-            .eq("event_date", targetDate)
-            .maybeSingle();
-
-          if (alreadySent) {
-            skipped++;
-            continue;
+          let teamList = "";
+          for (const [role, members] of roleMembers.entries()) {
+            const emoji = getEmojiForRole(role);
+            teamList += `${emoji} *${role}:* ${members.join(", ")}\n`;
           }
 
-          const formattedPhone = formatBrazilPhone(profile.whatsapp);
-          if (!formattedPhone) {
-            skipped++;
-            console.warn(`[whatsapp-reminders] Número inválido: "${profile.whatsapp}"`);
-            continue;
-          }
+          const msg = `*Escala para o ${eventTitle}*\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n\n${teamList}\n${DEFAULT_ORIENTATIONS}`;
 
-          if (sentToPhones.has(formattedPhone)) {
-             try {
-               await supabase.from("whatsapp_sent_log").insert({
-                 org_id: orgSetting.org_id,
-                 member_id: a.member_id,
-                 event_date: targetDate,
-               });
-             } catch(e) {}
-             skipped++;
-             continue;
-          }
+          const sentToPhones = new Set<string>();
+          const processedMembers = new Set<string>();
 
-          sentToPhones.add(formattedPhone);
-          const currentInstance = ministryMap.get(a.ministry_id) || instanceName;
-          const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
+          for (const a of evAssignments) {
+            const profile = a.profiles;
+            if (!profile || !profile.whatsapp) {
+              skipped++;
+              continue;
+            }
 
-          // Mitigar race condition no envio: Insere "placeholder" ou aguarda a resposta
-          let success = false;
-          let retries = 2;
+            if (processedMembers.has(a.member_id)) {
+              skipped++;
+              continue;
+            }
+            processedMembers.add(a.member_id);
 
-          while (retries > 0 && !success) {
-            try {
-              const reqEvolution = await fetchWithTimeout(endpoint, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": evolutionApiKey,
-                },
-                body: JSON.stringify({
-                  number: formattedPhone,
-                  options: { delay: 1200, presence: "composing" },
-                  text: msg,
-                }),
-                timeout: 5000
-              });
+            const formattedPhone = formatBrazilPhone(profile.whatsapp);
+            if (!formattedPhone) {
+              skipped++;
+              console.warn(`[whatsapp-reminders] Número inválido: "${profile.whatsapp}"`);
+              continue;
+            }
 
-              if (!reqEvolution.ok) {
-                const errBody = await reqEvolution.text();
-                throw new Error(`Evolution API ${reqEvolution.status}: ${errBody}`);
-              }
+            if (sentToPhones.has(formattedPhone)) {
+              skipped++;
+              continue;
+            }
 
-              success = true;
+            sentToPhones.add(formattedPhone);
+            const currentInstance = ministryMap.get(a.ministry_id) || instanceName;
+            const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
 
-              await supabase.from("whatsapp_sent_log").insert({
-                org_id: orgSetting.org_id,
-                member_id: a.member_id,
-                event_date: targetDate,
-              });
+            let success = false;
+            let retries = 2;
 
-              // Cria ação pendente para o membro confirmar via WhatsApp
-              const expiresAt = new Date(targetDate);
-              expiresAt.setDate(expiresAt.getDate() + 1);
-              await supabase.from("whatsapp_pending_actions").insert({
-                type:            "confirmation",
-                member_id:       a.member_id,
-                phone:           formattedPhone,
-                organization_id: orgSetting.org_id,
-                ministry_id:     a.ministry_id,
-                event_date:      targetDate,
-                event_rule_id:   a.event_rule_id,
-                expires_at:      expiresAt.toISOString(),
-              });
+            while (retries > 0 && !success) {
+              try {
+                const reqEvolution = await fetchWithTimeout(endpoint, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": evolutionApiKey,
+                  },
+                  body: JSON.stringify({
+                    number: formattedPhone,
+                    options: { delay: 1200, presence: "composing" },
+                    text: msg,
+                  }),
+                  timeout: 5000
+                });
 
-              console.log(`[whatsapp-reminders] Mensagem unificada enviada para ${profile.name} (${formattedPhone})`);
-              sent++;
-            } catch (postErr: any) {
-              retries--;
-              if (retries === 0) {
-                console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone}:`, postErr.message);
-                errors++;
-              } else {
-                console.log(`[whatsapp-reminders] Retentando envio para ${formattedPhone}...`);
-                await new Promise(r => setTimeout(r, 1000));
+                if (!reqEvolution.ok) {
+                  const errBody = await reqEvolution.text();
+                  throw new Error(`Evolution API ${reqEvolution.status}: ${errBody}`);
+                }
+
+                success = true;
+                console.log(`[whatsapp-reminders] Mensagem enviada para ${profile.name} (${formattedPhone})`);
+                sent++;
+              } catch (postErr: any) {
+                retries--;
+                if (retries === 0) {
+                  console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone}:`, postErr.message);
+                  errors++;
+                } else {
+                  console.log(`[whatsapp-reminders] Retentando envio para ${formattedPhone}...`);
+                  await new Promise(r => setTimeout(r, 1000));
+                }
               }
             }
           }
         }
-      }
 
-      results.push({ org_id: orgSetting.org_id, date: targetDate, sent, skipped, errors });
+        // ── 9. Marca como enviado ──────────────────────────────────────────
+        await supabase.from("whatsapp_scheduled_notifications")
+          .update({ status: errors > 0 && sent === 0 ? "failed" : "sent" })
+          .eq("id", notif.id);
+
+        results.push({ notif_id: notif.id, date: targetDate, title: notif.event_title, sent, skipped, errors });
+      } catch (notifErr: any) {
+        console.error(`[whatsapp-reminders] Erro processando notif ${notif.id}:`, notifErr);
+        await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
+        results.push({ notif_id: notif.id, error: notifErr.message });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, results }), {
