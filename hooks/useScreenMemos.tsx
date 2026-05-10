@@ -75,6 +75,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
             try {
                 await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: activeUser!.name, requesterId: activeUser!.id || '', role: role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); 
                 addToast("Pedido de troca solicitado com sucesso.", "success");
+                refreshData();
             } catch (e: any) {
                 addToast("Erro ao solicitar troca: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -85,6 +86,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
             try {
                 await Supabase.performSwapSQL(ministryId, orgId!, reqId, activeUser!.name, activeUser!.id!); 
                 addToast("Escala assumida com sucesso.", "success");
+                refreshData();
             } catch (e: any) {
                 addToast("Erro ao assumir escala: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -94,6 +96,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
             try {
                 await Supabase.cancelSwapRequestSQL(reqId, orgId!); 
                 addToast("Pedido removido com sucesso.", "info"); 
+                refreshData();
             } catch (e: any) {
                 addToast("Erro ao remover pedido: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);

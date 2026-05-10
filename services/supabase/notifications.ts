@@ -17,7 +17,9 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     const { data: globalNotifs, error: fetchError } = await query
         .order('created_at', { ascending: false })
         .limit(30);
-    
+
+    let finalNotifs = globalNotifs;
+
     // Fallback para erro de cache de schema
     if (fetchError && (fetchError.code === 'PGRST204' || fetchError.message?.includes('action_link'))) {
         console.warn("[Notifications] Schema cache error on global fetch, retrying basic.");
@@ -30,19 +32,13 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         // Se falhar de novo, deixa o erro subir ou retorna vazio para não quebrar o app
         if (!retryNotifs) return [];
         
-        // Mapeamento simplificado para o fallback
-        return retryNotifs.map(n => ({
-            id: n.id,
-            ministryId: n.ministry_id,
-            ministryName: 'Aviso',
-            organizationId: n.organization_id,
-            title: n.title,
-            message: n.message,
-            type: n.type,
-            timestamp: n.created_at,
-            read: false,
-            actionLink: (n as any).action_link || 'announcements'
+        // Mapeamento simplificado para o fallback que será processado abaixo
+        finalNotifs = retryNotifs.map(n => ({
+            ...n,
+            organization_ministries: { label: 'Aviso' }
         }));
+    } else if (fetchError) {
+        console.error("[Notifications] Fetch error:", fetchError);
     }
         
     const { data: reads } = await sb.from('notification_reads')
@@ -73,7 +69,7 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     const readSet = new Set(reads?.map((r: any) => r.notification_id));
     const clearSet = new Set([...dbClears.map((c: any) => c.notification_id), ...localClears]);
     
-    return (globalNotifs || [])
+    return (finalNotifs || [])
         .filter((n: any) => !clearSet.has(n.id))
         .map((n: any) => {
             const m = Array.isArray(n.organization_ministries) ? n.organization_ministries[0] : n.organization_ministries;

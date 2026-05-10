@@ -95,49 +95,71 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     // event_datetime is a timestamp, e.g., "2026-04-03T12:00:00"
     const datePart = req.event_datetime.split('T')[0];
     
-    // Busca primaria: pelo requester_id (UUID do membro)
-    let { data: assignment } = await sb.from('schedule_assignments')
-        .select('id, event_rule_id')
+    // Busca assignments apenas por data e role
+    const { data: assignments, error: fetchErr } = await sb.from('schedule_assignments')
+        .select('*, profiles(name)')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('event_date', datePart)
-        .eq('role', req.role)
-        .eq('member_id', req.requester_id)
-        .limit(1).maybeSingle();
+        .eq('role', req.role);
         
-    // Fallback: se nao achou por member_id, buscar pelo nome via join com profiles
-    if (!assignment) {
-        const { data: byName } = await sb.from('schedule_assignments')
-            .select('id, event_rule_id, profiles!inner(name)')
-            .eq('organization_id', orgId)
-            .eq('ministry_id', ministryId)
-            .eq('event_date', datePart)
-            .eq('role', req.role)
-            .eq('profiles.name', req.requester_name)
-            .limit(1).maybeSingle();
-        assignment = byName as any;
+    let assignment = null;
+    
+    if (assignments && assignments.length > 0) {
+        // Tenta achar pelo ID exato
+        assignment = assignments.find(a => a.member_id === req.requester_id);
+        
+        // Fallback: Tenta achar pelo nome associado ou diretamente via schedule logic
+        if (!assignment) {
+            assignment = assignments.find(a => {
+                const profileName = Array.isArray(a.profiles) ? a.profiles[0]?.name : a.profiles?.name;
+                return profileName === req.requester_name;
+            });
+        }
+        
+        // Super Fallback: Se so tem UM assignment pra essa role nesse dia, usa ele!
+        if (!assignment && assignments.length === 1) {
+            assignment = assignments[0];
+            console.warn(`[performSwapSQL] member_id mismatch mas só tem 1 vaga. Usando ela. req_id: ${req.requester_id}, found_id: ${assignment.member_id}`);
+        }
     }
         
     if (assignment) {
-        await sb.from('schedule_assignments').update({
+        const { error: errorAssignment } = await sb.from('schedule_assignments').update({
             member_id: takenById,
             confirmed: false
         }).eq('id', assignment.id);
         
-        await sb.from('swap_requests').update({
+        if (errorAssignment) {
+            console.error('[performSwapSQL] Erro atualizando schedule_assignments:', errorAssignment);
+            throw new Error('Falha de permissão ou erro ao atualizar escala original.');
+        }
+
+        const { error: errorSwap } = await sb.from('swap_requests').update({
             status: 'completed',
             taken_by_id: takenById,
             taken_by_name: takenByName
         }).eq('id', reqId).eq('organization_id', orgId);
+        
+        if (errorSwap) {
+            console.error('[performSwapSQL] Erro atualizando swap_requests:', errorSwap);
+            throw new Error('Falha ao concluir o pedido de troca.');
+        }
     } else {
-        console.error('[performSwapSQL] Assignment nao encontrado para o swap:', reqId);
+        const errorMsg = `[performSwapSQL] Assignment nao encontrado para o swap: ${reqId} (role: ${req.role}, requester_id: ${req.requester_id}, datePart: ${datePart})`;
+        console.error(errorMsg);
+        throw new Error("Não foi possível encontrar a escala original para processar a troca.");
     }
 };
 
 export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('swap_requests').update({ status: 'cancelled' }).eq('id', reqId).eq('organization_id', orgId);
+    const { error } = await sb.from('swap_requests').update({ status: 'cancelled' }).eq('id', reqId).eq('organization_id', orgId);
+    if (error) {
+        console.error('[cancelSwapRequestSQL] Erro:', error);
+        throw new Error('Falha ao cancelar o pedido de troca.');
+    }
 };
 
 export const updateMemberData = async (memberId: string, orgId: string, data: Partial<TeamMemberProfile> & { ministryId?: string; roles?: string[] }) => {
