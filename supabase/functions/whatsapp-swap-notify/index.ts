@@ -125,12 +125,10 @@ serve(async (req: Request) => {
       `📅 *Evento:* ${swapReq.event_title}\n` +
       `🗓️ *Data:* ${dateDisplay}\n` +
       `⏰ *Horário:* ${timePart}\n\n` +
-      `Responda *SIM* para assumir esta escala.`;
+      `Acesse o aplicativo web e vá na aba "Trocas" para assumir esta escala.`;
 
-    // ── 6. Envia mensagens e cria pending_actions ─────────────────────────
+    // ── 6. Envia mensagens ────────────────────────────────────────────────
     let sent = 0;
-    const pendingToInsert: any[] = [];
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
 
     for (const profile of profiles) {
       const phone = formatBrazilPhone((profile as any).whatsapp);
@@ -149,32 +147,11 @@ serve(async (req: Request) => {
 
         if (res.ok) {
           sent++;
-          pendingToInsert.push({
-            type:            "swap_accept",
-            member_id:       (profile as any).id,
-            phone,
-            organization_id: orgId,
-            ministry_id:     ministryId,
-            role:            swapReq.role,
-            swap_request_id: swapRequestId,
-            expires_at:      expiresAt,
-          });
         } else {
           console.warn(`[whatsapp-swap-notify] Evolution retornou ${res.status} para ${phone}`);
         }
       } catch (e) {
         console.error(`[whatsapp-swap-notify] Erro ao enviar para ${phone}:`, e);
-      }
-    }
-
-    // ── 7. Persiste as ações pendentes em batch ───────────────────────────
-    if (pendingToInsert.length > 0) {
-      const { error: insertErr } = await supabase
-        .from("whatsapp_pending_actions")
-        .insert(pendingToInsert);
-
-      if (insertErr) {
-        console.error("[whatsapp-swap-notify] Erro ao inserir pending_actions:", insertErr);
       }
     }
 
