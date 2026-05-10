@@ -1,5 +1,5 @@
-import { generateScheduleWithAI } from "../../services/aiOrchestrator";
-import { generateAISchedule } from "../../services/aiScheduleService";
+import { generateScheduleWithAI } from "../../services/aiOrchestrator.ts";
+import { generateAISchedule } from "../../services/aiScheduleService.ts";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
