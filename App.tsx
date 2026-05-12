@@ -654,7 +654,7 @@ const InnerApp = () => {
               <Suspense fallback={<LoadingFallback />}>
                   <PlanScreen 
                       organization={organization} 
-                      isAdmin={isAdmin} 
+                      isAdmin={isAdmin ?? false} 
                       onRefreshOrg={async () => { await refreshSession(); refreshData(); }} 
                   />
               </Suspense>

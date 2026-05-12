@@ -187,10 +187,8 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         members: members.map(m => ({ name: m.name, functions: m.ministry_functions, status: m.status }))
       };
   
-      const [healthParsed, memberAnalysis] = await Promise.all([
-        runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel),
-        runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel)
-      ]);
+      const healthParsed = await runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel);
+      const memberAnalysis = await runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel);
 
       setHealthInsights({
         ...healthParsed,
@@ -320,11 +318,13 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     }
   };
 
+  /* Removido trigger automático de explicação a pedido do usuário
   useEffect(() => {
     if (activeTab === 'explain' && !explanation && !explainLoading && Object.keys(schedule).length > 0) {
       handleExplainSchedule();
     }
   }, [activeTab, schedule]);
+  */
 
   return (
     <div className='max-w-5xl mx-auto space-y-6 pb-10 animate-fade-in'>
@@ -599,6 +599,11 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 space-y-5'>
           <h3 className='font-bold text-zinc-800 dark:text-zinc-100'>Explicar Decisão da IA</h3>
           <p className='text-sm text-zinc-500'>Entenda por que cada membro foi escalado na escala atual (usando o modelo configurado).</p>
+
+          <button onClick={handleExplainSchedule} disabled={explainLoading || Object.keys(schedule).length === 0} className='px-5 py-2.5 bg-ministral-500 hover:bg-ministral-600 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 disabled:opacity-60'>
+            {explainLoading ? <Loader2 size={14} className='animate-spin'/> : <Brain size={14}/>}
+            {explainLoading ? 'Analisando...' : (explanation ? 'Gerar Novamente' : 'Explicar Escala')}
+          </button>
           
           {explainLoading && (
             <div className='flex flex-col items-center justify-center py-10 text-zinc-500 gap-3'>
