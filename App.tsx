@@ -635,7 +635,31 @@ const InnerApp = () => {
   }
 
   if (status === 'locked_billing') {
-      return <BillingLockScreen checkoutUrl={organization?.checkout_url} orgId={organization?.id} onLogout={handleLogout} onRefresh={async () => { await refreshSession(); refreshData(); }} />;
+      return (
+          <DashboardLayout
+              onLogout={handleLogout}
+              title="Assinatura Pendente"
+              currentTab="plan"
+              onTabChange={() => {}}
+              mainNavItems={[]}
+              managementNavItems={[{ id: 'plan', label: 'Plano e Assinatura', icon: <Crown size={20}/> }]}
+              notifications={[]}
+              onNotificationsUpdate={() => {}}
+              onInstall={() => {}}
+              isStandalone={false}
+              onSwitchMinistry={() => {}}
+              onOpenJoinMinistry={() => {}}
+              activeMinistryId=""
+          >
+              <Suspense fallback={<LoadingFallback />}>
+                  <PlanScreen 
+                      organization={organization} 
+                      isAdmin={isAdmin} 
+                      onRefreshOrg={async () => { await refreshSession(); refreshData(); }} 
+                  />
+              </Suspense>
+          </DashboardLayout>
+      );
   }
 
   if (status === 'unauthenticated') {

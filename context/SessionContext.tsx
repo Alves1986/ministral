@@ -191,10 +191,10 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 }
 
                 if (!profile.is_super_admin) {
-                    const isTrial = orgDetails.plan_type === 'trial';
+                    const isTrial = !orgDetails.plan_type || orgDetails.plan_type === 'trial';
                     const trialExpired = isTrial && orgDetails.trial_ends_at && new Date() > new Date(orgDetails.trial_ends_at);
                     const isLocked = orgDetails.access_locked;
-                    const badStatus = orgDetails.billing_status && !['active', 'trial'].includes(orgDetails.billing_status);
+                    const badStatus = orgDetails.billing_status ? !['active', 'trial'].includes(orgDetails.billing_status) : false;
                     
                     const isPastDue = orgDetails.billing_status === 'past_due';
                     const isCanceled = orgDetails.billing_status === 'canceled';
