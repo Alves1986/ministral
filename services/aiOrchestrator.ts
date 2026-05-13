@@ -27,29 +27,29 @@ export enum AI_TASKS {
 
 export const OPENROUTER_MODELS = [
   {
-    id: 'openrouter/free',
-    name: 'OpenRouter Free (Recomendado)',
-    description: 'Roteamento automático para o modelo gratuito mais rápido e disponível.'
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Llama 3.3 70B (Recomendado)',
+    description: 'Rápido, inteligente e gratuito. Ideal para análises e geração de texto.'
   },
   {
     id: 'openai/gpt-oss-120b:free',
-    name: 'GPT OSS 120B (Maior Capacidade)',
-    description: 'Modelo de alta capacidade (120B), geralmente disponível sem muitos limites.'
+    name: 'GPT OSS 120B (Versátil)',
+    description: 'Alta capacidade de raciocínio. Excelente opção segura para o dia a dia.'
+  },
+  {
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Gemma 4 31B (Google)',
+    description: 'A mais recente versão do modelo Google. Bom raciocínio e velocidade.'
   },
   {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
     name: 'Nemotron 3 (Raciocínio)',
-    description: 'Excelente para tarefas que precisam de raciocínio lógico.'
+    description: 'Excelente para tarefas difíceis que precisam de lógica estrita.'
   },
   {
-    id: 'meta-llama/llama-3.3-70b-instruct:free',
-    name: 'Llama 3.3 (Fallback)',
-    description: 'Rápido e inteligente para análises da escala e textos.'
-  },
-  {
-    id: 'google/gemma-3-27b-it:free',
-    name: 'Gemma 3 (Fallback)',
-    description: 'Fallback com bom raciocínio e velocidade.'
+    id: 'meta-llama/llama-3.2-3b-instruct:free',
+    name: 'Llama 3.2 3B (Leve)',
+    description: 'Modelo super leve e rápido como opção contra congestionamento.'
   }
 ];
 
@@ -223,12 +223,23 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
       } catch (e) {
         errMsg += ` - ${respText.slice(0, 200)}`;
       }
-      throw new Error(errMsg);
+      const error = new Error(errMsg) as any;
+      error.status = res.status;
+      throw error;
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    if (!content) throw new Error('OpenRouter retornou resposta vazia.');
+    
+    // Check if OpenRouter sent an error object inside a 200 OK
+    if (data.error) {
+      throw Object.assign(new Error(data.error.message || 'OpenRouter API Error'), { status: res.status });
+    }
+
+    const content = data.choices?.[0]?.message?.content;
+    if (content === undefined || content === null || content === '') {
+      console.warn('[callOpenRouter] Resposta vazia ou nula:', JSON.stringify(data));
+      throw new Error(`OpenRouter retornou resposta vazia. ${data.error ? data.error.message : ''}`);
+    }
     return content;
   } catch (err: any) {
     if (err.name === 'AbortError') {
@@ -240,25 +251,56 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
   }
 }
 
-async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const order = preferredModel
-    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
-    : OPENROUTER_MODELS.map(m => m.id);
+const CREDIT_LIMIT_CODES = [402, 429];
+const CREDIT_LIMIT_MESSAGES = ['rate limit', 'quota', 'insufficient', 'credit', 'limit exceeded', 'too many requests'];
 
-  let lastErr: Error = new Error('Todos os modelos falharam.');
-  for (const model of order) {
+function isCreditLimitError(status: number, message: string): boolean {
+  if (CREDIT_LIMIT_CODES.includes(status)) return true;
+  const lower = message.toLowerCase();
+  return CREDIT_LIMIT_MESSAGES.some(keyword => lower.includes(keyword));
+}
+
+async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 2): Promise<string> {
+  let lastErr: any;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await callOpenRouter(prompt, taskType, model);
+      return await callOpenRouter(prompt, taskType, selectedModel);
     } catch (err: any) {
-      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
       lastErr = err;
+      const message = err.message || '';
+      const status = err.status || 0;
+      
+      // Se for limite da conta/crédito, aborta imediatamente
+      if (isCreditLimitError(status, message)) {
+        throw Object.assign(
+          new Error(`O modelo selecionado atingiu o limite de uso ou créditos. Por favor, troque para outro modelo nas configurações de IA.`),
+          { isCreditLimit: true, modelId: selectedModel }
+        );
+      }
+      
+      // Se for algo não encontrado ou erro do OpenRouter (que não limite de crédito), tenta novamente
+      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}:`, err.message);
+      
+      if (attempt < retries) {
+        // Pausa breve antes de tentar novamente para não rate limitar
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
   }
-  console.error(`[runAI] Todos os modelos falharam. Último erro:`, lastErr);
-  throw lastErr;
+  
+  // Se falhou todas as tentativas
+  if (lastErr) throw lastErr;
+  throw new Error("Falha desconhecida no OpenRouter.");
 }
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const err = new Error('VITE_OPENROUTER_API_KEY não configurada nas variáveis de ambiente.');
+    throw err;
+  }
+
   if (taskType === AI_TASKS.SCALE_GENERATION) {
     return generateScheduleLocally(payload);
   }
@@ -289,10 +331,14 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
   `;
 
   try {
-    const content = await callWithFallback(fullPrompt, taskType, preferredModel);
+    const modelToUse = preferredModel || DEFAULT_MODEL;
+    const content = await callSelectedModel(fullPrompt, taskType, modelToUse);
     return parseAIResponse(content, taskType);
   } catch (error: any) {
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
+    if (error.isCreditLimit) {
+      throw error;
+    }
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
   }
 }

@@ -42,6 +42,20 @@ interface Props {
   onScheduleGenerated: (assignments: any[]) => void;
 }
 
+// Utilitário para tratar erros de IA com recomendação de troca de modelo
+function handleAIError(e: any, addToast: (msg: string, type: 'success' | 'error' | 'info') => void, context: string) {
+  if (e?.isCreditLimit) {
+    addToast(
+      `⚠️ ${context}: Limite do modelo atingido. Acesse a aba "Configurar" e troque para outro modelo de IA.`,
+      'error'
+    );
+  } else if (e?.message?.includes('VITE_OPENROUTER_API_KEY')) {
+    addToast('❌ Chave da API OpenRouter não configurada. Verifique as variáveis de ambiente.', 'error');
+  } else {
+    addToast(`Erro em ${context}: ${e?.message || 'Erro desconhecido'}`, 'error');
+  }
+}
+
 export const AdvancedAIScreen: React.FC<Props> = ({
   ministryId, 
   orgId, 
@@ -76,7 +90,11 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
   useEffect(() => {
     const saved = localStorage.getItem(`ai_model_preference_${ministryId}`);
-    if (saved) setSelectedModel(saved);
+    if (saved) {
+      // Validate if the saved model still exists in our list. If not, fallback.
+      const isValid = OPENROUTER_MODELS.some(m => m.id === saved);
+      setSelectedModel(isValid ? saved : DEFAULT_MODEL);
+    }
   }, [ministryId]);
 
   // Recurso 1: Analise de saude
@@ -200,7 +218,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         totalEvents,
       });
     } catch (e: any) {
-      addToast('Erro ao analisar saude do ministerio: ' + e.message, 'error');
+      handleAIError(e, addToast, 'Análise de Saúde');
     } finally {
       setHealthLoading(false);
     }
@@ -257,7 +275,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload, selectedModel);
       setMessages(result);
     } catch (e: any) {
-      addToast('Erro ao gerar mensagens: ' + e.message, 'error');
+      handleAIError(e, addToast, 'Gerador de Mensagens');
     } finally {
       setMessagesLoading(false);
     }
@@ -286,7 +304,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload, selectedModel);
       setExplanation(text);
     } catch (e: any) {
-      addToast('Erro ao gerar explicacao: ' + e.message, 'error');
+      handleAIError(e, addToast, 'Explicar Escala');
     } finally {
       setExplainLoading(false);
     }
@@ -299,7 +317,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.SCALE_SUGGESTION, getAIContext(), payload, selectedModel);
       setScaleSuggestions(text);
     } catch (e: any) {
-      addToast('Erro ao obter sugestões: ' + e.message, 'error');
+      handleAIError(e, addToast, 'Sugestões de Escala');
     } finally {
       setPredictiveLoading(false);
     }
@@ -312,7 +330,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload, selectedModel);
       setPreventiveAlerts(text);
     } catch (e: any) {
-      addToast('Erro ao obter alertas: ' + e.message, 'error');
+      handleAIError(e, addToast, 'Alertas Preventivos');
     } finally {
       setPredictiveLoading(false);
     }
