@@ -27,29 +27,34 @@ export enum AI_TASKS {
 
 export const OPENROUTER_MODELS = [
   {
-    id: 'meta-llama/llama-3.3-70b-instruct:free',
-    name: 'Llama 3.3 70B (Recomendado)',
-    description: 'Rápido, inteligente e gratuito. Ideal para análises e geração de texto.'
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Gemma 4 31B (Google - Recomendado)',
+    description: 'A mais recente versão do Google. Alta performance em raciocínio e visão.'
+  },
+  {
+    id: 'deepseek/deepseek-r1:free',
+    name: 'DeepSeek R1 (Raciocínio)',
+    description: 'Especialista em lógica e cadeias de pensamento complexas.'
+  },
+  {
+    id: 'qwen/qwen-3-coder-480b:free',
+    name: 'Qwen 3 Coder (Especialista)',
+    description: 'Modelo massivo de 480B otimizado para lógica estruturada e dados.'
   },
   {
     id: 'openai/gpt-oss-120b:free',
-    name: 'GPT OSS 120B (Versátil)',
-    description: 'Alta capacidade de raciocínio. Excelente opção segura para o dia a dia.'
+    name: 'GPT OSS 120B (OpenAI MoE)',
+    description: 'Arquitetura Mixture-of-Experts para respostas versáteis e rápidas.'
   },
   {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Gemma 4 31B (Google)',
-    description: 'A mais recente versão do modelo Google. Bom raciocínio e velocidade.'
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Llama 3.3 70B (Meta)',
+    description: 'Equilíbrio perfeito entre velocidade e inteligência geral.'
   },
   {
-    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    name: 'Nemotron 3 (Raciocínio)',
-    description: 'Excelente para tarefas difíceis que precisam de lógica estrita.'
-  },
-  {
-    id: 'meta-llama/llama-3.2-3b-instruct:free',
-    name: 'Llama 3.2 3B (Leve)',
-    description: 'Modelo super leve e rápido como opção contra congestionamento.'
+    id: 'openrouter/free',
+    name: 'Automático (Melhor Disponível)',
+    description: 'O OpenRouter seleciona automaticamente o melhor modelo gratuito disponível.'
   }
 ];
 
@@ -367,47 +372,55 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
-  let cleaned = content;
+  let cleaned = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  
   try {
-    // Remover blocos <think> do deepseek-r1 antes de parsear
-    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    cleaned = cleaned.trim();
-    
+    // 1. Tentar extrair de blocos de código markdown
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
-      const parsed = JSON.parse(jsonBlockMatch[1].trim());
-      return extractByTask(parsed, taskType);
+      const blockContent = jsonBlockMatch[1].trim();
+      try {
+        return extractByTask(JSON.parse(blockContent), taskType);
+      } catch (e) {
+        console.warn('[parseAIResponse] Falha ao parsear bloco JSON markdown:', e);
+      }
     }
     
+    // 2. Tentar encontrar o primeiro { ou [ e o último } ou ] de forma independente
+    // Isso evita que um [ no texto antes de um { estrague a extração do objeto
     const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
     const firstBracket = cleaned.indexOf('[');
-    let jsonStart = -1;
-    let jsonEnd = -1;
+    const lastBracket = cleaned.lastIndexOf(']');
+
+    // Priorizamos o que parece ser o container principal
+    // Se temos tanto {} quanto [], vemos qual envolve o outro ou qual começa primeiro de forma válida
     
-    if (firstBrace !== -1 && firstBracket !== -1) {
-      if (firstBrace < firstBracket) {
-        jsonStart = firstBrace;
-        jsonEnd = cleaned.lastIndexOf('}') + 1;
-      } else {
-        jsonStart = firstBracket;
-        jsonEnd = cleaned.lastIndexOf(']') + 1;
-      }
-    } else if (firstBrace !== -1) {
-      jsonStart = firstBrace;
-      jsonEnd = cleaned.lastIndexOf('}') + 1;
-    } else if (firstBracket !== -1) {
-      jsonStart = firstBracket;
-      jsonEnd = cleaned.lastIndexOf(']') + 1;
+    const candidates: { start: number; end: number; priority: number }[] = [];
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      candidates.push({ start: firstBrace, end: lastBrace, priority: 1 });
+    }
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      candidates.push({ start: firstBracket, end: lastBracket, priority: 2 });
     }
 
-    if (jsonStart !== -1 && jsonEnd > jsonStart) {
-      const jsonStr = cleaned.slice(jsonStart, jsonEnd);
-      const parsed = JSON.parse(jsonStr);
-      return extractByTask(parsed, taskType);
+    // Ordenar por ordem de aparição para tentar o primeiro JSON válido encontrado
+    candidates.sort((a, b) => a.start - b.start);
+
+    for (const cand of candidates) {
+      try {
+        const jsonStr = cleaned.slice(cand.start, cand.end + 1);
+        const parsed = JSON.parse(jsonStr);
+        return extractByTask(parsed, taskType);
+      } catch (e) {
+        // Continua para o próximo candidato se falhar
+      }
     }
+
+    // 3. Fallback: retornar o conteúdo limpo se nada funcionar
     return cleaned;
   } catch (err) {
-    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', cleaned.slice(0, 200));
+    console.warn('[parseAIResponse] Falha crítica no processamento:', err);
     return cleaned;
   }
 }

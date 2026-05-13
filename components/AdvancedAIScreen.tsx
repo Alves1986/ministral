@@ -179,7 +179,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const scaleCount: Record<string, number> = {};
       const confirmedCount: Record<string, number> = {};
       Object.entries(schedule).forEach(([key, name]: [string, any]) => {
-        if (key.includes(currentMonth.replace('-', ''))) {
+        if (key.includes(currentMonth)) {
           scaleCount[name] = (scaleCount[name] || 0) + 1;
           if (attendance[key]) confirmedCount[name] = (confirmedCount[name] || 0) + 1;
         }
@@ -213,9 +213,13 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const healthParsed = await runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel);
       const memberAnalysis = await runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel);
 
+      // Validação de segurança para evitar crash se a IA retornar texto puro em vez de objeto
+      const validHealth = (typeof healthParsed === 'object' && healthParsed !== null) ? healthParsed : {};
+      const validMemberAnalysis = typeof memberAnalysis === 'string' ? memberAnalysis : (typeof memberAnalysis === 'object' ? JSON.stringify(memberAnalysis) : '');
+
       setHealthInsights({
-        ...healthParsed,
-        memberAnalysis,
+        ...validHealth,
+        memberAnalysis: validMemberAnalysis,
         membersWithoutAvail,
         overloaded,
         understaffed,
@@ -278,7 +282,17 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       };
   
       const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload, selectedModel);
-      setMessages(result);
+      
+      // Validação: Garante que result seja um array para evitar crash no .map
+      if (Array.isArray(result)) {
+        setMessages(result);
+      } else if (result && typeof result === 'object' && (result as any).message) {
+        setMessages([{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: (result as any).message }]);
+      } else if (typeof result === 'string') {
+        setMessages([{ name: 'IA', role: 'Aviso', message: result }]);
+      } else {
+        addToast('A IA retornou um formato inesperado.', 'error');
+      }
     } catch (e: any) {
       handleAIError(e, addToast, 'Gerador de Mensagens');
     } finally {
