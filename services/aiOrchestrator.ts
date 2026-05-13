@@ -220,9 +220,10 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
       try {
         const errObj = JSON.parse(respText);
         errMsg = errObj?.error?.message || errObj?.message || errMsg;
-      } catch (e) {
+      } catch (e: any) {
         errMsg += ` - ${respText.slice(0, 200)}`;
       }
+      console.log("[callOpenRouter] Failed request response:", respText);
       const error = new Error(errMsg) as any;
       error.status = res.status;
       throw error;
@@ -251,8 +252,8 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
   }
 }
 
-const CREDIT_LIMIT_CODES = [402, 429];
-const CREDIT_LIMIT_MESSAGES = ['rate limit', 'quota', 'insufficient', 'credit', 'limit exceeded', 'too many requests'];
+const CREDIT_LIMIT_CODES = [402];
+const CREDIT_LIMIT_MESSAGES = ['insufficient', 'credit', 'balance'];
 
 function isCreditLimitError(status: number, message: string): boolean {
   if (CREDIT_LIMIT_CODES.includes(status)) return true;
@@ -260,7 +261,13 @@ function isCreditLimitError(status: number, message: string): boolean {
   return CREDIT_LIMIT_MESSAGES.some(keyword => lower.includes(keyword));
 }
 
-async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 2): Promise<string> {
+function isRateLimitError(status: number, message: string): boolean {
+  if (status === 429) return true;
+  const lower = message.toLowerCase();
+  return lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('temporarily rate-limited');
+}
+
+async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 3): Promise<string> {
   let lastErr: any;
   
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -268,28 +275,44 @@ async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedMod
       return await callOpenRouter(prompt, taskType, selectedModel);
     } catch (err: any) {
       lastErr = err;
-      const message = err.message || '';
+      let message = err.message || '';
       const status = err.status || 0;
       
-      // Se for limite da conta/crédito, aborta imediatamente
+      // Se a mensagem for encapsulada, tenta achar a real
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed.error && parsed.error.message) {
+            message = parsed.error.message;
+        }
+      } catch(e) {}
+      
+      // Se for limite da conta/crédito (402), aborta imediatamente
       if (isCreditLimitError(status, message)) {
         throw Object.assign(
-          new Error(`O modelo selecionado atingiu o limite de uso ou créditos. Por favor, troque para outro modelo nas configurações de IA.`),
+          new Error(`A conta do OpenRouter atingiu o limite de créditos.`),
           { isCreditLimit: true, modelId: selectedModel }
         );
       }
       
-      // Se for algo não encontrado ou erro do OpenRouter (que não limite de crédito), tenta novamente
-      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}:`, err.message);
+      const isOverloaded = isRateLimitError(status, message);
+      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}. status=${status}`);
       
       if (attempt < retries) {
-        // Pausa breve antes de tentar novamente para não rate limitar
-        await new Promise(r => setTimeout(r, 1500));
+        // Pausa longa se for rate limit (OpenRouter pede para tentar novamente mais tarde)
+        const delay = isOverloaded ? 3000 * attempt : 1500;
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        // Se finalizou tentativas e é rate limit
+        if (isOverloaded) {
+          throw Object.assign(
+            new Error(`O modelo gratuito selecionado está sobrecarregado no momento. Tente novamente ou troque de modelo.`),
+            { isRateLimit: true, modelId: selectedModel }
+          );
+        }
       }
     }
   }
   
-  // Se falhou todas as tentativas
   if (lastErr) throw lastErr;
   throw new Error("Falha desconhecida no OpenRouter.");
 }
@@ -336,7 +359,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     return parseAIResponse(content, taskType);
   } catch (error: any) {
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
-    if (error.isCreditLimit) {
+    if (error.isCreditLimit || error.isRateLimit) {
       throw error;
     }
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);

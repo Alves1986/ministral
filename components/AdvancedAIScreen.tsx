@@ -46,7 +46,12 @@ interface Props {
 function handleAIError(e: any, addToast: (msg: string, type: 'success' | 'error' | 'info') => void, context: string) {
   if (e?.isCreditLimit) {
     addToast(
-      `⚠️ ${context}: Limite do modelo atingido. Acesse a aba "Configurar" e troque para outro modelo de IA.`,
+      `⚠️ ${context}: A conta atingiu o limite de créditos do OpenRouter.`,
+      'error'
+    );
+  } else if (e?.isRateLimit) {
+    addToast(
+      `⚠️ ${context}: O modelo gratuito está sobrecarregado. Tente novamente em instantes ou troque de modelo.`,
       'error'
     );
   } else if (e?.message?.includes('VITE_OPENROUTER_API_KEY')) {
