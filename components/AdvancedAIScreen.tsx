@@ -42,25 +42,6 @@ interface Props {
   onScheduleGenerated: (assignments: any[]) => void;
 }
 
-// Utilitário para tratar erros de IA com recomendação de troca de modelo
-function handleAIError(e: any, addToast: (msg: string, type: 'success' | 'error' | 'info') => void, context: string) {
-  if (e?.isCreditLimit) {
-    addToast(
-      `⚠️ ${context}: A conta atingiu o limite de créditos do OpenRouter.`,
-      'error'
-    );
-  } else if (e?.isRateLimit) {
-    addToast(
-      `⚠️ ${context}: O modelo gratuito está sobrecarregado. Tente novamente em instantes ou troque de modelo.`,
-      'error'
-    );
-  } else if (e?.message?.includes('VITE_OPENROUTER_API_KEY')) {
-    addToast('❌ Chave da API OpenRouter não configurada. Verifique as variáveis de ambiente.', 'error');
-  } else {
-    addToast(`Erro em ${context}: ${e?.message || 'Erro desconhecido'}`, 'error');
-  }
-}
-
 export const AdvancedAIScreen: React.FC<Props> = ({
   ministryId, 
   orgId, 
@@ -95,11 +76,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
   useEffect(() => {
     const saved = localStorage.getItem(`ai_model_preference_${ministryId}`);
-    if (saved) {
-      // Validate if the saved model still exists in our list. If not, fallback.
-      const isValid = OPENROUTER_MODELS.some(m => m.id === saved);
-      setSelectedModel(isValid ? saved : DEFAULT_MODEL);
-    }
+    if (saved) setSelectedModel(saved);
   }, [ministryId]);
 
   // Recurso 1: Analise de saude
@@ -179,7 +156,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const scaleCount: Record<string, number> = {};
       const confirmedCount: Record<string, number> = {};
       Object.entries(schedule).forEach(([key, name]: [string, any]) => {
-        if (key.includes(currentMonth)) {
+        if (key.includes(currentMonth.replace('-', ''))) {
           scaleCount[name] = (scaleCount[name] || 0) + 1;
           if (attendance[key]) confirmedCount[name] = (confirmedCount[name] || 0) + 1;
         }
@@ -210,16 +187,14 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         members: members.map(m => ({ name: m.name, functions: m.ministry_functions, status: m.status }))
       };
   
-      const healthParsed = await runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel);
-      const memberAnalysis = await runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel);
-
-      // Validação de segurança para evitar crash se a IA retornar texto puro em vez de objeto
-      const validHealth = (typeof healthParsed === 'object' && healthParsed !== null) ? healthParsed : {};
-      const validMemberAnalysis = typeof memberAnalysis === 'string' ? memberAnalysis : (typeof memberAnalysis === 'object' ? JSON.stringify(memberAnalysis) : '');
+      const [healthParsed, memberAnalysis] = await Promise.all([
+        runAI(AI_TASKS.MINISTRY_HEALTH, getAIContext(), payload, selectedModel),
+        runAI(AI_TASKS.MEMBER_ANALYSIS, getAIContext(), payload, selectedModel)
+      ]);
 
       setHealthInsights({
-        ...validHealth,
-        memberAnalysis: validMemberAnalysis,
+        ...healthParsed,
+        memberAnalysis,
         membersWithoutAvail,
         overloaded,
         understaffed,
@@ -227,7 +202,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         totalEvents,
       });
     } catch (e: any) {
-      handleAIError(e, addToast, 'Análise de Saúde');
+      addToast('Erro ao analisar saude do ministerio: ' + e.message, 'error');
     } finally {
       setHealthLoading(false);
     }
@@ -282,19 +257,9 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       };
   
       const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload, selectedModel);
-      
-      // Validação: Garante que result seja um array para evitar crash no .map
-      if (Array.isArray(result)) {
-        setMessages(result);
-      } else if (result && typeof result === 'object' && (result as any).message) {
-        setMessages([{ name: 'Grupo do Ministério', role: 'Aviso Geral', message: (result as any).message }]);
-      } else if (typeof result === 'string') {
-        setMessages([{ name: 'IA', role: 'Aviso', message: result }]);
-      } else {
-        addToast('A IA retornou um formato inesperado.', 'error');
-      }
+      setMessages(result);
     } catch (e: any) {
-      handleAIError(e, addToast, 'Gerador de Mensagens');
+      addToast('Erro ao gerar mensagens: ' + e.message, 'error');
     } finally {
       setMessagesLoading(false);
     }
@@ -323,7 +288,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload, selectedModel);
       setExplanation(text);
     } catch (e: any) {
-      handleAIError(e, addToast, 'Explicar Escala');
+      addToast('Erro ao gerar explicacao: ' + e.message, 'error');
     } finally {
       setExplainLoading(false);
     }
@@ -336,7 +301,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.SCALE_SUGGESTION, getAIContext(), payload, selectedModel);
       setScaleSuggestions(text);
     } catch (e: any) {
-      handleAIError(e, addToast, 'Sugestões de Escala');
+      addToast('Erro ao obter sugestões: ' + e.message, 'error');
     } finally {
       setPredictiveLoading(false);
     }
@@ -349,19 +314,17 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload, selectedModel);
       setPreventiveAlerts(text);
     } catch (e: any) {
-      handleAIError(e, addToast, 'Alertas Preventivos');
+      addToast('Erro ao obter alertas: ' + e.message, 'error');
     } finally {
       setPredictiveLoading(false);
     }
   };
 
-  /* Removido trigger automático de explicação a pedido do usuário
   useEffect(() => {
     if (activeTab === 'explain' && !explanation && !explainLoading && Object.keys(schedule).length > 0) {
       handleExplainSchedule();
     }
   }, [activeTab, schedule]);
-  */
 
   return (
     <div className='max-w-5xl mx-auto space-y-6 pb-10 animate-fade-in'>
@@ -636,11 +599,6 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 space-y-5'>
           <h3 className='font-bold text-zinc-800 dark:text-zinc-100'>Explicar Decisão da IA</h3>
           <p className='text-sm text-zinc-500'>Entenda por que cada membro foi escalado na escala atual (usando o modelo configurado).</p>
-
-          <button onClick={handleExplainSchedule} disabled={explainLoading || Object.keys(schedule).length === 0} className='px-5 py-2.5 bg-ministral-500 hover:bg-ministral-600 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 disabled:opacity-60'>
-            {explainLoading ? <Loader2 size={14} className='animate-spin'/> : <Brain size={14}/>}
-            {explainLoading ? 'Analisando...' : (explanation ? 'Gerar Novamente' : 'Explicar Escala')}
-          </button>
           
           {explainLoading && (
             <div className='flex flex-col items-center justify-center py-10 text-zinc-500 gap-3'>

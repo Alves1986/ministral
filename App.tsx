@@ -635,31 +635,7 @@ const InnerApp = () => {
   }
 
   if (status === 'locked_billing') {
-      return (
-          <DashboardLayout
-              onLogout={handleLogout}
-              title="Assinatura Pendente"
-              currentTab="plan"
-              onTabChange={() => {}}
-              mainNavItems={[]}
-              managementNavItems={[{ id: 'plan', label: 'Plano e Assinatura', icon: <Crown size={20}/> }]}
-              notifications={[]}
-              onNotificationsUpdate={() => {}}
-              onInstall={() => {}}
-              isStandalone={false}
-              onSwitchMinistry={() => {}}
-              onOpenJoinMinistry={() => {}}
-              activeMinistryId=""
-          >
-              <Suspense fallback={<LoadingFallback />}>
-                  <PlanScreen 
-                      organization={organization} 
-                      isAdmin={isAdmin ?? false} 
-                      onRefreshOrg={async () => { await refreshSession(); refreshData(); }} 
-                  />
-              </Suspense>
-          </DashboardLayout>
-      );
+      return <BillingLockScreen checkoutUrl={organization?.checkout_url} orgId={organization?.id} onLogout={handleLogout} onRefresh={async () => { await refreshSession(); refreshData(); }} />;
   }
 
   if (status === 'unauthenticated') {
@@ -763,27 +739,24 @@ const InnerApp = () => {
                     staleTime: 5 * 60 * 1000
                   });
 
-                  // 2. Busca permissões para o NOVO ministério ANTES da troca
-                  // Isso garante que o store tenha os dados corretos para o render imediato
+                  // 2. Executa operações e fetches em paralelo para evitar delay sequencial
                   const [access, profileCheck] = await Promise.all([
                       Supabase.fetchUserMinistryAccess(uId, id, oId),
-                      Supabase.getSupabase()!.from('profiles').select('allowed_ministries').eq('id', uId).single()
+                      Supabase.getSupabase()!.from('profiles').select('allowed_ministries').eq('id', uId).single(),
+                      Supabase.updateProfileMinistry(uId, id, oId)
                   ]);
                   
-                  // 3. Atualiza no servidor em segundo plano ou aguarda brevemente
-                  await Supabase.updateProfileMinistry(uId, id, oId);
-                  
-                  // 4. Salva o ID antigo para limpeza seletiva e remove queries do ministério anterior
+                  // 3. Invalida cache do TanStack Query do ministério anterior
                   const oldMinistryId = ministryId;
                   queryClient.removeQueries({
                       predicate: (query) => query.queryKey[1] === oldMinistryId
                   });
+                  queryClient.invalidateQueries();
 
-                  // 5. Atualiza a sessão ANTES da troca de estado para garantir consistência
-                  await refreshSession();
+                  // 4. Atualiza a sessão em background sem travar a UI
+                  refreshSession().catch(console.error);
 
-                  // 6. Atualiza store LOCALMENTE de forma atômica
-                  // Usamos os dados que acabamos de buscar para evitar flickering
+                  // 5. Atualiza store LOCALMENTE (Cancela subscriptions antigas e cria novas no Realtime via hooks)
                   setMinistryId(id);
                   setCurrentUser({ 
                       ...activeUser!, 

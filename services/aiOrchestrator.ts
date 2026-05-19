@@ -27,34 +27,29 @@ export enum AI_TASKS {
 
 export const OPENROUTER_MODELS = [
   {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Gemma 4 31B (Google - Recomendado)',
-    description: 'A mais recente versão do Google. Alta performance em raciocínio e visão.'
-  },
-  {
-    id: 'deepseek/deepseek-r1:free',
-    name: 'DeepSeek R1 (Raciocínio)',
-    description: 'Especialista em lógica e cadeias de pensamento complexas.'
-  },
-  {
-    id: 'qwen/qwen-3-coder-480b:free',
-    name: 'Qwen 3 Coder (Especialista)',
-    description: 'Modelo massivo de 480B otimizado para lógica estruturada e dados.'
+    id: 'openrouter/free',
+    name: 'OpenRouter Free (Recomendado)',
+    description: 'Roteamento automático para o modelo gratuito mais rápido e disponível.'
   },
   {
     id: 'openai/gpt-oss-120b:free',
-    name: 'GPT OSS 120B (OpenAI MoE)',
-    description: 'Arquitetura Mixture-of-Experts para respostas versáteis e rápidas.'
+    name: 'GPT OSS 120B (Maior Capacidade)',
+    description: 'Modelo de alta capacidade (120B), geralmente disponível sem muitos limites.'
+  },
+  {
+    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    name: 'Nemotron 3 (Raciocínio)',
+    description: 'Excelente para tarefas que precisam de raciocínio lógico.'
   },
   {
     id: 'meta-llama/llama-3.3-70b-instruct:free',
-    name: 'Llama 3.3 70B (Meta)',
-    description: 'Equilíbrio perfeito entre velocidade e inteligência geral.'
+    name: 'Llama 3.3 (Fallback)',
+    description: 'Rápido e inteligente para análises da escala e textos.'
   },
   {
-    id: 'openrouter/free',
-    name: 'Automático (Melhor Disponível)',
-    description: 'O OpenRouter seleciona automaticamente o melhor modelo gratuito disponível.'
+    id: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 (Fallback)',
+    description: 'Fallback com bom raciocínio e velocidade.'
   }
 ];
 
@@ -225,27 +220,15 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
       try {
         const errObj = JSON.parse(respText);
         errMsg = errObj?.error?.message || errObj?.message || errMsg;
-      } catch (e: any) {
+      } catch (e) {
         errMsg += ` - ${respText.slice(0, 200)}`;
       }
-      console.log("[callOpenRouter] Failed request response:", respText);
-      const error = new Error(errMsg) as any;
-      error.status = res.status;
-      throw error;
+      throw new Error(errMsg);
     }
 
     const data = await res.json();
-    
-    // Check if OpenRouter sent an error object inside a 200 OK
-    if (data.error) {
-      throw Object.assign(new Error(data.error.message || 'OpenRouter API Error'), { status: res.status });
-    }
-
-    const content = data.choices?.[0]?.message?.content;
-    if (content === undefined || content === null || content === '') {
-      console.warn('[callOpenRouter] Resposta vazia ou nula:', JSON.stringify(data));
-      throw new Error(`OpenRouter retornou resposta vazia. ${data.error ? data.error.message : ''}`);
-    }
+    const content = data.choices?.[0]?.message?.content || '';
+    if (!content) throw new Error('OpenRouter retornou resposta vazia.');
     return content;
   } catch (err: any) {
     if (err.name === 'AbortError') {
@@ -257,78 +240,25 @@ async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string)
   }
 }
 
-const CREDIT_LIMIT_CODES = [402];
-const CREDIT_LIMIT_MESSAGES = ['insufficient', 'credit', 'balance'];
+async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
+  const order = preferredModel
+    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
+    : OPENROUTER_MODELS.map(m => m.id);
 
-function isCreditLimitError(status: number, message: string): boolean {
-  if (CREDIT_LIMIT_CODES.includes(status)) return true;
-  const lower = message.toLowerCase();
-  return CREDIT_LIMIT_MESSAGES.some(keyword => lower.includes(keyword));
-}
-
-function isRateLimitError(status: number, message: string): boolean {
-  if (status === 429) return true;
-  const lower = message.toLowerCase();
-  return lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('temporarily rate-limited');
-}
-
-async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 3): Promise<string> {
-  let lastErr: any;
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  let lastErr: Error = new Error('Todos os modelos falharam.');
+  for (const model of order) {
     try {
-      return await callOpenRouter(prompt, taskType, selectedModel);
+      return await callOpenRouter(prompt, taskType, model);
     } catch (err: any) {
+      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
       lastErr = err;
-      let message = err.message || '';
-      const status = err.status || 0;
-      
-      // Se a mensagem for encapsulada, tenta achar a real
-      try {
-        const parsed = JSON.parse(message);
-        if (parsed.error && parsed.error.message) {
-            message = parsed.error.message;
-        }
-      } catch(e) {}
-      
-      // Se for limite da conta/crédito (402), aborta imediatamente
-      if (isCreditLimitError(status, message)) {
-        throw Object.assign(
-          new Error(`A conta do OpenRouter atingiu o limite de créditos.`),
-          { isCreditLimit: true, modelId: selectedModel }
-        );
-      }
-      
-      const isOverloaded = isRateLimitError(status, message);
-      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}. status=${status}`);
-      
-      if (attempt < retries) {
-        // Pausa longa se for rate limit (OpenRouter pede para tentar novamente mais tarde)
-        const delay = isOverloaded ? 3000 * attempt : 1500;
-        await new Promise(r => setTimeout(r, delay));
-      } else {
-        // Se finalizou tentativas e é rate limit
-        if (isOverloaded) {
-          throw Object.assign(
-            new Error(`O modelo gratuito selecionado está sobrecarregado no momento. Tente novamente ou troque de modelo.`),
-            { isRateLimit: true, modelId: selectedModel }
-          );
-        }
-      }
     }
   }
-  
-  if (lastErr) throw lastErr;
-  throw new Error("Falha desconhecida no OpenRouter.");
+  console.error(`[runAI] Todos os modelos falharam. Último erro:`, lastErr);
+  throw lastErr;
 }
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    const err = new Error('VITE_OPENROUTER_API_KEY não configurada nas variáveis de ambiente.');
-    throw err;
-  }
-
   if (taskType === AI_TASKS.SCALE_GENERATION) {
     return generateScheduleLocally(payload);
   }
@@ -359,68 +289,56 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
   `;
 
   try {
-    const modelToUse = preferredModel || DEFAULT_MODEL;
-    const content = await callSelectedModel(fullPrompt, taskType, modelToUse);
+    const content = await callWithFallback(fullPrompt, taskType, preferredModel);
     return parseAIResponse(content, taskType);
   } catch (error: any) {
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
-    if (error.isCreditLimit || error.isRateLimit) {
-      throw error;
-    }
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
   }
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
-  let cleaned = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  
+  let cleaned = content;
   try {
-    // 1. Tentar extrair de blocos de código markdown
+    // Remover blocos <think> do deepseek-r1 antes de parsear
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleaned = cleaned.trim();
+    
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
-      const blockContent = jsonBlockMatch[1].trim();
-      try {
-        return extractByTask(JSON.parse(blockContent), taskType);
-      } catch (e) {
-        console.warn('[parseAIResponse] Falha ao parsear bloco JSON markdown:', e);
-      }
+      const parsed = JSON.parse(jsonBlockMatch[1].trim());
+      return extractByTask(parsed, taskType);
     }
     
-    // 2. Tentar encontrar o primeiro { ou [ e o último } ou ] de forma independente
-    // Isso evita que um [ no texto antes de um { estrague a extração do objeto
     const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
     const firstBracket = cleaned.indexOf('[');
-    const lastBracket = cleaned.lastIndexOf(']');
-
-    // Priorizamos o que parece ser o container principal
-    // Se temos tanto {} quanto [], vemos qual envolve o outro ou qual começa primeiro de forma válida
+    let jsonStart = -1;
+    let jsonEnd = -1;
     
-    const candidates: { start: number; end: number; priority: number }[] = [];
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      candidates.push({ start: firstBrace, end: lastBrace, priority: 1 });
-    }
-    if (firstBracket !== -1 && lastBracket > firstBracket) {
-      candidates.push({ start: firstBracket, end: lastBracket, priority: 2 });
-    }
-
-    // Ordenar por ordem de aparição para tentar o primeiro JSON válido encontrado
-    candidates.sort((a, b) => a.start - b.start);
-
-    for (const cand of candidates) {
-      try {
-        const jsonStr = cleaned.slice(cand.start, cand.end + 1);
-        const parsed = JSON.parse(jsonStr);
-        return extractByTask(parsed, taskType);
-      } catch (e) {
-        // Continua para o próximo candidato se falhar
+    if (firstBrace !== -1 && firstBracket !== -1) {
+      if (firstBrace < firstBracket) {
+        jsonStart = firstBrace;
+        jsonEnd = cleaned.lastIndexOf('}') + 1;
+      } else {
+        jsonStart = firstBracket;
+        jsonEnd = cleaned.lastIndexOf(']') + 1;
       }
+    } else if (firstBrace !== -1) {
+      jsonStart = firstBrace;
+      jsonEnd = cleaned.lastIndexOf('}') + 1;
+    } else if (firstBracket !== -1) {
+      jsonStart = firstBracket;
+      jsonEnd = cleaned.lastIndexOf(']') + 1;
     }
 
-    // 3. Fallback: retornar o conteúdo limpo se nada funcionar
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      const jsonStr = cleaned.slice(jsonStart, jsonEnd);
+      const parsed = JSON.parse(jsonStr);
+      return extractByTask(parsed, taskType);
+    }
     return cleaned;
   } catch (err) {
-    console.warn('[parseAIResponse] Falha crítica no processamento:', err);
+    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', cleaned.slice(0, 200));
     return cleaned;
   }
 }

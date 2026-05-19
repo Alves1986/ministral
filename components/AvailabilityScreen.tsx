@@ -40,6 +40,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState("");
   const [dayModalOpen, setDayModalOpen] = useState<number | null>(null);
   
+  // Flag para impedir que o Realtime do Supabase sobrescreva um optimistic update em andamento
+  const isSyncing = React.useRef<boolean>(false);
+  
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
@@ -95,7 +98,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
     // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
     // com os dados mais recentes antes de repaginar a página pra Idle.
-    if (saveState !== 'idle') return;
+    if (saveState !== 'idle' || isSyncing.current) return;
 
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
@@ -122,6 +125,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!canEdit) return;
       if (isSaveLocked) return; // Bloqueio visual
 
+      isSyncing.current = true;
       setSaveState('dirty');
 
       if (isBlockedMonth) {
@@ -139,6 +143,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       
       if (isSaveLocked) return; // Bloqueio visual
 
+      isSyncing.current = true;
       setSaveState('dirty');
       
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -170,6 +175,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleToggleSpecificEvent = (eventTime: string, isSunday: boolean, day: number) => {
       if (isSaveLocked) return;
+      isSyncing.current = true;
       setSaveState('dirty');
 
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -208,6 +214,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       if (isSaveLocked) return;
+      isSyncing.current = true;
       setGeneralNote(e.target.value);
       setSaveState('dirty');
   };
@@ -217,6 +224,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
+      isSyncing.current = true;
       setSaveState('saving');
 
       try {
@@ -265,10 +273,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
           });
           
           // ESTADO TERMINAL DE SUCESSO
+          isSyncing.current = false;
           setSaveState('saved');
           
       } catch (error: unknown) {
           console.error(error);
+          isSyncing.current = false;
           setSaveState('dirty'); // Permite tentar novamente
           const msg = error instanceof Error ? error.message : "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");

@@ -41,7 +41,6 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const members = membershipsData.map((m: any) => Array.isArray(m.profiles) ? m.profiles[0] : m.profiles).filter(Boolean);
     const userIds = members.map((m: any) => m.id);
     const todayStr = new Date().toISOString().slice(0, 10);
-    const todayMiddayStr = `${todayStr}T12:00:00`;
     const now = new Date();
 
     const { data: ministryAnnouncements } = await sb.from('announcements')
@@ -82,17 +81,6 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const ministryMemberships = ministryMembershipsRes.data || [];
     const profiles = profilesRes.data || [];
 
-    const getEventDateTimeStr = (a: any, defaultTime = '12:00:00') => {
-        let timeStr = defaultTime;
-        if (a.event_rules && typeof a.event_rules === 'object' && !Array.isArray(a.event_rules)) {
-             timeStr = a.event_rules.time || defaultTime;
-        } else if (Array.isArray(a.event_rules) && a.event_rules.length > 0) {
-             timeStr = a.event_rules[0].time || defaultTime;
-        }
-        if (timeStr.length === 5) timeStr += ':00';
-        return `${a.event_date}T${timeStr}`;
-    };
-
     return (members || []).map((m: any) => {
         let points = 0;
         const history: RankingHistoryItem[] = [];
@@ -103,7 +91,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         memberAssignments.forEach((a: any) => {
             history.push({ 
                 id: `assign-${a.member_id}-${a.event_date}`, 
-                date: getEventDateTimeStr(a), 
+                date: a.event_date, 
                 description: `Escala Confirmada: ${a.role}`, 
                 points: GC.assignment, 
                 type: 'assignment' 
@@ -118,7 +106,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             streakCount++;
             history.push({
                 id: `streak-${m.id}-${sortedAssignments[i].event_date}`,
-                date: getEventDateTimeStr(sortedAssignments[i]),
+                date: sortedAssignments[i].event_date,
                 description: 'Bonus de Sequencia: 3 escalas seguidas',
                 points: GC.streak_bonus,
                 type: 'streak_bonus'
@@ -174,7 +162,15 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         // 5. CHECK-IN ESQUECIDO
         const misses = checkinMissesData.filter((a: any) => {
             if (a.member_id !== m.id || a.confirmed) return false;
-            const eventDateTime = new Date(getEventDateTimeStr(a, '23:59:59'));
+            let timeStr = '23:59:59';
+            if (a.event_rules && typeof a.event_rules === 'object' && !Array.isArray(a.event_rules)) {
+                 timeStr = a.event_rules.time || '23:59:59';
+            } else if (Array.isArray(a.event_rules) && a.event_rules.length > 0) {
+                 timeStr = a.event_rules[0].time || '23:59:59';
+            }
+            if (timeStr.length === 5) timeStr += ':00'; // Append seconds if hh:mm
+            
+            const eventDateTime = new Date(`${a.event_date}T${timeStr}`);
             // Add 120 minutes to allow the user checking in late
             const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
             return checkinClosedTime < now;
@@ -183,7 +179,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         misses.forEach((a: any) => {
             history.push({
                 id: `miss-${m.id}-${a.event_date}`,
-                date: getEventDateTimeStr(a, '23:59:59'),
+                date: a.event_date,
                 description: 'Check-in nao marcado',
                 points: GC.checkin_miss,
                 type: 'checkin_miss'
@@ -196,7 +192,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             points += GC.profile_complete;
             history.push({
                 id: `profile-${m.id}`,
-                date: m.created_at || todayMiddayStr,
+                date: m.created_at || todayStr,
                 description: 'Perfil Completo',
                 points: GC.profile_complete,
                 type: 'profile_complete'
@@ -217,7 +213,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
                     points += GC.month_complete;
                     history.push({
                         id: `month-bonus-${m.id}-${todayStr.slice(0, 7)}`,
-                        date: todayMiddayStr,
+                        date: todayStr,
                         description: 'Bonus: Todas as escalas do mes sem trocas',
                         points: GC.month_complete,
                         type: 'month_complete'

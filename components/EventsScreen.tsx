@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Calendar, Clock, Repeat, CalendarDays, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Plus, Calendar, Clock, Repeat, CalendarDays, Loader2 } from 'lucide-react';
 import { createEventRule, deleteEventRule } from '../services/supabaseService';
 import { fetchEventRules } from '../infra/supabase/fetchEventRules';
 import { useAppStore } from '../store/appStore';
@@ -14,7 +14,6 @@ export const EventsScreen: React.FC = () => {
   const [rules, setRules] = useState<EventRule[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showPastEvents, setShowPastEvents] = useState(false);
   
   // Form State
   const [type, setType] = useState<'weekly'|'single'>('weekly');
@@ -137,19 +136,6 @@ export const EventsScreen: React.FC = () => {
 
   const weeklyRules = rules.filter(r => r.type === 'weekly').sort((a, b) => (a.weekday || 0) - (b.weekday || 0));
   const singleRules = rules.filter(r => r.type === 'single').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-
-  const todayDateStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
-  const upcomingSingleRules = singleRules.filter(r => r.date && r.date >= todayDateStr);
-  const pastSingleRules = singleRules.filter(r => !r.date || r.date < todayDateStr);
-
-  const groupedUpcoming = upcomingSingleRules.reduce((acc, rule) => {
-      const dateObj = rule.date ? new Date(rule.date + 'T12:00:00') : new Date();
-      const monthYear = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-      const capitalized = monthYear.charAt(0).toUpperCase() + monthYear.slice(1);
-      if (!acc[capitalized]) acc[capitalized] = [];
-      acc[capitalized].push(rule);
-      return acc;
-  }, {} as Record<string, EventRule[]>);
 
   return (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto pb-24">
@@ -296,19 +282,9 @@ export const EventsScreen: React.FC = () => {
 
                 {/* Single Rules */}
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                            <Calendar size={16}/> Eventos Especiais (Únicos)
-                        </h3>
-                        {pastSingleRules.length > 0 && (
-                            <button 
-                                onClick={() => setShowPastEvents(!showPastEvents)}
-                                className="text-xs font-bold text-ministral-500 hover:text-ministral-600 flex items-center gap-1 transition-colors"
-                            >
-                                {showPastEvents ? <><ChevronUp size={14}/> Ocultar Passados</> : <><ChevronDown size={14}/> Ver Passados ({pastSingleRules.length})</>}
-                            </button>
-                        )}
-                    </div>
+                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                        <Calendar size={16}/> Eventos Especiais (Únicos)
+                    </h3>
                     
                     {loading ? (
                         <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>
@@ -317,86 +293,35 @@ export const EventsScreen: React.FC = () => {
                             Nenhum evento especial cadastrado.
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            {Object.entries(groupedUpcoming).map(([month, monthRules]) => (
-                                <div key={month} className="space-y-3">
-                                    <h4 className="text-xs font-bold text-zinc-400 uppercase ml-1 flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-ministral-500/50"></div>
-                                        {month}
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {monthRules.map(rule => {
-                                            const dateObj = rule.date ? new Date(rule.date + 'T12:00:00') : new Date();
-                                            return (
-                                                <div key={rule.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group hover:border-ministral-300 dark:hover:border-ministral-700 transition-colors">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center border bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 border-ministral-100 dark:border-ministral-500/30">
-                                                            <span className="text-[10px] font-black uppercase">{dateObj.toLocaleDateString('pt-BR', {day: '2-digit'})}</span>
-                                                            <span className="text-[8px] font-bold uppercase">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="font-bold text-zinc-800 dark:text-white text-sm">{rule.title}</h4>
-                                                            <p className="text-xs text-zinc-500 flex items-center gap-1">
-                                                                <Clock size={10}/> {rule.time.substring(0, 5)} • {dateObj.toLocaleDateString('pt-BR')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <button 
-                                                        onClick={() => handleDelete(rule.id, rule.title)}
-                                                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                        title="Remover regra"
-                                                    >
-                                                        <Trash2 size={18}/>
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {singleRules.map(rule => {
+                                const dateObj = rule.date ? new Date(rule.date + 'T12:00:00') : new Date();
+                                const isPast = new Date(rule.date || '') < new Date(new Date().toISOString().split('T')[0]);
 
-                            {upcomingSingleRules.length === 0 && !showPastEvents && (
-                                <div className="text-sm text-zinc-500 italic p-4 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50">
-                                    Nenhum evento especial futuro programado.
-                                </div>
-                            )}
-
-                            {showPastEvents && pastSingleRules.length > 0 && (
-                                <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                                    <h4 className="text-xs font-bold text-zinc-400 uppercase ml-1 flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
-                                        Eventos Passados
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {pastSingleRules.map(rule => {
-                                            const dateObj = rule.date ? new Date(rule.date + 'T12:00:00') : new Date();
-                                            return (
-                                                <div key={rule.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group transition-colors opacity-60 grayscale">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center border bg-zinc-100 dark:bg-zinc-900 text-zinc-500 border-zinc-200">
-                                                            <span className="text-[10px] font-black uppercase">{dateObj.toLocaleDateString('pt-BR', {day: '2-digit'})}</span>
-                                                            <span className="text-[8px] font-bold uppercase">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="font-bold text-zinc-800 dark:text-white text-sm line-through decoration-zinc-300">{rule.title}</h4>
-                                                            <p className="text-xs text-zinc-500 flex items-center gap-1">
-                                                                <Clock size={10}/> {rule.time.substring(0, 5)} • {dateObj.toLocaleDateString('pt-BR')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <button 
-                                                        onClick={() => handleDelete(rule.id, rule.title)}
-                                                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                        title="Remover regra"
-                                                    >
-                                                        <Trash2 size={18}/>
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
+                                return (
+                                    <div key={rule.id} className={`bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group transition-colors ${isPast ? 'opacity-60 grayscale' : 'hover:border-ministral-300 dark:hover:border-ministral-700'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center border ${isPast ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 border-zinc-200' : 'bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 border-ministral-100 dark:border-ministral-500/30'}`}>
+                                                <span className="text-[10px] font-black uppercase">{dateObj.toLocaleDateString('pt-BR', {day: '2-digit'})}</span>
+                                                <span className="text-[8px] font-bold uppercase">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-zinc-800 dark:text-white text-sm">{rule.title}</h4>
+                                                <p className="text-xs text-zinc-500 flex items-center gap-1">
+                                                    <Clock size={10}/> {rule.time.substring(0, 5)} • {dateObj.toLocaleDateString('pt-BR')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDelete(rule.id, rule.title)}
+                                            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            title="Remover regra"
+                                        >
+                                            <Trash2 size={18}/>
+                                        </button>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
