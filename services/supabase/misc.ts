@@ -396,8 +396,7 @@ export const fetchMemberScheduleHistory = async (
   if (!sb) return [];
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - limitMonths);
-  const { data } = await sb
-    .from('schedule_assignments')
+  const { data } = await sb.from('schedule_assignments')
     .select('event_date, role, confirmed, event_rules(title, time)')
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId)
@@ -422,6 +421,8 @@ export const scheduleWhatsAppNotification = async (
     if (!sb) return;
 
     // Remove agendamento anterior para o mesmo evento (se houver)
+    // No modo global, podemos ter múltiplos agendamentos se o ministryId variar, 
+    // mas aqui mantemos a integridade por ministério/evento.
     await sb.from('whatsapp_scheduled_notifications')
         .delete()
         .eq('org_id', orgId)
