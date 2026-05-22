@@ -11,25 +11,10 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
 }
 
 const ROLE_EMOJIS: Record<string, string> = {
-  proje: "💻",
-  ilumina: "💡",
-  luz: "💡",
-  transmiss: "🖥️",
-  camera: "🎥",
-  câmera: "🎥",
-  foto: "📸",
-  stori: "📱",
-  vocal: "🎤",
-  ministro: "🎤",
-  viol: "🎸",
-  guitar: "🎸",
-  baixo: "🎸",
-  bater: "🥁",
-  teclad: "🎹",
-  som: "🎛️",
-  áudio: "🎛️",
-  audio: "🎛️",
-  apresenta: "🎙️"
+  proje: "💻", ilumina: "💡", luz: "💡", transmiss: "🖥️", camera: "🎥",
+  câmera: "🎥", foto: "📸", stori: "📱", vocal: "🎤", ministro: "🎤",
+  viol: "🎸", guitar: "🎸", baixo: "🎸", bater: "🥁", teclad: "🎹",
+  som: "🎛️", áudio: "🎛️", audio: "🎛️", apresenta: "🎙️"
 };
 
 function getEmojiForRole(role: string): string {
@@ -48,70 +33,45 @@ const DEFAULT_ORIENTATIONS = `⚠️ *Orientações:*
 Vamos juntos servir com excelência! 🚀`;
 
 async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }) {
-  const { timeout = 8000 } = options;
+  const { timeout = 10000 } = options;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
-  const response = await fetch(resource, {
-    ...options,
-    signal: controller.signal
-  });
-  clearTimeout(id);
-  return response;
+  try {
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (e) {
+    clearTimeout(id);
+    throw e;
+  }
 }
 
 serve(async (req: Request) => {
+  console.log("[whatsapp-reminders] Execução iniciada.");
   try {
-    // ── 1. Autenticação do cron via secret header ─────────────────────────
+    // ── 1. Autenticação ──────────────────────────────────────────────────
     const cronSecret = Deno.env.get("WHATSAPP_CRON_SECRET");
-    if (!cronSecret) {
-      return new Response(JSON.stringify({ error: "Missing cron secret configuration" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
     const incomingSecret = req.headers.get("x-cron-secret");
     if (incomingSecret !== cronSecret) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
 
-    // ── 2. Inicialização do cliente Supabase ──────────────────────────────
+    // ── 2. Configurações ──────────────────────────────────────────────────
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Variáveis de ambiente do Supabase não configuradas.");
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // ── 3. Credenciais da Evolution API ───────────────────────────────────
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
     const globalInstanceName = Deno.env.get("EVOLUTION_INSTANCE_NAME");
 
-    if (!evolutionApiUrl || !evolutionApiKey || !globalInstanceName) {
-      throw new Error("Credenciais da Evolution API não configuradas (URL, Key ou Instance Name).");
+    console.log(`[whatsapp-reminders] Config: URL=${evolutionApiUrl}, Instance=${globalInstanceName}`);
+
+    if (!supabaseUrl || !supabaseServiceKey || !evolutionApiUrl || !evolutionApiKey || !globalInstanceName) {
+      throw new Error("Variáveis de ambiente incompletas no Supabase.");
     }
 
-    // ── 4. Mapa de instâncias por ministério (Legado) ─────────────────────
-    // NOTA: Vamos buscar, mas o código agora prioriza a Global se houver erro.
-    const { data: mnWhatsapps, error: mnErr } = await supabase
-      .from("ministry_whatsapp")
-      .select("ministry_id, instance_name")
-      .eq("connected", true);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const ministryMap = new Map<string, string>();
-    if (mnWhatsapps) {
-      mnWhatsapps.forEach((mw: any) => {
-        ministryMap.set(mw.ministry_id, mw.instance_name);
-      });
-    }
-
-    // ── 5. Busca agendamentos pendentes ──────────────────────────────────
+    // ── 3. Busca agendamentos ────────────────────────────────────────────
     const nowISO = new Date().toISOString();
     const { data: pendingNotifs, error: pendErr } = await supabase
       .from("whatsapp_scheduled_notifications")
@@ -121,144 +81,107 @@ serve(async (req: Request) => {
 
     if (pendErr) throw pendErr;
     if (!pendingNotifs || pendingNotifs.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: "Nenhum agendamento pendente." }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      console.log("[whatsapp-reminders] Nenhum agendamento para processar.");
+      return new Response(JSON.stringify({ success: true, message: "Vazio" }));
     }
 
     console.log(`[whatsapp-reminders] Processando ${pendingNotifs.length} agendamento(s)...`);
-    const results: any[] = [];
 
     for (const notif of pendingNotifs) {
       try {
-        const targetDate = notif.event_date;
-        const orgId = notif.org_id;
-
-        // ── 6. Busca assignments ──────────────────────────────────────────
-        let query = supabase
+        // ── 4. Busca assignments ──────────────────────────────────────────
+        const { data: assignments, error: assigErr } = await supabase
           .from("schedule_assignments")
           .select(`
-            id, member_id, role, event_date, event_rule_id, ministry_id,
+            id, member_id, role, event_date,
             profiles:member_id ( whatsapp, name ),
             organization_ministries:ministry_id ( label ),
             event_rules:event_rule_id ( title, time )
           `)
-          .eq("organization_id", orgId)
-          .eq("event_date", targetDate);
+          .eq("organization_id", notif.org_id)
+          .eq("event_date", notif.event_date)
+          .filter(notif.event_rule_id ? "event_rule_id" : "id", "not.is", null); // Hack para filtro condicional
 
-        if (notif.event_rule_id) query = query.eq("event_rule_id", notif.event_rule_id);
-        if (notif.ministry_id) query = query.eq("ministry_id", notif.ministry_id);
+        // Refinando o filtro se necessário (Supabase JS não é tão flexível com filtros dinâmicos em strings)
+        let filteredAssignments = assignments || [];
+        if (notif.event_rule_id) filteredAssignments = filteredAssignments.filter(a => a.event_rule_id === notif.event_rule_id);
+        if (notif.ministry_id) filteredAssignments = filteredAssignments.filter(a => a.ministry_id === notif.ministry_id);
 
-        const { data: assignments, error: assigErr } = await query;
-        if (assigErr) {
-          await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
-          continue;
-        }
-
-        if (!assignments || assignments.length === 0) {
+        if (assigErr || filteredAssignments.length === 0) {
+          console.log(`[whatsapp-reminders] Notif ${notif.id} sem assignments ou erro.`);
           await supabase.from("whatsapp_scheduled_notifications").update({ status: "sent" }).eq("id", notif.id);
           continue;
         }
 
-        let sent = 0, skipped = 0, errors = 0;
+        let sentCount = 0;
+        let errorCount = 0;
 
-        // ── 7. Agrupar por evento ─────────────────────────────────────────
-        const eventsMap = new Map<string, any[]>();
-        for (const a of assignments) {
-          const key = `${a.ministry_id}_${a.event_rule_id || 'fallback'}`;
-          if (!eventsMap.has(key)) eventsMap.set(key, []);
-          eventsMap.get(key)!.push(a);
+        // ── 5. Monta Mensagem (Simplificado: uma mensagem por notif/evento) ──
+        const first = filteredAssignments[0];
+        const eventTitle = first.event_rules?.title || notif.event_title || "Evento";
+        const eventTime = first.event_rules?.time?.substring(0, 5) || "00:00";
+        const [y, m, d] = notif.event_date.split('-');
+        
+        const roleGroups = new Map<string, string[]>();
+        filteredAssignments.forEach(a => {
+          if (!roleGroups.has(a.role)) roleGroups.set(a.role, []);
+          roleGroups.get(a.role)!.push(a.profiles?.name || "Membro");
+        });
+
+        let team = "";
+        for (const [role, members] of roleGroups.entries()) {
+          team += `${getEmojiForRole(role)} *${role}:* ${members.join(", ")}\n`;
         }
 
-        // ── 8. Processar envios ───────────────────────────────────────────
-        for (const [key, evAssignments] of eventsMap.entries()) {
-          const firstAssig = evAssignments[0];
-          const eventTitle = firstAssig.event_rules?.title || notif.event_title || "Culto";
-          const eventTimeStr = firstAssig.event_rules?.time ? firstAssig.event_rules.time.substring(0, 5) : "00:00";
-          const ministryLabel = firstAssig.organization_ministries?.label || "Ministério";
-          const [tY, tM, tD] = targetDate.split('-');
-          const dateStr = `${tD}/${tM}/${tY}`;
+        const msg = `*Escala: ${eventTitle}*\n🗓️ *Data:* ${d}/${m}/${y}\n⏰ *Hora:* ${eventTime}\n\n*Equipe:*\n${team}\n${DEFAULT_ORIENTATIONS}`;
 
-          const roleMembers = new Map<string, string[]>();
-          for (const a of evAssignments) {
-            const memberName = a.profiles?.name || "Desconhecido";
-            if (!roleMembers.has(a.role)) roleMembers.set(a.role, []);
-            roleMembers.get(a.role)!.push(memberName);
-          }
+        // ── 6. Envio via Evolution (APENAS GLOBAL) ────────────────────────
+        const processedPhones = new Set<string>();
+        for (const a of filteredAssignments) {
+          const phone = formatBrazilPhone(a.profiles?.whatsapp);
+          if (!phone || processedPhones.has(phone)) continue;
+          processedPhones.add(phone);
 
-          let teamList = "";
-          for (const [role, members] of roleMembers.entries()) {
-            teamList += `${getEmojiForRole(role)} *${role}:* ${members.join(", ")}\n`;
-          }
+          console.log(`[whatsapp-reminders] Tentando enviar para ${phone} via Global: ${globalInstanceName}`);
+          
+          try {
+            const endpoint = `${evolutionApiUrl}/message/sendText/${globalInstanceName}`;
+            const response = await fetchWithTimeout(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": evolutionApiKey },
+              body: JSON.stringify({ number: phone, options: { delay: 1200 }, text: msg })
+            });
 
-          const msg = `*Escala para o ${eventTitle}*\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n\n${teamList}\n${DEFAULT_ORIENTATIONS}`;
-
-          const processedPhones = new Set<string>();
-          for (const a of evAssignments) {
-            const profile = a.profiles;
-            if (!profile || !profile.whatsapp) { skipped++; continue; }
-            const phone = formatBrazilPhone(profile.whatsapp);
-            if (!phone || processedPhones.has(phone)) { skipped++; continue; }
-            processedPhones.add(phone);
-
-            // TENTA ENVIAR (Lógica Robusta de Instância)
-            // 1. Tenta a instância do ministério se existir no mapa
-            // 2. Se falhar com "Connection Closed" ou não existir, usa a GLOBAL
-            let instanceToUse = ministryMap.get(a.ministry_id) || globalInstanceName;
-            let success = false;
-            let attempt = 0;
-
-            while (attempt < 2 && !success) {
-              attempt++;
-              try {
-                const endpoint = `${evolutionApiUrl}/message/sendText/${instanceToUse}`;
-                const res = await fetchWithTimeout(endpoint, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "apikey": evolutionApiKey },
-                  body: JSON.stringify({ number: phone, options: { delay: 1200 }, text: msg }),
-                  timeout: 10000
-                });
-
-                const resText = await res.text();
-                if (res.ok) {
-                  success = true;
-                  sent++;
-                  console.log(`[whatsapp-reminders] Sucesso para ${phone} via ${instanceToUse}`);
-                } else {
-                  // Se o erro for de conexão fechada ou instância inválida, troca para a GLOBAL na próxima tentativa
-                  if (resText.includes("Connection Closed") || res.status === 404 || res.status === 500) {
-                    console.warn(`[whatsapp-reminders] Falha na instância ${instanceToUse}. Tentando Global...`);
-                    instanceToUse = globalInstanceName; 
-                  } else {
-                    throw new Error(`Evolution Error ${res.status}: ${resText}`);
-                  }
-                }
-              } catch (err: any) {
-                if (attempt >= 2) {
-                  console.error(`[whatsapp-reminders] Erro final para ${phone}:`, err.message);
-                  errors++;
-                } else {
-                  instanceToUse = globalInstanceName; // Fallback forzado
-                }
-              }
+            const resData = await response.text();
+            if (response.ok) {
+              console.log(`[whatsapp-reminders] ✅ SUCESSO: ${phone}`);
+              sentCount++;
+            } else {
+              console.error(`[whatsapp-reminders] ❌ ERRO Evolution (${response.status}): ${resData}`);
+              errorCount++;
             }
+          } catch (err: any) {
+            console.error(`[whatsapp-reminders] ❌ ERRO FETCH para ${phone}:`, err.message);
+            errorCount++;
           }
         }
 
+        // ── 7. Atualiza Status ───────────────────────────────────────────
+        const finalStatus = (errorCount > 0 && sentCount === 0) ? "failed" : "sent";
         await supabase.from("whatsapp_scheduled_notifications")
-          .update({ status: errors > 0 && sent === 0 ? "failed" : "sent" })
+          .update({ status: finalStatus })
           .eq("id", notif.id);
+        
+        console.log(`[whatsapp-reminders] Notif ${notif.id} finalizada. Sent: ${sentCount}, Errors: ${errorCount}`);
 
-        results.push({ notif_id: notif.id, sent, errors });
-      } catch (notifErr: any) {
-        console.error(`[whatsapp-reminders] Erro notif ${notif.id}:`, notifErr);
-        await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
+      } catch (innerErr: any) {
+        console.error(`[whatsapp-reminders] Erro processando notif ${notif.id}:`, innerErr.message);
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
   } catch (error: any) {
-    console.error("[whatsapp-reminders] Erro crítico:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    console.error("[whatsapp-reminders] Erro fatal:", error.message);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 });
