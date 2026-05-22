@@ -91,13 +91,13 @@ serve(async (req: Request) => {
     // ── 3. Credenciais da Evolution API ───────────────────────────────────
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
-    const instanceName    = Deno.env.get("EVOLUTION_INSTANCE_NAME");
+    const globalInstanceName = Deno.env.get("EVOLUTION_INSTANCE_NAME");
 
-    if (!evolutionApiUrl || !evolutionApiKey || !instanceName) {
-      throw new Error("Credenciais da Evolution API não configuradas.");
+    if (!evolutionApiUrl || !evolutionApiKey || !globalInstanceName) {
+      throw new Error("Credenciais da Evolution API não configuradas (URL, Key ou Instance Name).");
     }
 
-    // ── 4. Mapa de instâncias por ministério ──────────────────────────────
+    // ── 4. Mapa de instâncias por ministério (Legado/Opcional) ─────────────
     const { data: mnWhatsapps, error: mnErr } = await supabase
       .from("ministry_whatsapp")
       .select("ministry_id, instance_name")
@@ -252,7 +252,9 @@ serve(async (req: Request) => {
             }
 
             sentToPhones.add(formattedPhone);
-            const currentInstance = ministryMap.get(a.ministry_id) || instanceName;
+            
+            // Lógica de Instância Global: Prioriza a conexão do ministério se existir, senão usa a Global do Railway
+            const currentInstance = ministryMap.get(a.ministry_id) || globalInstanceName;
             const endpoint = `${evolutionApiUrl}/message/sendText/${currentInstance}`;
 
             let success = false;
@@ -280,12 +282,12 @@ serve(async (req: Request) => {
                 }
 
                 success = true;
-                console.log(`[whatsapp-reminders] Mensagem enviada para ${profile.name} (${formattedPhone})`);
+                console.log(`[whatsapp-reminders] Mensagem enviada para ${profile.name} (${formattedPhone}) via instância ${currentInstance}`);
                 sent++;
               } catch (postErr: any) {
                 retries--;
                 if (retries === 0) {
-                  console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone}:`, postErr.message);
+                  console.error(`[whatsapp-reminders] Erro ao enviar para ${formattedPhone} via ${currentInstance}:`, postErr.message);
                   errors++;
                 } else {
                   console.log(`[whatsapp-reminders] Retentando envio para ${formattedPhone}...`);
