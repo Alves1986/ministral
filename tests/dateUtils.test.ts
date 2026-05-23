@@ -4,8 +4,8 @@ import { getMonthName, adjustMonth } from '../utils/dateUtils';
 
 describe('Date Utilities', () => {
   it('should return correct month name', () => {
-    expect(getMonthName('2023-01')).toBe('Janeiro');
-    expect(getMonthName('2023-12')).toBe('Dezembro');
+    expect(getMonthName('2023-01')).toBe('Janeiro de 2023');
+    expect(getMonthName('2023-12')).toBe('Dezembro de 2023');
   });
 
   it('should adjust month correctly', () => {

@@ -12,18 +12,30 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { formatBrazilPhone } from "./_shared/phoneFormatter.ts";
+import { sendWhatsAppMessage } from "./_shared/evolutionClient.ts";
 
-function formatBrazilPhone(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  let digits = raw.replace(/\D/g, "");
-  if (digits.startsWith("55")) digits = digits.slice(2);
-  if (digits.length < 10 || digits.length > 11) return null;
-  return "55" + digits;
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const jsonResponse = (body: object, status = 200) => {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders }
+  });
+};
 
 serve(async (req: Request) => {
+  // Responde a preflight CORS
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
   try {
@@ -39,10 +51,38 @@ serve(async (req: Request) => {
     const { swapRequestId, ministryId, orgId } = await req.json();
 
     if (!swapRequestId || !ministryId || !orgId) {
-      return new Response(JSON.stringify({ error: "Missing parameters" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Missing parameters" }, 400);
+    }
+
+    // --- SEGURANÇA: Validação de Token JWT e Permissão de Admin (SEC-02) ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return jsonResponse({ error: "Authorization header ausente" }, 401);
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !user) {
+      return jsonResponse({ error: "Não autenticado: " + (userErr?.message || "") }, 401);
+    }
+
+    // Busca perfil do usuário
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_admin, is_super_admin, organization_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile) {
+      return jsonResponse({ error: "Perfil do usuário não encontrado" }, 403);
+    }
+
+    const isAuthorized =
+      profile.is_super_admin ||
+      (profile.is_admin && profile.organization_id === orgId);
+
+    if (!isAuthorized) {
+      return jsonResponse({ error: "Acesso negado. Administrador requerido para enviar notificações." }, 403);
     }
 
     // --- VERIFICAÇÃO DO PLANO E DA FLAG GLOBAL ---
@@ -53,20 +93,14 @@ serve(async (req: Request) => {
       .single();
 
     if (orgErr || !org) {
-      return new Response(JSON.stringify({ error: "Organização não encontrada" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Organização não encontrada" }, 404);
     }
 
     if (org.plan_type !== "enterprise" || !org.whatsapp_enabled) {
-      return new Response(JSON.stringify({ 
+      return jsonResponse({ 
         error: "WhatsApp indisponível. Plano Enterprise e ativação global são requeridos.",
         code: "WHATSAPP_DISABLED"
-      }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
+      }, 403);
     }
 
     // ── 1. Busca o swap request ───────────────────────────────────────────
@@ -78,10 +112,7 @@ serve(async (req: Request) => {
       .single();
 
     if (swapErr || !swapReq) {
-      return new Response(JSON.stringify({ error: "Swap request not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Swap request not found" }, 404);
     }
 
     // ── 2. Instância WhatsApp do ministério ───────────────────────────────
@@ -101,9 +132,7 @@ serve(async (req: Request) => {
       .eq("ministry_id", ministryId);
 
     if (!memberships || memberships.length === 0) {
-      return new Response(JSON.stringify({ success: true, sent: 0, reason: "no_members" }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: true, sent: 0, reason: "no_members" });
     }
 
     const eligibleIds = memberships
@@ -117,9 +146,7 @@ serve(async (req: Request) => {
 
     if (eligibleIds.length === 0) {
       console.log(`[whatsapp-swap-notify] Nenhum membro elegível para função: ${swapReq.role}`);
-      return new Response(JSON.stringify({ success: true, sent: 0, reason: "no_eligible_members" }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: true, sent: 0, reason: "no_eligible_members" });
     }
 
     // ── 4. Busca perfis com WhatsApp ──────────────────────────────────────
@@ -130,9 +157,7 @@ serve(async (req: Request) => {
       .not("whatsapp", "is", null);
 
     if (!profiles || profiles.length === 0) {
-      return new Response(JSON.stringify({ success: true, sent: 0, reason: "no_phones" }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: true, sent: 0, reason: "no_phones" });
     }
 
     // ── 5. Monta a mensagem ───────────────────────────────────────────────
@@ -149,53 +174,58 @@ serve(async (req: Request) => {
       `📅 *Evento:* ${swapReq.event_title}\n` +
       `🗓️ *Data:* ${dateDisplay}\n` +
       `⏰ *Horário:* ${timePart}\n\n` +
-      `Acesse o aplicativo web e vá na aba "Trocas" para assumir esta escala.`;
+      `Responda *SIM* para assumir esta escala diretamente pelo WhatsApp ou acesse o aplicativo web.`;
 
-    // ── 6. Envia mensagens ────────────────────────────────────────────────
+    // ── 6. Envia mensagens e grava as ações pendentes ──────────────────────
     let sent = 0;
 
     for (const profile of profiles) {
       const phone = formatBrazilPhone((profile as any).whatsapp);
       if (!phone) continue;
 
-      try {
-        const res = await fetch(`${apiUrl}/message/sendText/${instance}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: apiKey },
-          body: JSON.stringify({
-            number: phone,
-            options: { delay: 1200, presence: "composing" },
-            text: msg,
-          }),
-        });
+      const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
+        apiUrl, apiKey, instance, phone, msg, { retries: 1 }
+      );
 
-        if (res.ok) {
-          sent++;
-          
-          // Gravar log de uso do WhatsApp
-          await supabase.from("whatsapp_usage_logs").insert({
-            org_id: orgId,
-            ministry_id: ministryId
+      if (msgOk) {
+        sent++;
+
+        // Gravar ação pendente na tabela whatsapp_pending_actions para interceptação pelo webhook
+        const { error: pendingErr } = await supabase
+          .from("whatsapp_pending_actions")
+          .insert({
+            organization_id: orgId,
+            ministry_id: ministryId,
+            member_id: profile.id,
+            phone: phone,
+            type: "swap_accept",
+            swap_request_id: swapRequestId,
+            status: "pending",
+            event_date: datePart
           });
-        } else {
-          console.warn(`[whatsapp-swap-notify] Evolution retornou ${res.status} para ${phone}`);
+
+        if (pendingErr) {
+          console.error(`[whatsapp-swap-notify] Erro ao criar ação pendente para ${phone}:`, pendingErr.message);
         }
-      } catch (e) {
-        console.error(`[whatsapp-swap-notify] Erro ao enviar para ${phone}:`, e);
+
+        // Gravar log de uso do WhatsApp (assíncrono/não-bloqueante)
+        supabase.from("whatsapp_usage_logs").insert({
+          organization_id: orgId,
+          ministry_id: ministryId,
+          instance_name: instance
+        }).then(({ error: logErr }) => {
+          if (logErr) console.warn(`[whatsapp-swap-notify] Falha ao registrar log:`, logErr.message);
+        });
+      } else {
+        console.warn(`[whatsapp-swap-notify] Falha ao enviar para ${phone}:`, msgErr);
       }
     }
 
     console.log(`[whatsapp-swap-notify] Swap ${swapRequestId}: ${sent}/${profiles.length} mensagens enviadas.`);
 
-    return new Response(
-      JSON.stringify({ success: true, sent, total: profiles.length }),
-      { headers: { "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ success: true, sent, total: profiles.length });
   } catch (err: any) {
     console.error("[whatsapp-swap-notify] Erro crítico:", err);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Internal error" }, 500);
   }
 });

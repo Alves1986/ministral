@@ -33,7 +33,9 @@ export const keys = {
   globalConflicts: (mid: string, month: string, oid: string) => ['conflicts', mid, month, oid],
   ranking: (mid: string, oid: string) => ['ranking', mid, oid],
   nextEvent: (mid: string, oid: string) => ['nextEvent', mid, oid],
-  availabilityV2: (mid: string, oid: string) => ['availabilityV2', mid, oid]
+  availabilityV2: (mid: string, oid: string) => ['availabilityV2', mid, oid],
+  /** Configurações globais de WhatsApp da organização — use useWhatsAppSettings() */
+  whatsappSettings: (oid: string) => ['whatsapp-settings', oid],
 };
 
 // Dados que mudam raramente (10 minutos de cache)
