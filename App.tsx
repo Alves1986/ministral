@@ -13,6 +13,7 @@ import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGener
 import { subscribeUserToPush } from './utils/pushUtils';
 import { getSupabase } from './services/supabase/client';
 import { handleLoginCallback } from './services/spotifyService';
+import { autoSyncIfConnected } from './services/googleCalendar';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -410,6 +411,7 @@ const InnerApp = () => {
             />
         </div>
 
+
         <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                 <MousePointerClick size={14}/> Acesso Rápido
@@ -515,6 +517,7 @@ const InnerApp = () => {
   const settingsScreen = useMemo(() => (
     <SettingsScreen 
         initialTitle={ministryTitle} 
+        events={events}
         ministryId={ministryId} 
         themeMode={themeMode} 
         onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} 
@@ -557,11 +560,39 @@ const InnerApp = () => {
             }
             return url;
         }} 
+        onToggleWhatsApp={async (enabled) => {
+            if (!orgId) return;
+            const sb = getSupabase();
+            if (!sb) return;
+            const { error } = await sb.from('organizations').update({ whatsapp_enabled: enabled }).eq('id', orgId);
+            if (error) {
+                console.error(error);
+                addToast("Erro ao atualizar o WhatsApp na organização", "error");
+            } else {
+                addToast(`WhatsApp ${enabled ? 'ativado' : 'desativado'} com sucesso!`, "success");
+                await refreshSession();
+                refreshData();
+            }
+        }}
+        onToggleMinistryWhatsApp={async (minId, enabled) => {
+            if (!orgId) return;
+            const sb = getSupabase();
+            if (!sb) return;
+            const { error } = await sb.from('organization_ministries').update({ whatsapp_enabled: enabled }).eq('id', minId).eq('organization_id', orgId);
+            if (error) {
+                console.error(error);
+                addToast("Erro ao atualizar o WhatsApp do ministério (A coluna whatsapp_enabled pode não existir no banco).", "error");
+            } else {
+                addToast(`WhatsApp ${enabled ? 'ativado' : 'desativado'} para este ministério.`, "success");
+                await refreshSession();
+                refreshData();
+            }
+        }}
         ministryConfig={{ ...ministryConfig, ...integrations }} 
         organization={organization} 
         ministries={availableMinistries}
     />
-  ), [ministryTitle, ministryId, themeMode, availableMinistries, availabilityWindow, isAdmin, orgId, handleEnableNotifications, ministryConfig, integrations, organization, refreshData, refreshSession, setAvailableMinistries, addToast]);
+  ), [ministryTitle, events, ministryId, themeMode, availableMinistries, availabilityWindow, isAdmin, orgId, handleEnableNotifications, ministryConfig, integrations, organization, refreshData, refreshSession, setAvailableMinistries, addToast]);
 
   const membersScreen = useMemo(() => (
      <MembersScreen 
@@ -808,7 +839,7 @@ const InnerApp = () => {
             
             {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && announcementsScreen}
             
-            {currentTab === 'profile' && <ProfileScreen user={activeUser!} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); await refreshSession(); refreshData(); }} availableRoles={roles} />}
+            {currentTab === 'profile' && <ProfileScreen user={activeUser!} events={events} schedule={schedule} ministryName={ministryTitle} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); await refreshSession(); refreshData(); }} availableRoles={roles} />}
             {currentTab === 'history' && <HistoryScreen user={activeUser!} />}
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && settingsScreen}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && status === 'ready' && ministryId.length === 36 && membersScreen}
@@ -914,7 +945,11 @@ const InnerApp = () => {
             alreadyJoined={activeUser?.allowedMinistries || []} 
             isPro={activeUser?.isPro} 
         />
-        <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
+        <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { 
+            await Supabase.createMinistryEvent(ministryId, orgId!, e); 
+            await autoSyncIfConnected({ title: `${ministryTitle} - ${e.title}`, isoDate: `${e.date}T${e.time || '19:00:00'}` });
+            refreshData(); 
+        }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
         <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers} availability={availability} onUpdate={async (mId, d) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, ministryId, mId, d, {}, currentMonth); 
             refreshData(); 

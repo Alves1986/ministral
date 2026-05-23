@@ -45,6 +45,30 @@ serve(async (req: Request) => {
       });
     }
 
+    // --- VERIFICAÇÃO DO PLANO E DA FLAG GLOBAL ---
+    const { data: org, error: orgErr } = await supabase
+      .from("organizations")
+      .select("plan_type, whatsapp_enabled")
+      .eq("id", orgId)
+      .single();
+
+    if (orgErr || !org) {
+      return new Response(JSON.stringify({ error: "Organização não encontrada" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (org.plan_type !== "enterprise" || !org.whatsapp_enabled) {
+      return new Response(JSON.stringify({ 
+        error: "WhatsApp indisponível. Plano Enterprise e ativação global são requeridos.",
+        code: "WHATSAPP_DISABLED"
+      }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // ── 1. Busca o swap request ───────────────────────────────────────────
     const { data: swapReq, error: swapErr } = await supabase
       .from("swap_requests")
@@ -147,6 +171,12 @@ serve(async (req: Request) => {
 
         if (res.ok) {
           sent++;
+          
+          // Gravar log de uso do WhatsApp
+          await supabase.from("whatsapp_usage_logs").insert({
+            org_id: orgId,
+            ministry_id: ministryId
+          });
         } else {
           console.warn(`[whatsapp-swap-notify] Evolution retornou ${res.status} para ${phone}`);
         }

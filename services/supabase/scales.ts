@@ -100,7 +100,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
     const role = parts.slice(2).join('|');
 
     const { data } = await sb.from('schedule_assignments')
-        .select('confirmed')
+        .select('confirmed, member_id')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('event_rule_id', ruleId)
@@ -109,13 +109,25 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
         .maybeSingle();
         
     if (data) {
+        const nextConfirmed = !data.confirmed;
+        
         await sb.from('schedule_assignments')
-            .update({ confirmed: !data.confirmed })
+            .update({ confirmed: nextConfirmed })
             .eq('organization_id', orgId)
             .eq('ministry_id', ministryId)
             .eq('event_rule_id', ruleId)
             .eq('event_date', dateStr)
             .eq('role', role);
+
+        if (nextConfirmed && data.member_id) {
+            await sb.from('event_checkins').upsert({
+                organization_id: orgId,
+                ministry_id: ministryId,
+                member_id: data.member_id,
+                event_rule_id: ruleId,
+                date: dateStr
+            }, { onConflict: 'organization_id,ministry_id,member_id,event_rule_id,date' });
+        }
     }
 };
 

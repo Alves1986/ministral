@@ -4,14 +4,18 @@ import { UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Shield, Sparkles, C
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabase/client';
 import { fetchMemberScheduleHistory } from '../services/supabase/misc';
+import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 
 interface Props {
   user: User;
   onUpdateProfile: (name: string, whatsapp: string, avatar_url?: string, ministry_functions?: string[], birthDate?: string) => Promise<void>;
   availableRoles?: string[];
+  events?: any[];
+  schedule?: Record<string, string>;
+  ministryName?: string;
 }
 
-export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availableRoles: propAvailableRoles = [] }) => {
+export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availableRoles: propAvailableRoles = [], events = [], schedule = {}, ministryName = "Ministério" }) => {
   const [name, setName] = useState(user.name);
   const [whatsapp, setWhatsapp] = useState(user.whatsapp || '');
   const [avatar, setAvatar] = useState(user.avatar_url || '');
@@ -21,6 +25,13 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
+
+  const myEvents = React.useMemo(() => {
+    return events.filter(e => {
+        // e.id represents rule_id_date, and schedule keys are rule_id_date|roleSuffix
+        return Object.entries(schedule).some(([key, name]) => key.startsWith(`${e.id}|`) && name === user.name);
+    });
+  }, [events, schedule, user.name]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -321,6 +332,10 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               </button>
           </div>
       </form>
+
+      <div className="mt-8">
+          <GoogleCalendarSettings myEvents={myEvents} allEvents={events} ministryName={ministryName} />
+      </div>
     </div>
   );
 };

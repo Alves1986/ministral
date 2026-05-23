@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Building2, Users, Layers, Activity, Plus, Edit2, 
-    ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock, Link as LinkIcon
+    ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock, Link as LinkIcon,
+    MessageSquare, BarChart3, Clock, Crown, ShieldAlert
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getSupabase } from '../services/supabase/client';
 import { Organization } from '../types';
 import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL } from '../services/supabaseService';
 import { checkMinistryLimit } from '../services/supabase/admin';
@@ -10,10 +13,56 @@ import { useToast } from './Toast';
 import { getSystemLogo } from '../utils/branding';
 
 export const SuperAdminDashboard: React.FC = () => {
+    const [activeMainTab, setActiveMainTab] = useState<'orgs' | 'telemetry'>('orgs');
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     
+    // Telemetria detalhada de WhatsApp
+    const { data: usageLogs = [], isLoading: loadingLogs, refetch: refetchLogs } = useQuery({
+        queryKey: ['super_admin_whatsapp_logs'],
+        queryFn: async () => {
+            const sb = getSupabase();
+            if (!sb) return [];
+            const { data } = await sb
+                .from('whatsapp_usage_logs')
+                .select(`
+                    id,
+                    created_at,
+                    org_id,
+                    ministry_id,
+                    organizations ( name ),
+                    organization_ministries ( label )
+                `)
+                .order('created_at', { ascending: false });
+            return data || [];
+        }
+    });
+
+    const logsByOrg = useMemo(() => {
+        const map: Record<string, { name: string, count: number, ministries: Record<string, { label: string, count: number }> }> = {};
+        usageLogs.forEach((log: any) => {
+            const orgName = log.organizations?.name || `Org #${log.org_id}`;
+            const minLabel = log.organization_ministries?.label || `Min #${log.ministry_id}`;
+            
+            if (!map[log.org_id]) {
+                map[log.org_id] = { name: orgName, count: 0, ministries: {} };
+            }
+            map[log.org_id].count++;
+            
+            if (!map[log.org_id].ministries[log.ministry_id]) {
+                map[log.org_id].ministries[log.ministry_id] = { label: minLabel, count: 0 };
+            }
+            map[log.org_id].ministries[log.ministry_id].count++;
+        });
+        return Object.entries(map).map(([id, val]) => ({ id, ...val }));
+    }, [usageLogs]);
+
+    const last24hCount = useMemo(() => {
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        return usageLogs.filter((log: any) => new Date(log.created_at).getTime() > oneDayAgo).length;
+    }, [usageLogs]);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
     const [formData, setFormData] = useState<any>({ name: "", slug: "" });
@@ -187,141 +236,305 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600">
-                        <Building2 size={24}/>
-                    </div>
-                    <div>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Organizações</p>
-                        <p className="text-2xl font-bold text-zinc-800 dark:text-white">{organizations.length}</p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
-                        <Users size={24}/>
-                    </div>
-                    <div>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Total de Usuários</p>
-                        <p className="text-2xl font-bold text-zinc-800 dark:text-white">
-                            {organizations.reduce((acc, curr) => acc + (curr.userCount || 0), 0)}
-                        </p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-secondary/10 dark:bg-secondary/20 rounded-lg text-secondary">
-                        <Activity size={24}/>
-                    </div>
-                    <div>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Ativas</p>
-                        <p className="text-2xl font-bold text-zinc-800 dark:text-white">
-                            {organizations.filter(o => o.active).length}
-                        </p>
-                    </div>
-                </div>
+            {/* Tab Navigation */}
+            <div className="flex bg-zinc-100 dark:bg-zinc-800/60 p-1.5 rounded-2xl w-fit shadow-inner border border-zinc-200/50 dark:border-zinc-700/50">
+                <button
+                    onClick={() => setActiveMainTab('orgs')}
+                    className={`py-2.5 px-6 rounded-xl text-xs md:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'orgs' ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-md' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                >
+                    <Building2 size={16} /> Organizações
+                </button>
+                <button
+                    onClick={() => setActiveMainTab('telemetry')}
+                    className={`py-2.5 px-6 rounded-xl text-xs md:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'telemetry' ? 'bg-white dark:bg-zinc-700 text-[#c9a84c] dark:text-[#c9a84c] shadow-md border-b-2 border-b-[#c9a84c]' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                >
+                    <MessageSquare size={16} /> Telemetria WhatsApp
+                </button>
             </div>
 
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex gap-3">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Buscar organização..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                        />
+            {activeMainTab === 'orgs' ? (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
+                            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600">
+                                <Building2 size={24}/>
+                            </div>
+                            <div>
+                                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Organizações</p>
+                                <p className="text-2xl font-bold text-zinc-800 dark:text-white">{organizations.length}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
+                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
+                                <Users size={24}/>
+                            </div>
+                            <div>
+                                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Total de Usuários</p>
+                                <p className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                    {organizations.reduce((acc, curr) => acc + (curr.userCount || 0), 0)}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
+                            <div className="p-3 bg-secondary/10 dark:bg-secondary/20 rounded-lg text-secondary">
+                                <Activity size={24}/>
+                            </div>
+                            <div>
+                                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Ativas</p>
+                                <p className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                    {organizations.filter(o => o.active).length}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                {loading ? (
-                    <div className="p-12 text-center text-zinc-400 flex flex-col items-center">
-                        <Loader2 className="animate-spin mb-2" size={32}/> Carregando...
+                    <div className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex gap-3">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar organização..." 
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {loading ? (
+                            <div className="p-12 text-center text-zinc-400 flex flex-col items-center">
+                                <Loader2 className="animate-spin mb-2" size={32}/> Carregando...
+                            </div>
+                        ) : filteredOrgs.length === 0 ? (
+                            <div className="p-12 text-center text-zinc-400">Nenhuma organização encontrada.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-zinc-50 dark:bg-zinc-900/50 text-zinc-500 uppercase text-xs font-bold">
+                                        <tr>
+                                            <th className="px-6 py-3">Nome / Slug</th>
+                                            <th className="px-6 py-3 text-center">Status</th>
+                                            <th className="px-6 py-3 text-center">Plano</th>
+                                            <th className="px-6 py-3 text-center">Usuários</th>
+                                            <th className="px-6 py-3 text-center">Ministérios</th>
+                                            <th className="px-6 py-3 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
+                                        {filteredOrgs.map(org => (
+                                            <tr key={org.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className='flex items-center gap-2'>
+                                                        <img
+                                                            src={org.logo_url || getSystemLogo('light')}
+                                                            alt={org.name}
+                                                            className='w-7 h-7 rounded-lg object-contain bg-white border border-zinc-100 dark:border-zinc-700 p-0.5 shrink-0'
+                                                            onError={(e) => { 
+                                                                const fallback = getSystemLogo('light');
+                                                                if (!e.currentTarget.src.endsWith(fallback)) {
+                                                                    e.currentTarget.src = fallback;
+                                                                }
+                                                            }}
+                                                        />
+                                                        <div>
+                                                            <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">{org.name}</p>
+                                                            <p className="text-xs text-zinc-500">{org.slug || '-'}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <button onClick={() => handleToggleStatus(org)} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold border transition-colors ${org.active ? 'bg-secondary/10 text-secondary border-secondary/20 dark:bg-secondary/20 dark:text-secondary dark:border-secondary/30' : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'}`}>
+                                                        {org.active ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}
+                                                        {org.active ? 'Ativo' : 'Inativo'}
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${org.plan_type === 'enterprise' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : org.plan_type === 'pro' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
+                                                        {org.plan_type || 'Trial'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
+                                                        <Users size={12}/> {org.userCount || 0}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
+                                                        <Layers size={12}/> {org.ministryCount || 0}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button 
+                                                            onClick={() => handleEdit(org)}
+                                                            className="p-2 text-zinc-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                                                            title="Editar Organização"
+                                                        >
+                                                            <Edit2 size={16}/>
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteOrganization(org)}
+                                                            className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                            title="Excluir Organização"
+                                                        >
+                                                            <Trash2 size={16}/>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
-                ) : filteredOrgs.length === 0 ? (
-                    <div className="p-12 text-center text-zinc-400">Nenhuma organização encontrada.</div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-zinc-50 dark:bg-zinc-900/50 text-zinc-500 uppercase text-xs font-bold">
-                                <tr>
-                                    <th className="px-6 py-3">Nome / Slug</th>
-                                    <th className="px-6 py-3 text-center">Status</th>
-                                    <th className="px-6 py-3 text-center">Plano</th>
-                                    <th className="px-6 py-3 text-center">Usuários</th>
-                                    <th className="px-6 py-3 text-center">Ministérios</th>
-                                    <th className="px-6 py-3 text-right">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                                {filteredOrgs.map(org => (
-                                    <tr key={org.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className='flex items-center gap-2'>
-                                                <img
-                                                    src={org.logo_url || getSystemLogo('light')}
-                                                    alt={org.name}
-                                                    className='w-7 h-7 rounded-lg object-contain bg-white border border-zinc-100 dark:border-zinc-700 p-0.5 shrink-0'
-                                                    onError={(e) => { 
-                                                        const fallback = getSystemLogo('light');
-                                                        if (!e.currentTarget.src.endsWith(fallback)) {
-                                                            e.currentTarget.src = fallback;
-                                                        }
-                                                    }}
-                                                />
-                                                <div>
-                                                    <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">{org.name}</p>
-                                                    <p className="text-xs text-zinc-500">{org.slug || '-'}</p>
+                </>
+            ) : (
+                <div className="space-y-6 animate-slide-up">
+                    {/* Telemetry Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-gradient-to-br from-[#0f1f3d] to-[#1a2d52] p-6 rounded-3xl border border-[#c9a84c]/20 shadow-xl text-white relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-10"><MessageSquare size={80} /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[#c9a84c] bg-[#c9a84c]/10 px-2.5 py-1 rounded-full border border-[#c9a84c]/20">Geral</span>
+                            <p className="text-sm font-bold text-slate-300 mt-4 uppercase tracking-wider">Total de Mensagens WhatsApp</p>
+                            <p className="text-4xl font-black mt-2 text-white">{usageLogs.length}</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-5"><Building2 size={80} /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">Alcance</span>
+                            <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-4 uppercase tracking-wider">Igrejas Utilizando</p>
+                            <p className="text-4xl font-black mt-2 text-zinc-800 dark:text-white">{logsByOrg.length}</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-5"><Clock size={80} /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 bg-blue-500/10 px-2.5 py-1 rounded-full border border-blue-500/20">Atividade</span>
+                            <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-4 uppercase tracking-wider">Últimas 24 Horas</p>
+                            <p className="text-4xl font-black mt-2 text-zinc-800 dark:text-white">{last24hCount}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Top Organizations Chart */}
+                        <div className="lg:col-span-6 bg-white dark:bg-zinc-800 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                            <h3 className="text-base font-black text-zinc-800 dark:text-white mb-6 uppercase tracking-wider flex items-center gap-2">
+                                <BarChart3 size={18} className="text-[#c9a84c]" /> Volumetria por Igreja
+                            </h3>
+
+                            {logsByOrg.length === 0 ? (
+                                <p className="text-sm text-zinc-400 italic text-center py-12">Nenhum log de disparo registrado.</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {logsByOrg.slice(0, 5).map((org: any) => {
+                                        const percentage = usageLogs.length > 0 ? Math.round((org.count / usageLogs.length) * 100) : 0;
+                                        return (
+                                            <div key={org.id} className="space-y-1.5">
+                                                <div className="flex justify-between text-xs font-bold">
+                                                    <span className="text-zinc-700 dark:text-zinc-300">{org.name}</span>
+                                                    <span className="text-zinc-500">{org.count} disparos ({percentage}%)</span>
+                                                </div>
+                                                <div className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-full h-3 overflow-hidden">
+                                                    <div 
+                                                        className="bg-gradient-to-r from-[#0f1f3d] to-[#c9a84c] h-full rounded-full transition-all duration-500"
+                                                        style={{ width: `${percentage}%` }}
+                                                    ></div>
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button onClick={() => handleToggleStatus(org)} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold border transition-colors ${org.active ? 'bg-secondary/10 text-secondary border-secondary/20 dark:bg-secondary/20 dark:text-secondary dark:border-secondary/30' : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'}`}>
-                                                {org.active ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}
-                                                {org.active ? 'Ativo' : 'Inativo'}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${org.plan_type === 'enterprise' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : org.plan_type === 'pro' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
-                                                {org.plan_type || 'Trial'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
-                                                <Users size={12}/> {org.userCount || 0}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
-                                                <Layers size={12}/> {org.ministryCount || 0}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button 
-                                                    onClick={() => handleEdit(org)}
-                                                    className="p-2 text-zinc-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                                                    title="Editar Organização"
-                                                >
-                                                    <Edit2 size={16}/>
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDeleteOrganization(org)}
-                                                    className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                    title="Excluir Organização"
-                                                >
-                                                    <Trash2 size={16}/>
-                                                </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Breakdown per Ministry */}
+                        <div className="lg:col-span-6 bg-white dark:bg-zinc-800 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                            <h3 className="text-base font-black text-zinc-800 dark:text-white mb-6 uppercase tracking-wider flex items-center gap-2">
+                                <Layers size={18} className="text-blue-500" /> Distribuição por Ministério
+                            </h3>
+
+                            {logsByOrg.length === 0 ? (
+                                <p className="text-sm text-zinc-400 italic text-center py-12">Nenhuma distribuição ativa.</p>
+                            ) : (
+                                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                                    {logsByOrg.map((org: any) => (
+                                        <div key={org.id} className="p-3.5 bg-zinc-50 dark:bg-zinc-900/30 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
+                                            <h4 className="text-xs font-black text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-2 border-b border-zinc-200/50 dark:border-zinc-800 pb-1">{org.name}</h4>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {Object.entries(org.ministries).map(([minId, min]: any) => (
+                                                    <div key={minId} className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800/50 text-[11px] font-bold">
+                                                        <span className="text-zinc-600 dark:text-zinc-400 truncate">{min.label}</span>
+                                                        <span className="px-1.5 py-0.5 rounded bg-[#c9a84c]/10 text-[#c9a84c] shrink-0 font-extrabold">{min.count}</span>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Detailed Activity Logs */}
+                    <div className="bg-white dark:bg-zinc-800 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex justify-between items-center">
+                            <h3 className="text-sm font-black text-zinc-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                <Clock size={16} className="text-purple-500" /> Log em Tempo Real (Últimos 50 Envios)
+                            </h3>
+                            <button 
+                                onClick={() => refetchLogs()}
+                                className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                            >
+                                {loadingLogs ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
+                                Atualizar
+                            </button>
+                        </div>
+
+                        {loadingLogs ? (
+                            <div className="p-12 text-center text-zinc-400 flex flex-col items-center">
+                                <Loader2 className="animate-spin mb-2" size={32}/> Carregando Logs...
+                            </div>
+                        ) : usageLogs.length === 0 ? (
+                            <div className="p-12 text-center text-zinc-400">Nenhum log registrado ainda.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="bg-zinc-50 dark:bg-zinc-900/50 text-zinc-500 uppercase text-[10px] font-black tracking-wider">
+                                        <tr>
+                                            <th className="px-6 py-3">Data / Hora</th>
+                                            <th className="px-6 py-3">Organização</th>
+                                            <th className="px-6 py-3">Ministério</th>
+                                            <th className="px-6 py-3 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50 font-medium">
+                                        {usageLogs.slice(0, 50).map((log: any) => (
+                                            <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                                <td className="px-6 py-3.5 text-zinc-500">
+                                                    {new Date(log.created_at).toLocaleString('pt-BR', {
+                                                        day: '2-digit', month: '2-digit', year: 'numeric',
+                                                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                                    })}
+                                                </td>
+                                                <td className="px-6 py-3.5 font-bold text-zinc-800 dark:text-zinc-200">
+                                                    {log.organizations?.name || `Org #${log.org_id}`}
+                                                </td>
+                                                <td className="px-6 py-3.5 text-zinc-600 dark:text-zinc-400 font-bold">
+                                                    {log.organization_ministries?.label || `Min #${log.ministry_id}`}
+                                                </td>
+                                                <td className="px-6 py-3.5 text-center">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
+                                                        Sucesso
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">

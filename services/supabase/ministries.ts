@@ -23,13 +23,26 @@ export const fetchOrganizationMinistries = async (orgId?: string): Promise<Minis
     const sb = getSupabase();
     if (!sb || !orgId) return [];
 
-    const { data, error } = await sb
+    let data;
+    let error;
+
+    // Try selecting whatsapp_enabled first (fail quietly if column doesn't exist)
+    const { data: dataWithWhatsApp, error: err1 } = await sb
         .from('organization_ministries')
-        .select('id, code, label, enabled_tabs') 
+        .select('id, code, label, enabled_tabs, whatsapp_enabled') 
         .eq('organization_id', orgId);
 
-    if (error) {
-        throw error;
+    if (err1) {
+        // Fallback to legacy query if the column isn't there
+        const { data: dataLegacy, error: err2 } = await sb
+            .from('organization_ministries')
+            .select('id, code, label, enabled_tabs') 
+            .eq('organization_id', orgId);
+        
+        if (err2) throw err2;
+        data = dataLegacy;
+    } else {
+        data = dataWithWhatsApp;
     }
 
     return (data || []).map((m: any) => ({
@@ -37,7 +50,8 @@ export const fetchOrganizationMinistries = async (orgId?: string): Promise<Minis
         code: m.code || m.id,
         label: m.label || 'Sem nome', 
         organizationId: orgId,
-        enabledTabs: m.enabled_tabs
+        enabledTabs: m.enabled_tabs,
+        whatsapp_enabled: m.whatsapp_enabled !== undefined ? m.whatsapp_enabled : true
     }));
 };
 
