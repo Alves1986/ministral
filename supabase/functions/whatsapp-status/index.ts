@@ -26,25 +26,31 @@ serve(async (req: Request) => {
       throw new Error("Credenciais da Evolution API (URL e/ou KEY) não configuradas.");
     }
 
-    const { instance_name } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { instance_name, ministry_id } = body;
 
-    if (!instance_name) {
-      throw new Error("instance_name é obrigatório");
+    if (!instance_name && !ministry_id) {
+      throw new Error("instance_name ou ministry_id é obrigatório");
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── SEGURANÇA: Validar se a instância pertence à organização e verificar JWT (SEC-02) ──
-    const { data: mwa, error: mwaErr } = await supabase
-      .from("ministry_whatsapp")
-      .select("organization_id, org_id")
-      .eq("instance_name", instance_name)
-      .maybeSingle();
+    let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id, org_id");
+    
+    if (instance_name) {
+      query = query.eq("instance_name", instance_name);
+    } else {
+      query = query.eq("ministry_id", ministry_id);
+    }
+
+    const { data: mwa, error: mwaErr } = await query.maybeSingle();
 
     if (mwaErr || !mwa) {
       throw new Error("Instância WhatsApp não vinculada a nenhum ministério cadastrado.");
     }
 
+    const currentInstanceName = instance_name || mwa.instance_name;
     const targetOrgId = mwa.organization_id || mwa.org_id;
 
     const authHeader = req.headers.get("Authorization");
@@ -80,7 +86,7 @@ serve(async (req: Request) => {
     }
 
     // ── Executa a consulta de status física na Evolution API ──
-    const endpoint = `${evolutionApiUrl}/instance/connectionState/${instance_name}`;
+    const endpoint = `${evolutionApiUrl}/instance/connectionState/${currentInstanceName}`;
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {
@@ -105,7 +111,7 @@ serve(async (req: Request) => {
         connected:    true,
         phone_number: phone,
         updated_at:   new Date().toISOString(),
-      }).eq("instance_name", instance_name);
+      }).eq("instance_name", currentInstanceName);
 
       return new Response(
         JSON.stringify({ state: "open", phone }),

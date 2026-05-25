@@ -42,25 +42,36 @@ async function processNotification(
   // Suporte a ambas as colunas durante período de migração
   const orgId = notif.organization_id || notif.org_id;
 
-  // ── Verificação do plano e flag global ───────────────────────────────────
-  const { data: org, error: orgErr } = await supabase
-    .from("organizations")
-    .select("plan_type, whatsapp_enabled")
-    .eq("id", orgId)
-    .single();
+  // ── Verificação do plano e flag global/ministério ───────────────────────────
+  // Busca dados da organização e do ministério específico simultaneamente
+  const [orgRes, minRes] = await Promise.all([
+    supabase.from("organizations").select("plan_type, whatsapp_enabled").eq("id", orgId).single(),
+    notif.ministry_id 
+      ? supabase.from("organization_ministries").select("whatsapp_enabled").eq("id", notif.ministry_id).single()
+      : Promise.resolve({ data: { whatsapp_enabled: true }, error: null })
+  ]);
 
-  if (orgErr || !org) {
+  const org = orgRes.data;
+  const ministry = minRes.data;
+
+  if (orgRes.error || !org) {
     await supabase.from("whatsapp_scheduled_notifications")
       .update({ status: "failed", error_message: "Organização não encontrada" })
       .eq("id", notif.id);
     return { notif_id: notif.id, error: "Organização não encontrada" };
   }
 
-  if (org.plan_type !== "enterprise" || !org.whatsapp_enabled) {
+  // Permite 'pro' ou 'enterprise' (flexibilidade de plano)
+  const isPlanValid = org.plan_type === "enterprise" || org.plan_type === "pro";
+  const isOrgEnabled = org.whatsapp_enabled !== false; // Default true se null
+  const isMinEnabled = ministry ? ministry.whatsapp_enabled !== false : true;
+
+  if (!isPlanValid || !isOrgEnabled || !isMinEnabled) {
+    const reason = !isPlanValid ? `Plano ${org.plan_type} insuficiente` : (!isOrgEnabled ? "Org desativada" : "Ministério desativado");
     await supabase.from("whatsapp_scheduled_notifications")
       .update({
         status: "failed",
-        error_message: `WhatsApp bloqueado. Plano: ${org.plan_type}, Ativo: ${org.whatsapp_enabled}`
+        error_message: `WhatsApp bloqueado: ${reason}`
       })
       .eq("id", notif.id);
     return { notif_id: notif.id, skipped: true, reason: "plan_or_flag" };
@@ -72,8 +83,8 @@ async function processNotification(
     .select(`
       id, member_id, role, event_date, event_rule_id, ministry_id,
       profiles:member_id ( whatsapp, name ),
-      organization_ministries:ministry_id ( label ),
-      event_rules:event_rule_id ( title, time )
+      organization_ministries!ministry_id ( label ),
+      event_rules!event_rule_id ( title, time )
     `)
     .eq("organization_id", orgId)
     .eq("event_date", targetDate);

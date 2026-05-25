@@ -35,15 +35,28 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── SEGURANÇA: Verificar se o ministério pertence à organização e validar o JWT (SEC-02) ──
-    const { data: ministry, error: minErr } = await supabase
-      .from("ministries")
-      .select("organization_id")
+    // Tenta organization_ministries primeiro (padrão atual)
+    let { data: ministry, error: minErr } = await supabase
+      .from("organization_ministries")
+      .select("organization_id, org_id")
       .eq("id", ministry_id)
       .maybeSingle();
 
-    if (minErr || !ministry) {
+    // Fallback para tabela ministries se necessário
+    if (!ministry) {
+      const { data: fallbackMin } = await supabase
+        .from("ministries")
+        .select("organization_id, org_id")
+        .eq("id", ministry_id)
+        .maybeSingle();
+      ministry = fallbackMin;
+    }
+
+    if (!ministry) {
       throw new Error("Ministério não encontrado.");
     }
+
+    const targetOrgId = ministry.organization_id || ministry.org_id;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -68,7 +81,7 @@ serve(async (req: Request) => {
 
     const isAuthorized =
       profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === ministry.organization_id);
+      (profile.is_admin && profile.organization_id === targetOrgId);
 
     if (!isAuthorized) {
       return new Response(

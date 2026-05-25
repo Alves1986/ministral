@@ -128,10 +128,11 @@ serve(async (req: Request) => {
       const action = pendingActions.find((a: any) => a.type === "confirmation");
       if (action) {
         // Confirma TODAS as funções do membro neste evento
+        const targetOrgId = action.organization_id || action.org_id;
         await supabase
           .from("schedule_assignments")
           .update({ confirmed: true })
-          .eq("organization_id", action.organization_id)
+          .eq("organization_id", targetOrgId)
           .eq("ministry_id", action.ministry_id)
           .eq("event_rule_id", action.event_rule_id)
           .eq("event_date", action.event_date)
@@ -214,7 +215,7 @@ serve(async (req: Request) => {
         .update({ status: "completed", taken_by_id: acceptorId, taken_by_name: acceptorName })
         .eq("id", swapAction.swap_request_id)
         .eq("status", "pending") // ← garante atomicidade
-        .select("*, profiles:requester_id(name, whatsapp)")
+        .select("*, profiles!requester_id(name, whatsapp)")
         .maybeSingle();
 
       if (atomicErr) {
@@ -239,10 +240,11 @@ serve(async (req: Request) => {
       // ── Atualiza o assignment na escala ───────────────────────────────
       const datePart = atomicUpdate.event_datetime.split("T")[0];
 
+      const targetOrgId = atomicUpdate.organization_id || atomicUpdate.org_id;
       const { data: assignment } = await supabase
         .from("schedule_assignments")
         .select("id")
-        .eq("organization_id", atomicUpdate.organization_id)
+        .eq("organization_id", targetOrgId)
         .eq("ministry_id", atomicUpdate.ministry_id)
         .eq("event_date", datePart)
         .eq("role", atomicUpdate.role)
