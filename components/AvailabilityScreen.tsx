@@ -678,7 +678,19 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
                                 return (
                                     <label key={event.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isAvailable ? 'bg-secondary/10 border-secondary ring-1 ring-secondary' : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
-                                        <input type="checkbox" className="hidden" checked={isAvailable} onChange={() => handleToggleSpecificEvent(event.time, isSunday, dayModalOpen)} />
+                                        <input 
+                                            type="checkbox" 
+                                            className="hidden" 
+                                            checked={isAvailable} 
+                                            onChange={() => {
+                                                handleToggleSpecificEvent(event.time, isSunday, dayModalOpen);
+                                                // Se houver apenas um evento no dia, fecha o popup automaticamente após selecionar
+                                                const dayEvents = (events || []).filter(e => e.iso.startsWith(dateBase));
+                                                if (dayEvents.length === 1) {
+                                                    setDayModalOpen(null);
+                                                }
+                                            }} 
+                                        />
                                         <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border ${isAvailable ? 'bg-secondary border-secondary text-white' : 'border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'}`}>
                                             {isAvailable && <Check size={14} strokeWidth={3} />}
                                         </div>
