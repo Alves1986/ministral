@@ -365,7 +365,7 @@ const InnerApp = () => {
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
-            <div className="animate-slide-up flex justify-between items-center w-full">
+            <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0">
                 <div>
                     <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
                         Olá, <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
@@ -382,7 +382,7 @@ const InnerApp = () => {
                     </h1>
                     <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
                 </div>
-                <div className="hidden md:block animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
+                <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
             </div>
 
         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
@@ -730,7 +730,12 @@ const InnerApp = () => {
               setCurrentTab(tab);
           }}
           mainNavItems={MAIN_NAV}
-          managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
+          managementNavItems={(() => {
+              const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
+              if (isAdmin) return MANAGEMENT_NAV;
+              if (isMinister) return MANAGEMENT_NAV.filter(item => item.id === 'repertoire-manager' || item.id === 'send-announcements');
+              return [];
+          })()}
           notifications={notifications}
           onNotificationsUpdate={setNotifications}
           onInstall={() => {
@@ -884,7 +889,7 @@ const InnerApp = () => {
             )}
             {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && status === 'ready' && ministryId.length === 36 && <AvailabilityReportScreen availability={availability} availabilityNotes={availabilityNotes} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
             {currentTab === 'monthly-report' && isAdmin && safeEnabledTabs.includes('monthly-report') && status === 'ready' && ministryId.length === 36 && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
-            {currentTab === 'send-announcements' && isAdmin && safeEnabledTabs.includes('send-announcements') && status === 'ready' && ministryId.length === 36 && (
+            {currentTab === 'send-announcements' && (isAdmin || activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro'))) && safeEnabledTabs.includes('send-announcements') && status === 'ready' && ministryId.length === 36 && (
                 <AlertsManager 
                     orgName={organization?.name || ''}
                     ministryName={ministryTitle}

@@ -384,11 +384,33 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   function isMemberAvailable(memberId: string, date: string, time: string): boolean {
     const avail = data.availability[memberId];
     if (!avail) return false;
+    
+    // Support object format (legacy or from globalConflicts overrides)
     const monthKey = `${date.substring(0, 7)}-01`;
-    if (avail[monthKey] === 'BLK') return false;
-    const dayVal = avail[date];
-    if (!dayVal) return false;
+    if ((avail as any)[monthKey] === 'BLK') return false;
+    
+    const dayVal = (avail as any)[date];
     if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
+
+    // Check Array format (the actual standard structure from useMinistryQueries)
+    if (Array.isArray(avail)) {
+        if (avail.includes(date)) return true; // Full day
+        
+        // Exact event time (new format)
+        const timePart = time.slice(0, 5); // HH:mm
+        if (avail.includes(`${date}_${timePart}`)) return true;
+        
+        // Legacy Morning / Night blocks
+        const hour = parseInt(timePart.slice(0, 2), 10);
+        const isMorning = hour < 12; // Use standard `< 12` check
+        if (isMorning && avail.includes(`${date}_M`)) return true;
+        if (!isMorning && avail.includes(`${date}_N`)) return true;
+        
+        return false;
+    }
+
+    // Default object literal fallback if not array
+    if (!dayVal) return false;
     if (dayVal === 'all') return true;
     const hour = parseInt(time.split(':')[0], 10);
     if (dayVal === 'M') return hour < 12;

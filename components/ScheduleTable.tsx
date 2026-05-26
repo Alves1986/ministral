@@ -28,11 +28,20 @@ interface Props {
 
 const checkIsAvailable = (lookupSet: Set<string>, member: string, eventIso: string): boolean => {
     const datePart = eventIso.slice(0, 10);
-    const hour = parseInt(eventIso.slice(11, 13), 10);
+    const timePart = eventIso.slice(11, 16); // HH:mm
+    const hour = parseInt(timePart.slice(0, 2), 10);
+    
+    // Check Full Day
     if (lookupSet.has(`${member}_${datePart}`)) return true;
+    
+    // Check specific event time precisely
+    if (lookupSet.has(`${member}_${datePart}_${timePart}`)) return true;
+    
+    // Legacy mapping (Morning / Night block tracking)
     const isMorning = hour < 13;
     if (isMorning && lookupSet.has(`${member}_${datePart}_M`)) return true;
     if (!isMorning && lookupSet.has(`${member}_${datePart}_N`)) return true;
+    
     return false;
 };
 

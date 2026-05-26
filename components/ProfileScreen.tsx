@@ -135,13 +135,31 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     }
   };
 
-  const toggleRole = (role: string) => {
-      if (selectedRoles.includes(role)) {
-          setSelectedRoles(selectedRoles.filter(r => r !== role));
-      } else {
-          setSelectedRoles([...selectedRoles, role]);
-      }
-  };
+    const toggleRole = (role: string) => {
+        const isAdmin = user.access_role === 'admin' || user.isOrgAdmin || user.isSuperAdmin;
+        if (role.toLowerCase().includes('ministro') && !isAdmin && !selectedRoles.includes(role)) {
+            addToast("Solicitação enviada ao administrador.", "info");
+            import('../services/supabase/notifications').then(({ notifySuperAdmins }) => {
+                if (user.ministryId && user.organizationId) {
+                    notifySuperAdmins(
+                        'Solicitação de Função: Ministro',
+                        `O membro ${user.name} solicitou a função de Ministro. Você pode adicioná-lo acessando o menu Membros.`,
+                        undefined,
+                        user.ministryId,
+                        user.organizationId,
+                        'info'
+                    );
+                }
+            }).catch(console.error);
+            return;
+        }
+
+        if (selectedRoles.includes(role)) {
+            setSelectedRoles(selectedRoles.filter(r => r !== role));
+        } else {
+            setSelectedRoles([...selectedRoles, role]);
+        }
+    };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,7 +310,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                       <Briefcase size={16}/> Minhas Funções
                   </h3>
                   <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
-                      Selecione as funções que você exerce na equipe. Isso ajuda na organização automática da escala.
+                      Selecione as funções que você exerce na equipe. Algumas funções requerem aprovação.
                   </p>
                   
                   <div className="flex-1">
@@ -308,7 +326,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                       key={role}
                                       type="button"
                                       onClick={() => toggleRole(role)}
-                                      className={`group relative px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 ${
+                                      className={`group relative px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 cursor-pointer ${
                                           isSelected 
                                           ? 'bg-accent/10 dark:bg-accent/20 border-accent/50 text-accent dark:text-accent shadow-sm ring-1 ring-accent/20' 
                                           : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800'
