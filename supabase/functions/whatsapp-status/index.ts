@@ -36,7 +36,7 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── SEGURANÇA: Validar se a instância pertence à organização e verificar JWT (SEC-02) ──
-    let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id, org_id");
+    let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id");
     
     if (instance_name) {
       query = query.eq("instance_name", instance_name);
@@ -51,7 +51,7 @@ serve(async (req: Request) => {
     }
 
     const currentInstanceName = instance_name || mwa.instance_name;
-    const targetOrgId = mwa.organization_id || mwa.org_id;
+    const targetOrgId = mwa.organization_id;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {

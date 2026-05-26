@@ -38,7 +38,7 @@ serve(async (req: Request) => {
     // Tenta organization_ministries primeiro (padrão atual)
     let { data: ministry, error: minErr } = await supabase
       .from("organization_ministries")
-      .select("organization_id, org_id")
+      .select("organization_id")
       .eq("id", ministry_id)
       .maybeSingle();
 
@@ -46,7 +46,7 @@ serve(async (req: Request) => {
     if (!ministry) {
       const { data: fallbackMin } = await supabase
         .from("ministries")
-        .select("organization_id, org_id")
+        .select("organization_id")
         .eq("id", ministry_id)
         .maybeSingle();
       ministry = fallbackMin;
@@ -56,7 +56,7 @@ serve(async (req: Request) => {
       throw new Error("Ministério não encontrado.");
     }
 
-    const targetOrgId = ministry.organization_id || ministry.org_id;
+    const targetOrgId = ministry.organization_id;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {

@@ -102,7 +102,7 @@ serve(async (req: Request) => {
     // Já está conectado
     if (result.state === "open") {
       const { error: dbErr } = await supabaseAdmin.from("ministry_whatsapp").upsert({
-        org_id,
+        organization_id: org_id,
         ministry_id,
         instance_name: instanceName,
         connected:     true,
@@ -129,7 +129,7 @@ serve(async (req: Request) => {
 
     // Salva estado inicial no banco
     const { error: dbErr } = await supabaseAdmin.from("ministry_whatsapp").upsert({
-      org_id,
+      organization_id: org_id,
       ministry_id,
       instance_name: instanceName,
       connected:     false,
