@@ -498,6 +498,7 @@ const InnerApp = () => {
                                 queryClient.setQueryData(['schedule', ministryId, orgId!, currentMonth], {});
                                 addToast("Escala limpa com sucesso", "success");
                                 refreshData();
+                                window.dispatchEvent(new Event('refresh-assignments'));
                             } catch (e) {
                                 addToast("Erro ao limpar escala", "error");
                             }

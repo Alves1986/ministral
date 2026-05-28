@@ -50,6 +50,31 @@ async function startServer() {
     }
   });
 
+  app.post("/api/ai/run", async (req, res) => {
+    try {
+      const { prompt, isJson, model } = req.body;
+      const { GoogleGenAI } = await import('@google/genai');
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Server is missing GEMINI_API_KEY");
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: model || 'gemini-2.5-flash',
+        contents: [
+          { role: 'user', parts: [{ text: `Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.\n\n${prompt}` }] }
+        ],
+        config: {
+          responseMimeType: isJson ? 'application/json' : 'text/plain',
+        }
+      });
+      
+      res.json({ result: response.text });
+    } catch (error: any) {
+      console.error("Error in /api/ai/run", error);
+      res.status(500).json({ error: error.message || "Failed AI call" });
+    }
+  });
+
   app.post("/api/spotify/token", async (req, res) => {
     try {
       const clientId = req.body.clientId || process.env.VITE_SPOTIFY_CLIENT_ID;

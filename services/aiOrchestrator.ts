@@ -1,17 +1,4 @@
 // services/aiOrchestrator.ts
-// ─── OpenRouter API — sem dependências externas de IA ───────────────────────
-
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-function getApiKey(): string {
-  if (typeof window !== 'undefined') {
-    return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
-  }
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-  }
-  return '';
-}
 
 export enum AI_TASKS {
   MINISTRY_HEALTH  = 'MINISTRY_HEALTH',
@@ -27,34 +14,9 @@ export enum AI_TASKS {
 
 export const OPENROUTER_MODELS = [
   {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Gemma 4 31B (Google - Recomendado)',
-    description: 'A mais recente versão do Google. Alta performance em raciocínio e visão.'
-  },
-  {
-    id: 'deepseek/deepseek-r1:free',
-    name: 'DeepSeek R1 (Raciocínio)',
-    description: 'Especialista em lógica e cadeias de pensamento complexas.'
-  },
-  {
-    id: 'qwen/qwen-3-coder-480b:free',
-    name: 'Qwen 3 Coder (Especialista)',
-    description: 'Modelo massivo de 480B otimizado para lógica estruturada e dados.'
-  },
-  {
-    id: 'openai/gpt-oss-120b:free',
-    name: 'GPT OSS 120B (OpenAI MoE)',
-    description: 'Arquitetura Mixture-of-Experts para respostas versáteis e rápidas.'
-  },
-  {
-    id: 'meta-llama/llama-3.3-70b-instruct:free',
-    name: 'Llama 3.3 70B (Meta)',
-    description: 'Equilíbrio perfeito entre velocidade e inteligência geral.'
-  },
-  {
-    id: 'openrouter/free',
-    name: 'Automático (Melhor Disponível)',
-    description: 'O OpenRouter seleciona automaticamente o melhor modelo gratuito disponível.'
+    id: 'gemini-2.5-flash',
+    name: 'Google Gemini 2.5 Flash',
+    description: 'O modelo mais versátil e escalável do Google.'
   }
 ];
 
@@ -273,54 +235,36 @@ function isRateLimitError(status: number, message: string): boolean {
 }
 
 async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 3): Promise<string> {
-  let lastErr: any;
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await callOpenRouter(prompt, taskType, selectedModel);
-    } catch (err: any) {
-      lastErr = err;
-      let message = err.message || '';
-      const status = err.status || 0;
-      
-      // Se a mensagem for encapsulada, tenta achar a real
-      try {
-        const parsed = JSON.parse(message);
-        if (parsed.error && parsed.error.message) {
-            message = parsed.error.message;
-        }
-      } catch(e) {}
-      
-      // Se for limite da conta/crédito (402), aborta imediatamente
-      if (isCreditLimitError(status, message)) {
-        throw Object.assign(
-          new Error(`A conta do OpenRouter atingiu o limite de créditos.`),
-          { isCreditLimit: true, modelId: selectedModel }
-        );
+  const isBrowser = typeof window !== 'undefined';
+  const isJson = JSON_TASKS.has(taskType);
+
+  if (isBrowser) {
+    const res = await fetch('/api/ai/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, isJson, model: selectedModel })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed AI call');
+    return data.result;
+  } else {
+    // RUN IN NODE.JS
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: [
+        { role: 'user', parts: [{ text: `Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.\n\n${prompt}` }] }
+      ],
+      config: {
+        responseMimeType: isJson ? 'application/json' : 'text/plain',
       }
-      
-      const isOverloaded = isRateLimitError(status, message);
-      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}. status=${status}`);
-      
-      if (attempt < retries) {
-        // Pausa longa se for rate limit (OpenRouter pede para tentar novamente mais tarde)
-        const delay = isOverloaded ? 3000 * attempt : 1500;
-        await new Promise(r => setTimeout(r, delay));
-      } else {
-        // Se finalizou tentativas e é rate limit
-        if (isOverloaded) {
-          throw Object.assign(
-            new Error(`O modelo gratuito selecionado está sobrecarregado no momento. Tente novamente ou troque de modelo.`),
-            { isRateLimit: true, modelId: selectedModel }
-          );
-        }
-      }
-    }
+    });
+
+    return response.text || '';
   }
-  
-  if (lastErr) throw lastErr;
-  throw new Error("Falha desconhecida no OpenRouter.");
 }
+
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
   const apiKey = getApiKey();

@@ -46,16 +46,16 @@ interface Props {
 function handleAIError(e: any, addToast: (msg: string, type: 'success' | 'error' | 'info') => void, context: string) {
   if (e?.isCreditLimit) {
     addToast(
-      `⚠️ ${context}: A conta atingiu o limite de créditos do OpenRouter.`,
+      `⚠️ ${context}: A conta atingiu o limite de créditos de IA.`,
       'error'
     );
   } else if (e?.isRateLimit) {
     addToast(
-      `⚠️ ${context}: O modelo gratuito está sobrecarregado. Tente novamente em instantes ou troque de modelo.`,
+      `⚠️ ${context}: A Inteligência Artificial está sobrecarregada. Tente novamente em instantes ou aguarde um pouco.`,
       'error'
     );
-  } else if (e?.message?.includes('VITE_OPENROUTER_API_KEY')) {
-    addToast('❌ Chave da API OpenRouter não configurada. Verifique as variáveis de ambiente.', 'error');
+  } else if (e?.message?.includes('GEMINI_API_KEY') || e?.message?.includes('OPENROUTER_API_KEY')) {
+    addToast('❌ Chave de API não configurada. Verifique as variáveis de ambiente.', 'error');
   } else {
     addToast(`Erro em ${context}: ${e?.message || 'Erro desconhecido'}`, 'error');
   }
