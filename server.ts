@@ -97,6 +97,42 @@ async function startServer() {
     }
   });
 
+  app.post("/api/ai/run", async (req, res) => {
+    try {
+      const { runAI } = await import("./services/aiOrchestrator.ts");
+      const { taskType, context, payload, preferredModel } = req.body;
+      const result = await runAI(taskType, context, payload, preferredModel);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in /api/ai/run:", error);
+      res.status(500).json({ error: error.message || "Failed to run AI task" });
+    }
+  });
+
+  app.post("/api/cifraclub/search", async (req, res) => {
+    try {
+      const { searchCifraClub } = await import("./services/cifraClubService.ts");
+      const { query } = req.body;
+      const result = await searchCifraClub(query);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in /api/cifraclub/search:", error);
+      res.status(500).json({ error: error.message || "Failed to search Cifra Club" });
+    }
+  });
+
+  app.post("/api/youtube/search", async (req, res) => {
+    try {
+      const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
+      const { query, customApiKey } = req.body;
+      const result = await searchYouTubeVideos(query, customApiKey);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in /api/youtube/search:", error);
+      res.status(500).json({ error: error.message || "Failed to search YouTube" });
+    }
+  });
+
   app.post("/api/spotify/token", async (req, res) => {
     try {
       const clientId = req.body.clientId || process.env.VITE_SPOTIFY_CLIENT_ID;

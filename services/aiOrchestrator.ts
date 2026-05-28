@@ -1,14 +1,9 @@
 // services/aiOrchestrator.ts
-// ─── OpenRouter API — sem dependências externas de IA ───────────────────────
-
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// ─── Gemini API — nativa e otimizada ───────────────────────
 
 function getApiKey(): string {
-  if (typeof window !== 'undefined') {
-    return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
-  }
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+    return process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
   }
   return '';
 }
@@ -25,35 +20,23 @@ export enum AI_TASKS {
   SCALE_GENERATION = 'SCALE_GENERATION'
 }
 
-export const OPENROUTER_MODELS = [
+export const AI_MODELS = [
   {
-    id: 'openrouter/free',
-    name: 'OpenRouter Free (Recomendado)',
-    description: 'Roteamento automático para o modelo gratuito mais rápido e disponível.'
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash (Rápido)',
+    description: 'Modelo veloz e eficiente para análises e reescritas diárias.'
   },
   {
-    id: 'openai/gpt-oss-120b:free',
-    name: 'GPT OSS 120B (Maior Capacidade)',
-    description: 'Modelo de alta capacidade (120B), geralmente disponível sem muitos limites.'
-  },
-  {
-    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    name: 'Nemotron 3 (Raciocínio)',
-    description: 'Excelente para tarefas que precisam de raciocínio lógico.'
-  },
-  {
-    id: 'meta-llama/llama-3.3-70b-instruct:free',
-    name: 'Llama 3.3 (Fallback)',
-    description: 'Rápido e inteligente para análises da escala e textos.'
-  },
-  {
-    id: 'google/gemma-3-27b-it:free',
-    name: 'Gemma 3 (Fallback)',
-    description: 'Fallback com bom raciocínio e velocidade.'
+    id: 'gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro (Maior Capacidade)',
+    description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
   }
 ];
 
-export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id;
+// exportação legada para compatibilidade se tiver algo estrito chamando:
+export const OPENROUTER_MODELS = AI_MODELS;
+
+export const DEFAULT_MODEL = AI_MODELS[0].id;
 
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
@@ -179,76 +162,45 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.SCALE_GENERATION]: (_data) => '',
 };
 
-async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string): Promise<string> {
+async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('VITE_OPENROUTER_API_KEY não configurada.');
+  if (!apiKey) throw new Error('GEMINI_API_KEY não configurada.');
 
   const isJson = JSON_TASKS.has(taskType);
+  const { GoogleGenAI, Type } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey });
 
-  const body: any = {
-    model,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'system',
-        content: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.' +
-          (isJson ? ' Responda SOMENTE com JSON válido, sem markdown, sem blocos de código, sem texto adicional.' : '')
-      },
-      { role: 'user', content: prompt }
-    ],
+  const config: any = {
+    systemInstruction: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.'
   };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
+  if (isJson) {
+      config.responseMimeType = "application/json";
+  }
 
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
-        'X-Title': 'Ministral',
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config
     });
-
-    if (!res.ok) {
-      const respText = await res.text();
-      let errMsg = `OpenRouter error ${res.status}`;
-      try {
-        const errObj = JSON.parse(respText);
-        errMsg = errObj?.error?.message || errObj?.message || errMsg;
-      } catch (e) {
-        errMsg += ` - ${respText.slice(0, 200)}`;
-      }
-      throw new Error(errMsg);
-    }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    if (!content) throw new Error('OpenRouter retornou resposta vazia.');
+    const content = response.text || '';
+    if (!content) throw new Error('Gemini retornou resposta vazia.');
     return content;
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error(`Timeout: modelo ${model} não respondeu em 45s.`);
-    }
     throw err;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
   const order = preferredModel
-    ? [preferredModel, ...OPENROUTER_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
-    : OPENROUTER_MODELS.map(m => m.id);
+    ? [preferredModel, ...AI_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
+    : AI_MODELS.map(m => m.id);
 
   let lastErr: Error = new Error('Todos os modelos falharam.');
   for (const model of order) {
     try {
-      return await callOpenRouter(prompt, taskType, model);
+      return await callAI(prompt, taskType, model);
     } catch (err: any) {
       console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
       lastErr = err;
@@ -259,6 +211,25 @@ async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredMod
 }
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
+  if (typeof window !== 'undefined') {
+    // Estamos no navegador: chamar nosso backend ao invés de ligar diretamente (esconde API Key)
+    const res = await fetch('/api/ai/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskType, context, payload, preferredModel })
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        try {
+            const err = JSON.parse(text);
+            throw new Error(err.error || 'Erro na camada de proxy da IA');
+        } catch(e) {
+            throw new Error(`Erro na API (${res.status}): ${text}`);
+        }
+    }
+    return res.json();
+  }
+
   if (taskType === AI_TASKS.SCALE_GENERATION) {
     return generateScheduleLocally(payload);
   }
@@ -300,8 +271,6 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
   let cleaned = content;
   try {
-    // Remover blocos <think> do deepseek-r1 antes de parsear
-    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
     cleaned = cleaned.trim();
     
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
@@ -338,7 +307,6 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
     }
     return cleaned;
   } catch (err) {
-    console.warn('[parseAIResponse] Falha ao parsear resposta como JSON:', cleaned.slice(0, 200));
     return cleaned;
   }
 }
@@ -402,7 +370,7 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
         
         // Legacy Morning / Night blocks
         const hour = parseInt(timePart.slice(0, 2), 10);
-        const isMorning = hour < 12; // Use standard `< 12` check
+        const isMorning = hour < 12; // Use standard \`< 12\` check
         if (isMorning && avail.includes(`${date}_M`)) return true;
         if (!isMorning && avail.includes(`${date}_N`)) return true;
         

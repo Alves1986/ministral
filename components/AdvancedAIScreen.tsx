@@ -23,7 +23,7 @@ import {
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { runAI, AI_TASKS, OPENROUTER_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
+import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
 
 interface Props {
   ministryId: string;
@@ -98,7 +98,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const [preventiveAlerts, setPreventiveAlerts] = useState<string>('');
   const [predictiveLoading, setPredictiveLoading] = useState(false);
 
-  const AI_MODELS = OPENROUTER_MODELS;
+// No need for local assignment we can just use AI_MODELS directly
 
   useEffect(() => {
     const fetchRules = async () => {

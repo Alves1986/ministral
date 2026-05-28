@@ -4,7 +4,7 @@
 - SaaS multi-tenant de gestão de ministérios para igrejas
 - Stack: React 18 + TypeScript + Vite + TailwindCSS + Supabase + Zustand + TanStack Query
 - Deploy: Vercel. Backend: Supabase Edge Functions (Deno/TypeScript)
-- IA: OpenRouter (modelos variáveis via `services/aiOrchestrator.ts`)
+- IA: Gemini API (@google/genai) via `services/aiOrchestrator.ts`
 - Pagamentos: Stripe. Notificações: Web Push + WhatsApp (Baileys/CodeChat)
 
 ## Convenções arquiteturais — NÃO quebre estas regras
