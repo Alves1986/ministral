@@ -52,6 +52,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     const userRef = useRef<User | null>(null);
     const isProcessingRef = useRef(false);
     const activeChannelRef = useRef<any>(null);
+    const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isMountedRef = useRef(false);
 
@@ -95,8 +96,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     (payload: any) => {
                         console.log("[SessionProvider] Realtime profile update:", payload);
                         if (payload.new && payload.new.organization_id) {
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
+                            // Debounce: evita chamadas em rápida sucessão e
+                            // verifica se não há processamento em andamento
+                            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+                            realtimeDebounceRef.current = setTimeout(() => {
+                                if (!isProcessingRef.current) {
+                                    processSession(sessionUser);
+                                }
+                            }, 800);
                         }
                     }
                 )
@@ -152,8 +159,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                         { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${sessionUser.id}` },
                         (payload: any) => {
                             console.log("[SessionProvider] Realtime profile update:", payload);
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
+                            // Debounce para evitar re-autenticações em cascata
+                            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+                            realtimeDebounceRef.current = setTimeout(() => {
+                                if (!isProcessingRef.current) {
+                                    isProcessingRef.current = false;
+                                    processSession(sessionUser);
+                                }
+                            }, 1000);
                         }
                     )
                     .on(
@@ -161,8 +174,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                         { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` },
                         (payload: any) => {
                             console.log("[SessionProvider] Realtime organization update:", payload);
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
+                            // Debounce para evitar re-autenticações em cascata
+                            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+                            realtimeDebounceRef.current = setTimeout(() => {
+                                if (!isProcessingRef.current) {
+                                    isProcessingRef.current = false;
+                                    processSession(sessionUser);
+                                }
+                            }, 1000);
                         }
                     )
                     .subscribe();
@@ -191,10 +210,10 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 }
 
                 if (!profile.is_super_admin) {
-                    const isTrial = orgDetails.plan_type === 'trial';
+                    const isTrial = !orgDetails.plan_type || orgDetails.plan_type === 'trial';
                     const trialExpired = isTrial && orgDetails.trial_ends_at && new Date() > new Date(orgDetails.trial_ends_at);
                     const isLocked = orgDetails.access_locked;
-                    const badStatus = orgDetails.billing_status && !['active', 'trial'].includes(orgDetails.billing_status);
+                    const badStatus = orgDetails.billing_status ? !['active', 'trial'].includes(orgDetails.billing_status) : false;
                     
                     const isPastDue = orgDetails.billing_status === 'past_due';
                     const isCanceled = orgDetails.billing_status === 'canceled';

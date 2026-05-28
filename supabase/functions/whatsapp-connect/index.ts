@@ -107,7 +107,7 @@ serve(async (req: Request) => {
         instance_name: instanceName,
         connected:     true,
         updated_at:    new Date().toISOString(),
-      }, { onConflict: "ministry_id" });
+      }, { onConflict: "ministry_id,organization_id" });
 
       if (dbErr) throw dbErr;
 
@@ -134,7 +134,7 @@ serve(async (req: Request) => {
       instance_name: instanceName,
       connected:     false,
       updated_at:    new Date().toISOString(),
-    }, { onConflict: "ministry_id" });
+    }, { onConflict: "ministry_id,organization_id" });
 
     if (dbErr) throw dbErr;
 

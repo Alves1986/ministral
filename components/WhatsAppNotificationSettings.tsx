@@ -25,6 +25,7 @@ const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', '
 
 export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryId, ministries, currentUserId, onShowToast }) => {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [rules, setRules] = useState<EventRuleV2[]>([]);
   const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
@@ -114,8 +115,9 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
 
       setWeeklyInputs(wInputs);
       setSingleInputs(sInputs);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error loading WhatsApp schedule data:", e);
+      setLoadError(e?.message || "Erro ao carregar dados. Verifique sua conexão e tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -230,6 +232,28 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
     return (
       <div className="flex justify-center p-8">
         <Loader2 className="animate-spin text-green-500" size={24} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col items-center gap-4 text-center py-4">
+          <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500">
+            <AlertTriangle size={24} />
+          </div>
+          <div>
+            <h3 className="font-bold text-zinc-800 dark:text-white mb-1">Erro ao carregar</h3>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{loadError}</p>
+          </div>
+          <button
+            onClick={() => { setLoadError(null); loadData(); }}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold text-sm transition-colors"
+          >
+            <RefreshCw size={14} /> Tentar novamente
+          </button>
+        </div>
       </div>
     );
   }

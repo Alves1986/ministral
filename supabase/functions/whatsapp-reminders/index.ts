@@ -100,7 +100,8 @@ async function processNotification(
   }
 
   if (!assignments || assignments.length === 0) {
-    await supabase.from("whatsapp_scheduled_notifications").update({ status: "sent" }).eq("id", notif.id);
+    // CORREÇÃO: usar 'skipped' em vez de 'sent' — permite reprocessamento se assignments forem adicionados
+    await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
     return { notif_id: notif.id, date: targetDate, sent: 0, reason: "Sem assignments." };
   }
 
@@ -161,7 +162,16 @@ async function processNotification(
       if (sentToPhones.has(formattedPhone)) { skipped++; continue; }
       sentToPhones.add(formattedPhone);
 
+      // CORREÇÃO CRÍTICA: usar SEMPRE a instância específica do ministério.
+      // Se o ministério não tiver instância própria E não houver instância global (ou não for para usar a global),
+      // pular este membro (não enviar pelo WhatsApp errado de outra org).
       const currentInstance = ministryMap.get(a.ministry_id) || defaultInstance;
+      if (!currentInstance) {
+        console.warn(`[whatsapp-reminders] Ministério ${a.ministry_id} sem instância WhatsApp configurada. Pulando membro ${profile.name}.`);
+        skipped++;
+        continue;
+      }
+
       const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
         evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, msg,
         { timeout: 5000, retries: 2 }
@@ -216,10 +226,11 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const evolutionApiUrl    = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey    = Deno.env.get("EVOLUTION_API_KEY");
-    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME");
+    // CORREÇÃO: instanceName global é OPCIONAL — ministérios usam suas próprias instâncias
+    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME") || null;
 
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Variáveis Supabase não configuradas.");
-    if (!evolutionApiUrl || !evolutionApiKey || !instanceName) throw new Error("Credenciais Evolution API não configuradas.");
+    if (!evolutionApiUrl || !evolutionApiKey) throw new Error("Credenciais Evolution API não configuradas.");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

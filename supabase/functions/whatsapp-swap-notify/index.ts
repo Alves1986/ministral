@@ -46,7 +46,8 @@ serve(async (req: Request) => {
 
     const apiUrl      = Deno.env.get("EVOLUTION_API_URL")!;
     const apiKey      = Deno.env.get("EVOLUTION_API_KEY")!;
-    const defaultInst = Deno.env.get("EVOLUTION_INSTANCE_NAME")!;
+    // CORREÇÃO: não usar instância global como fallback — cada ministério tem seu próprio WhatsApp
+    // Se não encontrar instância específica, retornar erro sem enviar pelo WhatsApp errado
 
     const { swapRequestId, ministryId, orgId } = await req.json();
 
@@ -123,7 +124,15 @@ serve(async (req: Request) => {
       .eq("connected", true)
       .maybeSingle();
 
-    const instance = ministryWa?.instance_name ?? defaultInst;
+    const instance = ministryWa?.instance_name;
+
+    if (!instance) {
+      console.warn(`[whatsapp-swap-notify] Ministério ${ministryId} não tem WhatsApp configurado e conectado. Notificação cancelada para evitar envio pelo canal errado.`);
+      return new Response(
+        JSON.stringify({ success: false, sent: 0, reason: "ministry_has_no_whatsapp" }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     // ── 3. Membros elegíveis: têm a função E não são o solicitante ────────
     const { data: memberships } = await supabase
