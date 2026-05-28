@@ -42,7 +42,7 @@ export const WeatherWidget: React.FC = () => {
 
       const fetchWeatherData = async (lat: number, lon: number) => {
           try {
-              const weatherRes = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+              const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
 
               if (!weatherRes.ok) {
                   const errText = await weatherRes.text();
@@ -50,10 +50,34 @@ export const WeatherWidget: React.FC = () => {
               }
               const weatherJson = await weatherRes.json();
               
+              let city = "Localização";
+              try {
+                  // Nominatim é lento e instável, buscamos com timeout curto
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 4000);
+                  
+                  const cityRes = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`,
+                    { signal: controller.signal }
+                  );
+                  
+                  clearTimeout(timeoutId);
+
+                  if (cityRes.ok) {
+                      const cityJson = await cityRes.json();
+                      const addr = cityJson.address;
+                      // Prioriza a cidade/município sobre vila/subúrbio para evitar nomes de bairro
+                      city = addr?.city || addr?.municipality || addr?.town || addr?.village || addr?.suburb || "Local";
+                      city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
+                  }
+              } catch (e) {
+                  console.warn("Falha ao buscar nome da cidade:", e);
+              }
+
               const newData: WeatherData = {
-                  temperature: weatherJson.temperature,
-                  weatherCode: weatherJson.weatherCode,
-                  city: weatherJson.city,
+                  temperature: weatherJson.current_weather.temperature,
+                  weatherCode: weatherJson.current_weather.weathercode,
+                  city,
                   timestamp: Date.now()
               };
 
@@ -63,8 +87,8 @@ export const WeatherWidget: React.FC = () => {
                   setError(false);
               }
 
-          } catch (e: any) {
-              console.warn("Aviso ao buscar clima:", e.message || e);
+          } catch (e) {
+              console.error("Erro ao buscar clima:", e);
               if (isMounted) setError(true);
           } finally {
               if (isMounted) {
@@ -151,22 +175,22 @@ export const WeatherWidget: React.FC = () => {
   if (!weather) return null;
 
   return (
-    <div className="flex items-center justify-center md:justify-start gap-3 sm:gap-4 px-4 sm:px-5 py-3 w-full md:w-auto bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+    <div className="flex items-center gap-4 px-5 py-3 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
       
-      <div className="flex flex-col items-end shrink-0">
+      <div className="flex flex-col items-end">
         <div className="flex items-center gap-1.5 text-zinc-800 dark:text-zinc-100 font-bold text-lg leading-none">
           {Math.round(weather.temperature)}°C
           <div className="group-hover:scale-110 transition-transform duration-300">
              {getWeatherIcon(weather.weatherCode)}
           </div>
         </div>
-        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate max-w-[120px]">{getWeatherDescription(weather.weatherCode)}</span>
+        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">{getWeatherDescription(weather.weatherCode)}</span>
       </div>
       
-      <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 md:mx-2 shrink-0"></div>
+      <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-700 mx-1"></div>
 
-      <div className="flex flex-col justify-center min-w-0 flex-1 md:flex-none">
-        <div className="flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide" title={weather.city}>
+      <div className="flex flex-col justify-center min-w-[80px]">
+        <div className="flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide truncate max-w-[150px]" title={weather.city}>
            <MapPin size={12} className="text-red-500 shrink-0" /> <span className="truncate">{weather.city}</span>
         </div>
         <button 
@@ -174,8 +198,8 @@ export const WeatherWidget: React.FC = () => {
             className="flex items-center gap-1 mt-0.5 text-[10px] text-zinc-400 hover:text-ministral-500 transition-colors"
             disabled={refreshing}
         >
-            <span className="shrink-0">Atualizar Local</span>
-            <RefreshCw size={8} className={`shrink-0 ${refreshing ? "animate-spin text-ministral-500" : ""}`}/>
+            <span className="truncate">Atualizar Local</span>
+            <RefreshCw size={8} className={refreshing ? "animate-spin text-ministral-500" : ""}/>
         </button>
       </div>
     </div>

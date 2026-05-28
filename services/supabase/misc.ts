@@ -5,22 +5,19 @@ import { notifySuperAdmins } from './notifications';
 export const fetchWhatsAppSettings = async (orgId: string): Promise<WhatsAppSettings | null> => {
     const sb = getSupabase();
     if (!sb) return null;
-    // Tenta organization_id primeiro; fallback para org_id durante migração
-    const { data } = await sb.from('whatsapp_settings').select('*').eq('organization_id', orgId).maybeSingle();
-    if (data) return data;
-    const { data: fallback } = await sb.from('whatsapp_settings').select('*').eq('org_id', orgId).maybeSingle();
-    return fallback || null;
+    const { data } = await sb.from('whatsapp_settings').select('*').eq('org_id', orgId).maybeSingle();
+    return data || null;
 };
 
 export const upsertWhatsAppSettings = async (orgId: string, settings: Partial<WhatsAppSettings>) => {
     const sb = getSupabase();
     if (!sb) return;
     const { error } = await sb.from('whatsapp_settings').upsert({
-        organization_id: orgId,
+        org_id: orgId,
         enabled: settings.enabled ?? true,
         send_days_before: settings.send_days_before ?? 0,
         send_time: settings.send_time ?? '09:00:00'
-    }, { onConflict: 'organization_id' });
+    }, { onConflict: 'org_id' });
     if (error) throw error;
 };
 
@@ -427,13 +424,13 @@ export const scheduleWhatsAppNotification = async (
     // Remove agendamento anterior para o mesmo evento (se houver)
     await sb.from('whatsapp_scheduled_notifications')
         .delete()
-        .eq('organization_id', orgId)
+        .eq('org_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('event_rule_id', eventRuleId)
         .eq('event_date', eventDate);
 
     const { error } = await sb.from('whatsapp_scheduled_notifications').insert({
-        organization_id: orgId,
+        org_id: orgId,
         ministry_id: ministryId,
         event_rule_id: eventRuleId,
         event_date: eventDate,
@@ -462,7 +459,7 @@ export const fetchScheduledNotifications = async (
     if (!sb) return [];
     const { data } = await sb.from('whatsapp_scheduled_notifications')
         .select('*')
-        .eq('organization_id', orgId)
+        .eq('org_id', orgId)
         .eq('ministry_id', ministryId)
         .order('scheduled_at', { ascending: true });
     return data || [];

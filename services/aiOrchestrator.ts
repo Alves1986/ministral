@@ -1,9 +1,14 @@
 // services/aiOrchestrator.ts
-// ─── Gemini API — nativa e otimizada ───────────────────────
+// ─── OpenRouter API — sem dependências externas de IA ───────────────────────
+
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 function getApiKey(): string {
+  if (typeof window !== 'undefined') {
+    return (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '';
+  }
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+    return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
   }
   return '';
 }
@@ -20,23 +25,40 @@ export enum AI_TASKS {
   SCALE_GENERATION = 'SCALE_GENERATION'
 }
 
-export const AI_MODELS = [
+export const OPENROUTER_MODELS = [
   {
-    id: 'gemini-3.5-flash',
-    name: 'Gemini 3.5 Flash (Rápido)',
-    description: 'Modelo veloz e eficiente para análises e reescritas diárias.'
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Gemma 4 31B (Google - Recomendado)',
+    description: 'A mais recente versão do Google. Alta performance em raciocínio e visão.'
   },
   {
-    id: 'gemini-3.1-pro-preview',
-    name: 'Gemini 3.1 Pro (Maior Capacidade)',
-    description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
+    id: 'deepseek/deepseek-r1:free',
+    name: 'DeepSeek R1 (Raciocínio)',
+    description: 'Especialista em lógica e cadeias de pensamento complexas.'
+  },
+  {
+    id: 'qwen/qwen-3-coder-480b:free',
+    name: 'Qwen 3 Coder (Especialista)',
+    description: 'Modelo massivo de 480B otimizado para lógica estruturada e dados.'
+  },
+  {
+    id: 'openai/gpt-oss-120b:free',
+    name: 'GPT OSS 120B (OpenAI MoE)',
+    description: 'Arquitetura Mixture-of-Experts para respostas versáteis e rápidas.'
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Llama 3.3 70B (Meta)',
+    description: 'Equilíbrio perfeito entre velocidade e inteligência geral.'
+  },
+  {
+    id: 'openrouter/free',
+    name: 'Automático (Melhor Disponível)',
+    description: 'O OpenRouter seleciona automaticamente o melhor modelo gratuito disponível.'
   }
 ];
 
-// exportação legada para compatibilidade se tiver algo estrito chamando:
-export const OPENROUTER_MODELS = AI_MODELS;
-
-export const DEFAULT_MODEL = AI_MODELS[0].id;
+export const DEFAULT_MODEL = OPENROUTER_MODELS[0].id;
 
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
@@ -162,72 +184,149 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.SCALE_GENERATION]: (_data) => '',
 };
 
-async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
+async function callOpenRouter(prompt: string, taskType: AI_TASKS, model: string): Promise<string> {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('GEMINI_API_KEY não configurada.');
+  if (!apiKey) throw new Error('VITE_OPENROUTER_API_KEY não configurada.');
 
   const isJson = JSON_TASKS.has(taskType);
-  const { GoogleGenAI, Type } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey });
 
-  const config: any = {
-    systemInstruction: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.'
+  const body: any = {
+    model,
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'system',
+        content: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.' +
+          (isJson ? ' Responda SOMENTE com JSON válido, sem markdown, sem blocos de código, sem texto adicional.' : '')
+      },
+      { role: 'user', content: prompt }
+    ],
   };
 
-  if (isJson) {
-      config.responseMimeType = "application/json";
-  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://ministral.app',
+        'X-Title': 'Ministral',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
     });
-    const content = response.text || '';
-    if (!content) throw new Error('Gemini retornou resposta vazia.');
+
+    if (!res.ok) {
+      const respText = await res.text();
+      let errMsg = `OpenRouter error ${res.status}`;
+      try {
+        const errObj = JSON.parse(respText);
+        errMsg = errObj?.error?.message || errObj?.message || errMsg;
+      } catch (e: any) {
+        errMsg += ` - ${respText.slice(0, 200)}`;
+      }
+      console.log("[callOpenRouter] Failed request response:", respText);
+      const error = new Error(errMsg) as any;
+      error.status = res.status;
+      throw error;
+    }
+
+    const data = await res.json();
+    
+    // Check if OpenRouter sent an error object inside a 200 OK
+    if (data.error) {
+      throw Object.assign(new Error(data.error.message || 'OpenRouter API Error'), { status: res.status });
+    }
+
+    const content = data.choices?.[0]?.message?.content;
+    if (content === undefined || content === null || content === '') {
+      console.warn('[callOpenRouter] Resposta vazia ou nula:', JSON.stringify(data));
+      throw new Error(`OpenRouter retornou resposta vazia. ${data.error ? data.error.message : ''}`);
+    }
     return content;
   } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Timeout: modelo ${model} não respondeu em 45s.`);
+    }
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const order = preferredModel
-    ? [preferredModel, ...AI_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
-    : AI_MODELS.map(m => m.id);
+const CREDIT_LIMIT_CODES = [402];
+const CREDIT_LIMIT_MESSAGES = ['insufficient', 'credit', 'balance'];
 
-  let lastErr: Error = new Error('Todos os modelos falharam.');
-  for (const model of order) {
+function isCreditLimitError(status: number, message: string): boolean {
+  if (CREDIT_LIMIT_CODES.includes(status)) return true;
+  const lower = message.toLowerCase();
+  return CREDIT_LIMIT_MESSAGES.some(keyword => lower.includes(keyword));
+}
+
+function isRateLimitError(status: number, message: string): boolean {
+  if (status === 429) return true;
+  const lower = message.toLowerCase();
+  return lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('temporarily rate-limited');
+}
+
+async function callSelectedModel(prompt: string, taskType: AI_TASKS, selectedModel: string, retries = 3): Promise<string> {
+  let lastErr: any;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await callAI(prompt, taskType, model);
+      return await callOpenRouter(prompt, taskType, selectedModel);
     } catch (err: any) {
-      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
       lastErr = err;
+      let message = err.message || '';
+      const status = err.status || 0;
+      
+      // Se a mensagem for encapsulada, tenta achar a real
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed.error && parsed.error.message) {
+            message = parsed.error.message;
+        }
+      } catch(e) {}
+      
+      // Se for limite da conta/crédito (402), aborta imediatamente
+      if (isCreditLimitError(status, message)) {
+        throw Object.assign(
+          new Error(`A conta do OpenRouter atingiu o limite de créditos.`),
+          { isCreditLimit: true, modelId: selectedModel }
+        );
+      }
+      
+      const isOverloaded = isRateLimitError(status, message);
+      console.warn(`[callSelectedModel] Tentativa ${attempt} falhou para o modelo ${selectedModel}. status=${status}`);
+      
+      if (attempt < retries) {
+        // Pausa longa se for rate limit (OpenRouter pede para tentar novamente mais tarde)
+        const delay = isOverloaded ? 3000 * attempt : 1500;
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        // Se finalizou tentativas e é rate limit
+        if (isOverloaded) {
+          throw Object.assign(
+            new Error(`O modelo gratuito selecionado está sobrecarregado no momento. Tente novamente ou troque de modelo.`),
+            { isRateLimit: true, modelId: selectedModel }
+          );
+        }
+      }
     }
   }
-  console.error(`[runAI] Todos os modelos falharam. Último erro:`, lastErr);
-  throw lastErr;
+  
+  if (lastErr) throw lastErr;
+  throw new Error("Falha desconhecida no OpenRouter.");
 }
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
-  if (typeof window !== 'undefined') {
-    // Estamos no navegador: chamar nosso backend ao invés de ligar diretamente (esconde API Key)
-    const res = await fetch('/api/ai/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ taskType, context, payload, preferredModel })
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        try {
-            const err = JSON.parse(text);
-            throw new Error(err.error || 'Erro na camada de proxy da IA');
-        } catch(e) {
-            throw new Error(`Erro na API (${res.status}): ${text}`);
-        }
-    }
-    return res.json();
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const err = new Error('VITE_OPENROUTER_API_KEY não configurada nas variáveis de ambiente.');
+    throw err;
   }
 
   if (taskType === AI_TASKS.SCALE_GENERATION) {
@@ -260,53 +359,68 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
   `;
 
   try {
-    const content = await callWithFallback(fullPrompt, taskType, preferredModel);
+    const modelToUse = preferredModel || DEFAULT_MODEL;
+    const content = await callSelectedModel(fullPrompt, taskType, modelToUse);
     return parseAIResponse(content, taskType);
   } catch (error: any) {
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
+    if (error.isCreditLimit || error.isRateLimit) {
+      throw error;
+    }
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
   }
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
-  let cleaned = content;
+  let cleaned = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  
   try {
-    cleaned = cleaned.trim();
-    
+    // 1. Tentar extrair de blocos de código markdown
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
-      const parsed = JSON.parse(jsonBlockMatch[1].trim());
-      return extractByTask(parsed, taskType);
+      const blockContent = jsonBlockMatch[1].trim();
+      try {
+        return extractByTask(JSON.parse(blockContent), taskType);
+      } catch (e) {
+        console.warn('[parseAIResponse] Falha ao parsear bloco JSON markdown:', e);
+      }
     }
     
+    // 2. Tentar encontrar o primeiro { ou [ e o último } ou ] de forma independente
+    // Isso evita que um [ no texto antes de um { estrague a extração do objeto
     const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
     const firstBracket = cleaned.indexOf('[');
-    let jsonStart = -1;
-    let jsonEnd = -1;
+    const lastBracket = cleaned.lastIndexOf(']');
+
+    // Priorizamos o que parece ser o container principal
+    // Se temos tanto {} quanto [], vemos qual envolve o outro ou qual começa primeiro de forma válida
     
-    if (firstBrace !== -1 && firstBracket !== -1) {
-      if (firstBrace < firstBracket) {
-        jsonStart = firstBrace;
-        jsonEnd = cleaned.lastIndexOf('}') + 1;
-      } else {
-        jsonStart = firstBracket;
-        jsonEnd = cleaned.lastIndexOf(']') + 1;
-      }
-    } else if (firstBrace !== -1) {
-      jsonStart = firstBrace;
-      jsonEnd = cleaned.lastIndexOf('}') + 1;
-    } else if (firstBracket !== -1) {
-      jsonStart = firstBracket;
-      jsonEnd = cleaned.lastIndexOf(']') + 1;
+    const candidates: { start: number; end: number; priority: number }[] = [];
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      candidates.push({ start: firstBrace, end: lastBrace, priority: 1 });
+    }
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      candidates.push({ start: firstBracket, end: lastBracket, priority: 2 });
     }
 
-    if (jsonStart !== -1 && jsonEnd > jsonStart) {
-      const jsonStr = cleaned.slice(jsonStart, jsonEnd);
-      const parsed = JSON.parse(jsonStr);
-      return extractByTask(parsed, taskType);
+    // Ordenar por ordem de aparição para tentar o primeiro JSON válido encontrado
+    candidates.sort((a, b) => a.start - b.start);
+
+    for (const cand of candidates) {
+      try {
+        const jsonStr = cleaned.slice(cand.start, cand.end + 1);
+        const parsed = JSON.parse(jsonStr);
+        return extractByTask(parsed, taskType);
+      } catch (e) {
+        // Continua para o próximo candidato se falhar
+      }
     }
+
+    // 3. Fallback: retornar o conteúdo limpo se nada funcionar
     return cleaned;
   } catch (err) {
+    console.warn('[parseAIResponse] Falha crítica no processamento:', err);
     return cleaned;
   }
 }
@@ -352,33 +466,11 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   function isMemberAvailable(memberId: string, date: string, time: string): boolean {
     const avail = data.availability[memberId];
     if (!avail) return false;
-    
-    // Support object format (legacy or from globalConflicts overrides)
     const monthKey = `${date.substring(0, 7)}-01`;
-    if ((avail as any)[monthKey] === 'BLK') return false;
-    
-    const dayVal = (avail as any)[date];
-    if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
-
-    // Check Array format (the actual standard structure from useMinistryQueries)
-    if (Array.isArray(avail)) {
-        if (avail.includes(date)) return true; // Full day
-        
-        // Exact event time (new format)
-        const timePart = time.slice(0, 5); // HH:mm
-        if (avail.includes(`${date}_${timePart}`)) return true;
-        
-        // Legacy Morning / Night blocks
-        const hour = parseInt(timePart.slice(0, 2), 10);
-        const isMorning = hour < 12; // Use standard \`< 12\` check
-        if (isMorning && avail.includes(`${date}_M`)) return true;
-        if (!isMorning && avail.includes(`${date}_N`)) return true;
-        
-        return false;
-    }
-
-    // Default object literal fallback if not array
+    if (avail[monthKey] === 'BLK') return false;
+    const dayVal = avail[date];
     if (!dayVal) return false;
+    if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
     if (dayVal === 'all') return true;
     const hour = parseInt(time.split(':')[0], 10);
     if (dayVal === 'M') return hour < 12;

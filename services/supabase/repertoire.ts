@@ -27,25 +27,6 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
 export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
     const sb = getSupabase();
     if (!sb) return false;
-
-    // Tenta resolver event_rule_id a partir de schedule_assignments na mesma data
-    let eventRuleId: string | null = null;
-    try {
-        const { data: ass } = await sb
-            .from('schedule_assignments')
-            .select('event_rule_id')
-            .eq('organization_id', orgId)
-            .eq('ministry_id', ministryId)
-            .eq('event_date', item.date)
-            .limit(1)
-            .maybeSingle();
-        if (ass?.event_rule_id) {
-            eventRuleId = ass.event_rule_id;
-        }
-    } catch (e) {
-        console.error("Erro ao resolver event_rule_id:", e);
-    }
-
     const { error } = await sb.from('repertoire_items').insert({
         organization_id: orgId,
         ministry_id: ministryId,
@@ -53,8 +34,7 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
         link: item.link,
         event_date: item.date,
         added_by: item.addedBy,
-        content: item.content,
-        event_rule_id: eventRuleId
+        content: item.content
     });
 
     if (!error) {

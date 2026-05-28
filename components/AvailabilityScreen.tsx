@@ -40,9 +40,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState("");
   const [dayModalOpen, setDayModalOpen] = useState<number | null>(null);
   
-  // Flag para impedir que o Realtime do Supabase sobrescreva um optimistic update em andamento
-  const isSyncing = React.useRef<boolean>(false);
-  
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
@@ -98,7 +95,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
     // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
     // com os dados mais recentes antes de repaginar a página pra Idle.
-    if (saveState !== 'idle' || isSyncing.current) return;
+    if (saveState !== 'idle') return;
 
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
@@ -125,7 +122,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!canEdit) return;
       if (isSaveLocked) return; // Bloqueio visual
 
-      isSyncing.current = true;
       setSaveState('dirty');
 
       if (isBlockedMonth) {
@@ -143,7 +139,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       
       if (isSaveLocked) return; // Bloqueio visual
 
-      isSyncing.current = true;
       setSaveState('dirty');
       
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -175,7 +170,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleToggleSpecificEvent = (eventTime: string, isSunday: boolean, day: number) => {
       if (isSaveLocked) return;
-      isSyncing.current = true;
       setSaveState('dirty');
 
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -183,8 +177,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (isSunday) {
           const hour = parseInt(eventTime.split(':')[0], 10);
           period = hour < 12 ? `${dateBase}_M` : `${dateBase}_N`;
-      } else {
-          period = `${dateBase}_${eventTime}`;
       }
 
       setTempDates(prev => {
@@ -200,35 +192,14 @@ export const AvailabilityScreen: React.FC<Props> = ({
              return updated;
           }
 
-          if (updated.includes(dateBase) && !isSunday) {
-              updated = updated.filter(d => d !== dateBase);
-              const dayEvents = (events || []).filter(e => e.iso.startsWith(dateBase));
-              for (const ev of dayEvents) {
-                  if (ev.time !== eventTime) {
-                      updated.push(`${dateBase}_${ev.time}`);
-                  }
-              }
-              return updated;
-          }
-
           if (updated.includes(period)) {
               updated = updated.filter(d => d !== period);
           } else {
               updated.push(period);
               // Check if now they have both M and N, we can upgrade to full day
-              if (isSunday && updated.includes(`${dateBase}_M`) && updated.includes(`${dateBase}_N`)) {
+              if (updated.includes(`${dateBase}_M`) && updated.includes(`${dateBase}_N`)) {
                   updated = updated.filter(d => d !== `${dateBase}_M` && d !== `${dateBase}_N`);
                   updated.push(dateBase);
-              }
-              if (!isSunday) {
-                  const dayEvents = (events || []).filter(e => e.iso.startsWith(dateBase));
-                  const allOtherEventsPresent = dayEvents.every(ev => updated.includes(`${dateBase}_${ev.time}`));
-                  if (allOtherEventsPresent && dayEvents.length > 0) {
-                      dayEvents.forEach(ev => {
-                          updated = updated.filter(d => d !== `${dateBase}_${ev.time}`);
-                      });
-                      updated.push(dateBase);
-                  }
               }
           }
           return updated;
@@ -237,7 +208,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       if (isSaveLocked) return;
-      isSyncing.current = true;
       setGeneralNote(e.target.value);
       setSaveState('dirty');
   };
@@ -247,7 +217,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
-      isSyncing.current = true;
       setSaveState('saving');
 
       try {
@@ -296,12 +265,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
           });
           
           // ESTADO TERMINAL DE SUCESSO
-          isSyncing.current = false;
           setSaveState('saved');
           
       } catch (error: unknown) {
           console.error(error);
-          isSyncing.current = false;
           setSaveState('dirty'); // Permite tentar novamente
           const msg = error instanceof Error ? error.message : "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
@@ -552,8 +519,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             else if (isSunday) {
                                 if (hour < 14 && hasMorning) isAvailable = true;
                                 if (hour >= 14 && hasNight) isAvailable = true;
-                            } else {
-                                if (tempDates.includes(`${dateBase}_${ev.iso.split('T')[1].slice(0,5)}`)) isAvailable = true;
                             }
 
                             const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-rose-500', 'bg-cyan-500'];
@@ -573,7 +538,27 @@ export const AvailabilityScreen: React.FC<Props> = ({
                                     <button 
                                         onClick={() => {
                                             if (isSaveLocked) return;
-                                            handleToggleSpecificEvent(ev.iso.split('T')[1].slice(0,5), isSunday, dayModalOpen);
+                                            setSaveState('dirty');
+                                            
+                                            let newDates = [...tempDates];
+                                            if (isAvailable) {
+                                                // remove
+                                                if (isSunday) {
+                                                    if (hour < 14) newDates = newDates.filter(d => d !== `${dateBase}_M` && d !== dateBase);
+                                                    else newDates = newDates.filter(d => d !== `${dateBase}_N` && d !== dateBase);
+                                                } else {
+                                                    newDates = newDates.filter(d => d !== dateBase);
+                                                }
+                                            } else {
+                                                // add
+                                                if (isSunday) {
+                                                    if (hour < 14 && !newDates.includes(`${dateBase}_M`)) newDates.push(`${dateBase}_M`);
+                                                    else if (hour >= 14 && !newDates.includes(`${dateBase}_N`)) newDates.push(`${dateBase}_N`);
+                                                } else {
+                                                    if (!hasFull) newDates.push(dateBase);
+                                                }
+                                            }
+                                            setTempDates(newDates);
                                         }}
                                         className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
                                             isAvailable 
@@ -648,7 +633,58 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         </div>
 
+        {/* DAY EVENTS MODAL */}
+        {dayModalOpen && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setDayModalOpen(null)}>
+                <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-sm flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+                            Eventos do dia {dayModalOpen}
+                        </h3>
+                        <button onClick={() => setDayModalOpen(null)} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                            <span className="sr-only">Fechar</span>
+                            &times;
+                        </button>
+                    </div>
 
+                    <div className="space-y-3">
+                        {(() => {
+                            const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                            const dayEvents = (events || []).filter(e => e.iso.startsWith(dateBase));
+                            const dateObj = new Date(year, month - 1, dayModalOpen);
+                            const isSunday = dateObj.getDay() === 0;
+
+                            if (dayEvents.length === 0) return <p className="text-sm text-zinc-500">Nenhum evento neste dia.</p>;
+
+                            return dayEvents.map(event => {
+                                const hour = parseInt(event.time.split(':')[0], 10);
+                                const period = isSunday ? (hour < 12 ? `${dateBase}_M` : `${dateBase}_N`) : dateBase;
+                                const isAvailable = tempDates.includes(dateBase) || tempDates.includes(period);
+
+                                const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-rose-500', 'bg-cyan-500'];
+                                let hash = 0;
+                                for (let i = 0; i < event.title.length; i++) hash = event.title.charCodeAt(i) + ((hash << 5) - hash);
+                                const eventColor = colors[Math.abs(hash) % colors.length];
+
+                                return (
+                                    <label key={event.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isAvailable ? 'bg-secondary/10 border-secondary ring-1 ring-secondary' : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                                        <input type="checkbox" className="hidden" checked={isAvailable} onChange={() => handleToggleSpecificEvent(event.time, isSunday, dayModalOpen)} />
+                                        <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border ${isAvailable ? 'bg-secondary border-secondary text-white' : 'border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'}`}>
+                                            {isAvailable && <Check size={14} strokeWidth={3} />}
+                                        </div>
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${eventColor}`}></div>
+                                        <div className="flex-1">
+                                            <p className={`font-bold text-sm ${isAvailable ? 'text-secondary dark:text-secondary' : 'text-zinc-700 dark:text-zinc-300'}`}>{event.title}</p>
+                                            <p className="text-xs text-zinc-500">{event.time}</p>
+                                        </div>
+                                    </label>
+                                );
+                            });
+                        })()}
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

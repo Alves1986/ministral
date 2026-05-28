@@ -37,22 +37,23 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     }
 
     if (!membershipsData || membershipsData.length === 0) return [];
-    
+
     const members = membershipsData.map((m: any) => Array.isArray(m.profiles) ? m.profiles[0] : m.profiles).filter(Boolean);
     const userIds = members.map((m: any) => m.id);
     const todayStr = new Date().toISOString().slice(0, 10);
+    const todayMiddayStr = `${todayStr}T12:00:00`;
     const now = new Date();
 
     const { data: ministryAnnouncements } = await sb.from('announcements')
         .select('id')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId);
-    
+
     const announcementIds = (ministryAnnouncements || []).map((a: any) => a.id);
 
     const [
-        assignmentsRes, 
-        swapsRes, 
+        assignmentsRes,
+        swapsRes,
         interactionsRes,
         swapsAssumedRes,
         availabilityRes,
@@ -61,7 +62,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     ] = await Promise.all([
         sb.from('schedule_assignments').select('member_id, event_date, role, confirmed, event_rules(time)').eq('organization_id', orgId).eq('ministry_id', ministryId).lte('event_date', todayStr),
         sb.from('swap_requests').select('requester_id, created_at, status').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        announcementIds.length > 0 
+        announcementIds.length > 0
             ? sb.from('announcement_interactions').select('user_id, interaction_type, created_at').eq('organization_id', orgId).in('user_id', userIds).in('announcement_id', announcementIds)
             : Promise.resolve({ data: [], error: null }),
         sb.from('swap_requests').select('taken_by_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('status', 'completed').not('taken_by_id', 'is', null),
@@ -73,13 +74,24 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const allAssignments = assignmentsRes.data || [];
     const assignments = allAssignments.filter((a: any) => a.confirmed === true);
     const checkinMissesData = allAssignments.filter((a: any) => a.confirmed !== true);
-    
+
     const swaps = swapsRes.data || [];
     const interactions = interactionsRes.data || [];
     const swapsAssumed = swapsAssumedRes.data || [];
     const availabilities = availabilityRes.data || [];
     const ministryMemberships = ministryMembershipsRes.data || [];
     const profiles = profilesRes.data || [];
+
+    const getEventDateTimeStr = (a: any, defaultTime = '12:00:00') => {
+        let timeStr = defaultTime;
+        if (a.event_rules && typeof a.event_rules === 'object' && !Array.isArray(a.event_rules)) {
+            timeStr = a.event_rules.time || defaultTime;
+        } else if (Array.isArray(a.event_rules) && a.event_rules.length > 0) {
+            timeStr = a.event_rules[0].time || defaultTime;
+        }
+        if (timeStr.length === 5) timeStr += ':00';
+        return `${a.event_date}T${timeStr}`;
+    };
 
     return (members || []).map((m: any) => {
         let points = 0;
@@ -89,12 +101,12 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         const memberAssignments = assignments.filter((a: any) => a.member_id === m.id);
         points += memberAssignments.length * GC.assignment;
         memberAssignments.forEach((a: any) => {
-            history.push({ 
-                id: `assign-${a.member_id}-${a.event_date}`, 
-                date: a.event_date, 
-                description: `Escala Confirmada: ${a.role}`, 
-                points: GC.assignment, 
-                type: 'assignment' 
+            history.push({
+                id: `assign-${a.member_id}-${a.event_date}`,
+                date: getEventDateTimeStr(a),
+                description: `Escala Confirmada: ${a.role}`,
+                points: GC.assignment,
+                type: 'assignment'
             });
         });
 
@@ -106,7 +118,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             streakCount++;
             history.push({
                 id: `streak-${m.id}-${sortedAssignments[i].event_date}`,
-                date: sortedAssignments[i].event_date,
+                date: getEventDateTimeStr(sortedAssignments[i]),
                 description: 'Bonus de Sequencia: 3 escalas seguidas',
                 points: GC.streak_bonus,
                 type: 'streak_bonus'
@@ -162,15 +174,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         // 5. CHECK-IN ESQUECIDO
         const misses = checkinMissesData.filter((a: any) => {
             if (a.member_id !== m.id || a.confirmed) return false;
-            let timeStr = '23:59:59';
-            if (a.event_rules && typeof a.event_rules === 'object' && !Array.isArray(a.event_rules)) {
-                 timeStr = a.event_rules.time || '23:59:59';
-            } else if (Array.isArray(a.event_rules) && a.event_rules.length > 0) {
-                 timeStr = a.event_rules[0].time || '23:59:59';
-            }
-            if (timeStr.length === 5) timeStr += ':00'; // Append seconds if hh:mm
-            
-            const eventDateTime = new Date(`${a.event_date}T${timeStr}`);
+            const eventDateTime = new Date(getEventDateTimeStr(a, '23:59:59'));
             // Add 120 minutes to allow the user checking in late
             const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
             return checkinClosedTime < now;
@@ -179,7 +183,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         misses.forEach((a: any) => {
             history.push({
                 id: `miss-${m.id}-${a.event_date}`,
-                date: a.event_date,
+                date: getEventDateTimeStr(a, '23:59:59'),
                 description: 'Check-in nao marcado',
                 points: GC.checkin_miss,
                 type: 'checkin_miss'
@@ -192,7 +196,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
             points += GC.profile_complete;
             history.push({
                 id: `profile-${m.id}`,
-                date: m.created_at || todayStr,
+                date: m.created_at || todayMiddayStr,
                 description: 'Perfil Completo',
                 points: GC.profile_complete,
                 type: 'profile_complete'
@@ -213,7 +217,7 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
                     points += GC.month_complete;
                     history.push({
                         id: `month-bonus-${m.id}-${todayStr.slice(0, 7)}`,
-                        date: todayStr,
+                        date: todayMiddayStr,
                         description: 'Bonus: Todas as escalas do mes sem trocas',
                         points: GC.month_complete,
                         type: 'month_complete'
@@ -225,22 +229,22 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         // 8. CURTIDAS E LEITURAS
         const memberReads = interactions.filter((i: any) => i.user_id === m.id && i.interaction_type === 'read');
         points += memberReads.length * GC.announcement_read;
-        memberReads.forEach((i: any) => history.push({ 
-            id: `read-${m.id}-${i.created_at}`, 
-            date: i.created_at, 
-            description: `Leu um Aviso`, 
-            points: GC.announcement_read, 
-            type: 'announcement_read' 
+        memberReads.forEach((i: any) => history.push({
+            id: `read-${m.id}-${i.created_at}`,
+            date: i.created_at,
+            description: `Leu um Aviso`,
+            points: GC.announcement_read,
+            type: 'announcement_read'
         }));
 
         const memberLikes = interactions.filter((i: any) => i.user_id === m.id && i.interaction_type === 'like');
         points += memberLikes.length * GC.announcement_like;
-        memberLikes.forEach((i: any) => history.push({ 
-            id: `like-${m.id}-${i.created_at}`, 
-            date: i.created_at, 
-            description: `Curtiu um Aviso`, 
-            points: GC.announcement_like, 
-            type: 'announcement_like' 
+        memberLikes.forEach((i: any) => history.push({
+            id: `like-${m.id}-${i.created_at}`,
+            date: i.created_at,
+            description: `Curtiu um Aviso`,
+            points: GC.announcement_like,
+            type: 'announcement_like'
         }));
 
         // Excluded: if (points < 0) points = 0;

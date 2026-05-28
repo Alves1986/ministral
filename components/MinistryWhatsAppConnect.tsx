@@ -19,8 +19,6 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
   const [resolvedMinistryName, setResolvedMinistryName] = useState<string | null>(null);
   // CORREÇÃO: ref para evitar setState em componente desmontado
   const isMounted = useRef(true);
-  // Backoff exponencial: delay cresce a cada tentativa (máx 20s)
-  const pollDelay = useRef(3000);
 
   const supabase = getSupabase();
 
@@ -120,51 +118,35 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, mi
   };
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
+    let interval: any;
+    let timeout: any;
     if (status === 'qr' && instanceName) {
       setPollCount(0);
       setShowAlreadyConnected(false);
-      pollDelay.current = 3000; // Reset do backoff ao iniciar nova sessão QR
-
-      // Mostra o botão "Já conectei" após 15s
-      const alreadyConnectedTimeout = setTimeout(() => setShowAlreadyConnected(true), 15000);
-
-      // Função recursiva de polling com backoff exponencial
-      const scheduleNextPoll = () => {
-        timeoutId = setTimeout(async () => {
-          if (!isMounted.current) return;
-
-          setPollCount(prev => {
-            const next = prev + 1;
-            // Para automaticamente após 25 tentativas (~3 minutos no total)
-            if (next > 25) {
-              setShowAlreadyConnected(true);
-              return prev;
-            }
-            return next;
-          });
-
-          // Executa o poll
-          if (instanceName && isMounted.current) {
-            const isConnected = await pollStatus(instanceName);
-            if (!isConnected && isMounted.current) {
-              // Aumenta o delay com backoff exponencial (máx 20s)
-              pollDelay.current = Math.min(pollDelay.current * 1.5, 20000);
-              scheduleNextPoll();
-            }
-          }
-        }, pollDelay.current);
-      };
-
-      scheduleNextPoll();
-
-      return () => {
-        clearTimeout(timeoutId);
-        clearTimeout(alreadyConnectedTimeout);
-      };
+      
+      timeout = setTimeout(() => setShowAlreadyConnected(true), 15000);
+      
+      interval = setInterval(() => {
+        setPollCount(prev => prev + 1);
+      }, 3000);
     }
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, [status, instanceName]);
+
+  useEffect(() => {
+    if (status === 'qr' && pollCount > 0 && instanceName) {
+      const runPoll = async () => {
+        const isConnected = await pollStatus(instanceName);
+        if (!isConnected && pollCount >= 3) {
+           await checkConnection(); // fallback
+        }
+      };
+      runPoll();
+    }
+  }, [pollCount, instanceName, status]);
 
   useEffect(() => {
     if (status === 'loading') {

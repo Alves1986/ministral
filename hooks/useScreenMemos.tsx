@@ -174,16 +174,12 @@ export function useScreenMemos(props: ScreenMemosProps) {
     />
   ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData]);
 
-  const repertoireScreen = useMemo(() => {
-    const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
-    const canManage = isAdmin || isMinister;
-    return (
+  const repertoireScreen = useMemo(() => (
     <>
       {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="view" ministryId={ministryId} integrations={integrations} />}
-      {(currentTab === 'repertoire-manager' && canManage && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} integrations={integrations} />}
+      {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} integrations={integrations} />}
     </>
-    );
-  }, [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations]);
+  ), [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations]);
 
   return { availabilityScreen, swapsScreen, announcementsScreen, repertoireScreen };
 }

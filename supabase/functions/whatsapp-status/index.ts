@@ -22,75 +22,24 @@ serve(async (req: Request) => {
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
 
+    // ── CORREÇÃO: Validar ambas as credenciais antes de usar ──────────────
     if (!evolutionApiUrl || !evolutionApiKey) {
       throw new Error("Credenciais da Evolution API (URL e/ou KEY) não configuradas.");
     }
 
-    const body = await req.json().catch(() => ({}));
-    const { instance_name, ministry_id } = body;
+    const { instance_name } = await req.json();
 
-    if (!instance_name && !ministry_id) {
-      throw new Error("instance_name ou ministry_id é obrigatório");
+    if (!instance_name) {
+      throw new Error("instance_name é obrigatório");
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── SEGURANÇA: Validar se a instância pertence à organização e verificar JWT (SEC-02) ──
-    let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id");
-    
-    if (instance_name) {
-      query = query.eq("instance_name", instance_name);
-    } else {
-      query = query.eq("ministry_id", ministry_id);
-    }
-
-    const { data: mwa, error: mwaErr } = await query.maybeSingle();
-
-    if (mwaErr || !mwa) {
-      throw new Error("Instância WhatsApp não vinculada a nenhum ministério cadastrado.");
-    }
-
-    const currentInstanceName = instance_name || mwa.instance_name;
-    const targetOrgId = mwa.organization_id;
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Authorization header ausente.");
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !user) {
-      throw new Error("Usuário não autenticado: " + (userErr?.message || "Não encontrado"));
-    }
-
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("is_admin, is_super_admin, organization_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileErr || !profile) {
-      throw new Error("Perfil do usuário não encontrado.");
-    }
-
-    const isAuthorized =
-      profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === targetOrgId);
-
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: "Acesso negado. Administrador requerido para consultar status." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ── Executa a consulta de status física na Evolution API ──
-    const endpoint = `${evolutionApiUrl}/instance/connectionState/${currentInstanceName}`;
+    const endpoint = `${evolutionApiUrl}/instance/connectionState/${instance_name}`;
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {
-        "apikey": evolutionApiKey,
+        "apikey": evolutionApiKey, // Agora garantidamente string
       },
     });
 
@@ -111,7 +60,7 @@ serve(async (req: Request) => {
         connected:    true,
         phone_number: phone,
         updated_at:   new Date().toISOString(),
-      }).eq("instance_name", currentInstanceName);
+      }).eq("instance_name", instance_name);
 
       return new Response(
         JSON.stringify({ state: "open", phone }),

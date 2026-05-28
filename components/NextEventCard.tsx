@@ -3,7 +3,6 @@ import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, C
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
 import { useMinistryData } from '../hooks/useMinistryData'; // Import hook to get data
-import { ServiceSchedule } from './ServiceSchedule';
 
 // UPDATE PROPS: Remove explicit event/schedule/etc if we use internal data or update usage
 interface Props {
@@ -23,7 +22,6 @@ type TimeStatus = 'early' | 'open' | 'closed';
 export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, attendance, roles, members, onConfirm, ministryId, ministryName, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [countdownString, setCountdownString] = useState('');
-  const [showServiceSchedule, setShowServiceSchedule] = useState(false);
   
   // Use data directly passed from the new hook structure in App.tsx
   // The prop `event` now comes as `nextEvent` from `useMinistryData` which has `{ event, members }` structure.
@@ -38,11 +36,17 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
     const eventDate = new Date(eventData.iso);
     const diffInMinutes = (now.getTime() - eventDate.getTime()) / (1000 * 60);
 
-    const pad = (n: number) => n.toString().padStart(2, '0');
+    // Dynamic window based on type
+    const isSingle = eventData.type === 'single';
+    // If single, valid until 23:59 of that day.
+    // If weekly/recurring, valid for 2 hours after start.
+    
+    let isClosed = diffInMinutes > 60; // 1 hour after
 
-    if (diffInMinutes < -120) {
+    // Opens 30 minutes before
+    if (diffInMinutes < -30) {
       setTimeStatus('early');
-      const openTime = new Date(eventDate.getTime() - 120 * 60 * 1000);
+      const openTime = new Date(eventDate.getTime() - 30 * 60 * 1000);
       let msUntilOpen = openTime.getTime() - now.getTime();
       if (msUntilOpen < 0) msUntilOpen = 0;
 
@@ -51,29 +55,16 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
       const m = Math.floor((totalSeconds % 3600) / 60);
       const s = totalSeconds % 60;
 
+      const pad = (n: number) => n.toString().padStart(2, '0');
       if (h > 0) {
           setCountdownString(`${pad(h)}:${pad(m)}:${pad(s)}`);
       } else {
           setCountdownString(`${pad(m)}:${pad(s)}`);
       }
-    } else if (diffInMinutes > 60) {
+    } else if (isClosed) {
       setTimeStatus('closed');
     } else {
       setTimeStatus('open');
-      const closeTime = new Date(eventDate.getTime() + 60 * 60 * 1000);
-      let msUntilClose = closeTime.getTime() - now.getTime();
-      if (msUntilClose < 0) msUntilClose = 0;
-
-      const totalSeconds = Math.floor(msUntilClose / 1000);
-      const h = Math.floor(totalSeconds / 3600);
-      const m = Math.floor((totalSeconds % 3600) / 60);
-      const s = totalSeconds % 60;
-
-      if (h > 0) {
-          setCountdownString(`${pad(h)}:${pad(m)}:${pad(s)}`);
-      } else {
-          setCountdownString(`${pad(m)}:${pad(s)}`);
-      }
     }
   };
 
@@ -131,79 +122,26 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
       switch (timeStatus) {
           case 'early':
               return (
-                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-black/40 text-white/40 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest cursor-not-allowed border border-white/5">
-                      <Clock size={16} /> Abre em {countdownString}
+                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-black/40 text-white/40 rounded-[1.5rem] text-xs font-black uppercase tracking-widest cursor-not-allowed border border-white/5">
+                      <Clock size={18} /> Libera em {countdownString}
                   </button>
               );
           case 'closed':
               return (
-                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-rose-500/20 text-rose-300 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest cursor-not-allowed border border-rose-500/30">
-                      <AlertCircle size={16} /> Check-in Encerrado
+                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-rose-500/20 text-rose-200 rounded-[1.5rem] text-xs font-black uppercase tracking-widest cursor-not-allowed border border-rose-500/30">
+                      <AlertCircle size={18} /> Período Encerrado
                   </button>
               );
           case 'open':
               return (
                   <button 
                       onClick={() => onConfirm(memberKey)}
-                      className="w-full flex flex-col items-center justify-center gap-1 px-8 py-4 bg-gradient-to-r from-[#c9a84c] to-[#b2933d] hover:from-[#d8b95c] hover:to-[#c9a84c] text-[#0f1f3d] rounded-[1.5rem] shadow-2xl shadow-ministral-gold/20 active:scale-95 transition-all border border-[#c9a84c]/20"
+                      className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-ministral-500 to-ministral-600 hover:from-ministral-400 hover:to-ministral-500 text-white rounded-[1.5rem] text-sm font-black uppercase tracking-widest shadow-2xl shadow-ministral-500/30 active:scale-95 transition-all"
                   >
-                      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
-                          <MapPin size={18} fill="currentColor" className="opacity-80" /> Confirmar Check-in
-                      </div>
-                      <span className="text-[10px] font-bold opacity-80">Fecha em {countdownString}</span>
+                      <MapPin size={20} /> Confirmar Presença Agora
                   </button>
               );
       }
-  };
-
-  const getBackgroundUrl = () => {
-    const name = (ministryName || "").toLowerCase();
-    if (name.includes("mídia") || name.includes("midia") || name.includes("projeção") || name.includes("projecao") || name.includes("transmissão") || name.includes("transmissao") || name.includes("multimídia") || name.includes("multimidia")) {
-      return "https://images.unsplash.com/photo-1542204165-65bf26472b9b?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("som") || name.includes("áudio") || name.includes("audio")) {
-      return "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("louvor") || name.includes("música") || name.includes("musica") || name.includes("banda") || name.includes("canto") || name.includes("coral")) {
-      return "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("recep") || name.includes("boas") || name.includes("acolhimento") || name.includes("portaria")) {
-      return "https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("comunica") || name.includes("marketing") || name.includes("foto")) {
-      return "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("infantil") || name.includes("kids") || name.includes("criança") || name.includes("crianca")) {
-      return "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("joven") || name.includes("juventude") || name.includes("adolescente") || name.includes("mocidade")) {
-      return "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("mulher") || name.includes("feminino") || name.includes("senhora")) {
-      return "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("homen") || name.includes("masculino") || name.includes("senhor") || name.includes("homem")) {
-      return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("dança") || name.includes("danca") || name.includes("teatro") || name.includes("artes") || name.includes("coreografia") || name.includes("teatro")) {
-      return "https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("intercess") || name.includes("oraç") || name.includes("orac")) {
-      return "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("ensino") || name.includes("ebd") || name.includes("escola") || name.includes("estudo") || name.includes("professor")) {
-      return "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("diaconia") || name.includes("diácono") || name.includes("diacono") || name.includes("ceia") || name.includes("serviço") || name.includes("servico")) {
-      return "https://images.unsplash.com/photo-1529070538774-1843cb3265df?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("seguran") || name.includes("estacionamento")) {
-      return "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=600&auto=format&fit=crop";
-    }
-    if (name.includes("limpeza") || name.includes("zeladoria") || name.includes("manutenç") || name.includes("manutenc")) {
-      return "https://images.unsplash.com/photo-1585421514738-01798e348b17?q=80&w=600&auto=format&fit=crop";
-    }
-    return "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=600&auto=format&fit=crop";
   };
 
   return (
@@ -211,11 +149,8 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
       
       <div className="grid grid-cols-1 lg:grid-cols-12">
           {/* Main Info - High Fidelity Sidebar */}
-          <div 
-              className="lg:col-span-4 p-8 lg:p-12 bg-cover bg-center relative overflow-hidden flex flex-col justify-between text-white"
-              style={{ backgroundImage: `url(${getBackgroundUrl()})` }}
-          >
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#121212]/90 to-transparent"></div>
+          <div className="lg:col-span-4 p-8 lg:p-12 bg-ministral-dark relative overflow-hidden flex flex-col justify-between text-white">
+              <div className="absolute inset-0 bg-gradient-to-br from-ministral-600/20 via-ministral-dark to-ministral-gold/10"></div>
               <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-150 contrast-150 mix-blend-overlay"></div>
               
               <div className="relative z-10">
@@ -265,19 +200,9 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
           </div>
 
           {/* Team Detail List */}
-          <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-ministral-dark relative">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-                  <div className="flex items-center gap-4">
-                      <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
-                      <button 
-                          onClick={() => setShowServiceSchedule(true)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 hover:bg-[#c9a84c]/20 transition-colors text-[10px] font-black uppercase tracking-widest"
-                      >
-                          <Sparkles size={12} />
-                          Cronograma
-                      </button>
-                  </div>
+          <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-ministral-dark">
+              <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
                   <span className="text-[10px] font-black text-ministral-600 dark:text-white bg-ministral-50 dark:bg-ministral-600/20 px-3 py-1 rounded-full">{eventMembers.length} Integrantes</span>
               </div>
 
@@ -330,17 +255,6 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
               )}
           </div>
       </div>
-
-      {showServiceSchedule && eventData && (
-        <ServiceSchedule 
-          eventRuleId={eventData.ruleId || eventData.id}
-          eventDate={eventData.date}
-          currentUser={currentUser!}
-          orgId={currentUser?.organizationId}
-          ministryId={ministryId}
-          onClose={() => setShowServiceSchedule(false)}
-        />
-      )}
     </div>
   );
 };

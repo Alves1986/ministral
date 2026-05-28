@@ -250,7 +250,7 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     const sb = getSupabase();
     if (!sb) return;
 
-    // ── 1. Busca admins em uma única query ────────────────────────────────
+    // Buscamos administradores da organização alvo (ou super admins globais se orgId for nulo)
     let query = sb
       .from('profiles')
       .select('id, organization_id')
@@ -258,8 +258,8 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
       .not('organization_id', 'is', null);
 
     const { data: admins } = await query;
-
-    // ── 2. Busca admins do ministério alvo (batch) ────────────────────────
+    
+    // Também buscamos administradores específicos deste ministério se targetMinistryId for fornecido
     let ministryAdmins: any[] = [];
     if (targetMinistryId) {
         const { data: mAdmins } = await sb.from('ministry_members')
@@ -272,70 +272,50 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     }
 
     const allAdmins = [...(admins || []), ...ministryAdmins];
+    // Remover duplicatas por ID de administrador
     const uniqueAdmins = Array.from(new Map(allAdmins.map(a => [a.id, a])).values());
 
     if (!uniqueAdmins.length) return;
 
-    // ── 3. Resolve ministérios de cada admin em BATCH ─────────────────────
-    // Admins que já têm targetMinistryId definido → usam diretamente
-    // Admins sem ministério alvo → buscamos seus ministérios em uma única query
-
-    // Agrupa org_ids que precisam de lookup de ministério padrão
-    const orgsNeedingMinistry = uniqueAdmins
-        .filter(a => !targetMinistryId && a.organization_id)
-        .map(a => a.organization_id as string);
-
-    // Busca o PRIMEIRO ministério de cada org em batch
-    const ministryByOrg = new Map<string, string>();
-    if (orgsNeedingMinistry.length > 0) {
-        const uniqueOrgIds = [...new Set(orgsNeedingMinistry)];
-        const { data: orgMinistries } = await sb
-            .from('organization_ministries')
-            .select('id, organization_id')
-            .in('organization_id', uniqueOrgIds);
-
-        if (orgMinistries) {
-            for (const om of orgMinistries) {
-                // Mantém apenas o primeiro encontrado por org (equivale ao .limit(1) anterior)
-                if (!ministryByOrg.has(om.organization_id)) {
-                    ministryByOrg.set(om.organization_id, om.id);
-                }
-            }
-        }
-    }
-
-    // ── 4. Monta o mapa de targets (orgId|minId) único ────────────────────
+    // Mapa para rastrear combinações únicas de (orgId, minId)
     const targetMap = new Map<string, { orgId: string, minId: string }>();
 
     for (const admin of uniqueAdmins) {
-        const minId = targetMinistryId || ministryByOrg.get(admin.organization_id);
-        const oId   = orgId || admin.organization_id;
+        let minId = targetMinistryId;
+        let oId = orgId || admin.organization_id;
+        
+        if (!minId) {
+            // Se não houver ministério alvo, buscamos o primeiro ministério da conta do admin
+            const { data: ministries } = await sb
+              .from('organization_ministries')
+              .select('id')
+              .eq('organization_id', admin.organization_id)
+              .limit(1);
+            
+            minId = ministries?.[0]?.id;
+            oId = admin.organization_id;
+        }
+
         if (minId && oId) {
             targetMap.set(`${oId}|${minId}`, { orgId: oId, minId });
         }
     }
 
-    if (targetMap.size === 0) return;
-
-    // ── 5. Busca labels de todos os ministérios em uma única query ─────────
-    const allMinIds = [...targetMap.values()].map(t => t.minId);
-    const { data: labelsData } = await sb
-        .from('organization_ministries')
-        .select('id, label')
-        .in('id', allMinIds);
-
-    const labelById = new Map<string, string>(
-        (labelsData || []).map(m => [m.id, m.label])
-    );
-
-    // ── 6. Monta notificações em memória e insere em lote ─────────────────
-    const cleanRawMessage = stripHtml(message);
     const notificationsToInsert: any[] = [];
 
-    for (const [, target] of targetMap.entries()) {
+    for (const [key, target] of targetMap.entries()) {
         const { orgId: tOrgId, minId: tMinId } = target;
-        const displayLabel = labelById.get(tMinId) || 'Ministério';
-        const finalMessage = `${cleanRawMessage} (Ministério: ${displayLabel})`;
+
+        // Busca o label para a mensagem
+        const { data: m } = await sb
+          .from('organization_ministries')
+          .select('label')
+          .eq('id', tMinId)
+          .maybeSingle();
+        
+        const displayLabel = m?.label || 'Ministério';
+        const cleanRawMessage = stripHtml(message);
+        const finalMessage = displayLabel ? `${cleanRawMessage} (Ministério: ${displayLabel})` : cleanRawMessage;
 
         notificationsToInsert.push({
             organization_id: tOrgId,
@@ -348,6 +328,7 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     }
 
     if (notificationsToInsert.length > 0) {
+        // Inserção em lote
         return await sb.from('notifications').insert(notificationsToInsert);
     }
     return { data: null, error: null };
