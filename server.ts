@@ -39,6 +39,53 @@ async function startServer() {
     }
   });
 
+  app.get("/api/weather", async (req, res) => {
+    try {
+      const { lat, lon } = req.query;
+      if (!lat || !lon) {
+        return res.status(400).json({ error: "Missing lat/lon" });
+      }
+
+      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+      if (!weatherRes.ok) {
+        throw new Error("Weather API Error");
+      }
+      const weatherJson = await weatherRes.json();
+
+      let city = "Localização";
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const cityRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`,
+          { 
+              signal: controller.signal,
+              headers: { 'User-Agent': 'GestaoEscala/1.0' }
+          }
+        );
+        clearTimeout(timeoutId);
+
+        if (cityRes.ok) {
+          const cityJson = await cityRes.json();
+          const addr = cityJson.address;
+          city = addr?.city || addr?.municipality || addr?.town || addr?.village || addr?.suburb || "Local";
+          city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
+        }
+      } catch (e) {
+        console.warn("Falha ao buscar cidade:", e);
+      }
+
+      res.json({
+        temperature: weatherJson.current_weather.temperature,
+        weatherCode: weatherJson.current_weather.weathercode,
+        city
+      });
+    } catch (error: any) {
+      console.error("Error fetching weather:", error);
+      res.status(500).json({ error: "Failed to fetch weather" });
+    }
+  });
+
   app.post("/api/ai/polish", async (req, res) => {
     try {
       const { text, tone, model } = req.body;
@@ -52,33 +99,44 @@ async function startServer() {
 
   app.post("/api/ai/run", async (req, res) => {
     try {
-      const { prompt, isJson, model } = req.body;
-      const { GoogleGenAI } = await import('@google/genai');
-      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Server is missing GEMINI_API_KEY");
-      
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: model || 'gemini-2.5-flash',
-        contents: [
-          { role: 'user', parts: [{ text: `Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.\n\n${prompt}` }] }
-        ],
-        config: {
-          responseMimeType: isJson ? 'application/json' : 'text/plain',
-        }
-      });
-      
-      res.json({ result: response.text });
+      const { runAI } = await import("./services/aiOrchestrator.ts");
+      const { taskType, context, payload, preferredModel } = req.body;
+      const result = await runAI(taskType, context, payload, preferredModel);
+      res.json(result);
     } catch (error: any) {
-      console.error("Error in /api/ai/run", error);
-      res.status(500).json({ error: error.message || "Failed AI call" });
+      console.error("Error in /api/ai/run:", error);
+      res.status(500).json({ error: error.message || "Failed to run AI task" });
+    }
+  });
+
+  app.post("/api/cifraclub/search", async (req, res) => {
+    try {
+      const { searchCifraClub } = await import("./services/cifraClubService.ts");
+      const { query } = req.body;
+      const result = await searchCifraClub(query);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in /api/cifraclub/search:", error);
+      res.status(500).json({ error: error.message || "Failed to search Cifra Club" });
+    }
+  });
+
+  app.post("/api/youtube/search", async (req, res) => {
+    try {
+      const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
+      const { query, customApiKey } = req.body;
+      const result = await searchYouTubeVideos(query, customApiKey);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in /api/youtube/search:", error);
+      res.status(500).json({ error: error.message || "Failed to search YouTube" });
     }
   });
 
   app.post("/api/spotify/token", async (req, res) => {
     try {
       const clientId = req.body.clientId || process.env.VITE_SPOTIFY_CLIENT_ID;
-      const clientSecret = req.body.clientSecret || process.env.VITE_SPOTIFY_CLIENT_SECRET || process.env.SPOTIFY_CLIENT_SECRET;
+      const clientSecret = req.body.clientSecret || process.env.VITE_SPOTIFY_CLIENT_SECRET;
 
       if (!clientId || !clientSecret) {
         return res.status(500).json({ error: "Spotify credentials not configured on server" });

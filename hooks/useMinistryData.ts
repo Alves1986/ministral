@@ -157,10 +157,20 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       quickAccessItems: settingsQuery.data?.quickAccessItems
   }), [settingsQuery.data]);
 
-  const refreshData = useCallback(() => {
-      // Invalida o cache das queries relevantes para forçar refetch.
-      // A verificação de sessão foi removida: o Supabase retornará erro 401
-      // nas próprias queries se a sessão expirar, evitando latência extra.
+  const refreshData = useCallback(async () => {
+      const sb = getSupabase();
+      if (sb) {
+          try {
+              const { data: { session }, error } = await sb.auth.getSession();
+              if (error || !session) {
+                   console.error("Sessão expirada durante refreshData", error);
+                   window.location.reload();
+                   return;
+              }
+          } catch(e) {}
+      }
+
+      // 1. Reseta as queries para o estado inicial (limpa cache e refetch se enabled)
       queryClient.invalidateQueries({ 
           predicate: (query) => 
               query.queryKey[0] === 'event_rules' || 
@@ -327,10 +337,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     ministryTitle,
     availabilityWindow,
     integrations,
-    // isLoading é true apenas quando as queries PRINCIPAIS estão carregando pela primeira vez
-    // (sem dados no cache ainda). isLoadingEvents é excluído para evitar "flickering"
-    // causado pela projeção de eventos que carrega após os dados principais.
-    isLoading: isLoadingQueries && !assignmentsQuery.data && !membersQuery.data,
+    isLoading: (isLoadingQueries && !assignmentsQuery.data && !membersQuery.data) || isLoadingEvents,
     refreshData,
     setEvents: () => refreshData(), 
     setSchedule: () => refreshData(),
@@ -352,6 +359,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       notificationsQuery.data, announcementsQuery.data, repertoireQuery.data, 
       swapsQuery.data, conflictsQuery.data, eventRules, 
       nextEventQuery.data, ministryTitle, availabilityWindow, integrations, 
-      isLoadingQueries, refreshData, queryClient
+      isLoadingQueries, isLoadingEvents, refreshData, queryClient, mid, orgId, isAdminFlag, currentUser
   ]);
 }

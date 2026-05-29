@@ -17,6 +17,7 @@ export interface Organization {
   // Billing & Access Control
   plan_type?: 'trial' | 'pro' | 'enterprise';
   billing_status?: 'active' | 'past_due' | 'canceled' | 'trial';
+  whatsapp_enabled?: boolean;
   trial_ends_at?: string;
   checkout_url?: string;
   access_locked?: boolean;
@@ -32,6 +33,7 @@ export interface MinistryDef {
   organizationId?: string; 
   qrCodeUrl?:      string;
   socialLinkUrl?:  string;
+  whatsapp_enabled?: boolean;
 }
 
 export interface MemberMap {

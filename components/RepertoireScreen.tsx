@@ -98,9 +98,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           return;
       }
       if(date) localStorage.setItem('repertoire_draft_date', date);
-      const url = getLoginUrl(integrations?.spotifyClientId);
+      const url = getLoginUrl();
       if (url) window.location.href = url;
-      else addToast("A chave do Spotify não está configurada para este ministério. Vá em Configurações > Administrador.", "error");
+      else addToast("A chave do Spotify não está configurada no servidor (.env).", "error");
   };
 
   const handleLoadPlaylists = async () => {
@@ -130,7 +130,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (!spotifyQuery.trim() || !ministryId) return;
       setSpotifyLoading(true);
       try {
-          const results = await searchSpotifyTracks(spotifyQuery, integrations?.spotifyClientId, integrations?.spotifyClientSecret);
+          const results = await searchSpotifyTracks(spotifyQuery);
           setSpotifyResults(results);
           if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
       } catch (e: any) {
@@ -144,7 +144,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (!youtubeQuery.trim()) return;
       setYoutubeLoading(true);
       try {
-          const results = await searchYouTubeVideos(youtubeQuery, integrations?.youtubeApiKey);
+          const results = await searchYouTubeVideos(youtubeQuery);
           setYoutubeResults(results);
           if (results.length === 0) addToast("Nenhum vídeo encontrado.", "warning");
       } catch (e: any) {

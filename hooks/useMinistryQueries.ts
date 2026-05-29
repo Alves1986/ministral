@@ -33,7 +33,9 @@ export const keys = {
   globalConflicts: (mid: string, month: string, oid: string) => ['conflicts', mid, month, oid],
   ranking: (mid: string, oid: string) => ['ranking', mid, oid],
   nextEvent: (mid: string, oid: string) => ['nextEvent', mid, oid],
-  availabilityV2: (mid: string, oid: string) => ['availabilityV2', mid, oid]
+  availabilityV2: (mid: string, oid: string) => ['availabilityV2', mid, oid],
+  /** Configurações globais de WhatsApp da organização — use useWhatsAppSettings() */
+  whatsappSettings: (oid: string) => ['whatsapp-settings', oid],
 };
 
 // Dados que mudam raramente (10 minutos de cache)
@@ -64,8 +66,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled,
     staleTime: STALE_SLOW,
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true
+    refetchOnWindowFocus: false
   });
 
   // 2. Assignments (Schedule Map)
@@ -75,8 +76,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isScheduleEnabled,
     staleTime: STALE_REALTIME,
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true
+    refetchOnWindowFocus: false
   });
 
   // 3. Members
@@ -86,8 +86,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled,
     staleTime: STALE_REALTIME, // Reduzido para garantir visibilidade de novos membros
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true
+    refetchOnWindowFocus: false
   });
 
   // 4. Availability
@@ -109,8 +108,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     },
     enabled: Boolean(user?.id && orgId),
     staleTime: STALE_MEDIUM,
-    gcTime: GC_TIME,
-    refetchOnReconnect: true
+    gcTime: GC_TIME
   });
 
   // 6. Announcements
@@ -179,10 +177,9 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryKey: keys.availabilityV2(ministryId, orgId),
     queryFn: () => Supabase.fetchMemberAvailabilityV2(ministryId, orgId),
     enabled: isQueryEnabled,
-    staleTime: STALE_MEDIUM, // usa a constante definida (2 minutos)
+    staleTime: 1000 * 60 * 2, // 2 minutes
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true
+    refetchOnWindowFocus: false
   });
 
   return {

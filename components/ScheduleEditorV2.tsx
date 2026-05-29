@@ -614,15 +614,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         loadData();
     }, [currentMonth, ministryId, orgId]);
 
-    // Ouve eventos externos de refresh (ex: quando limpa a escala a partir do Layout)
-    useEffect(() => {
-        const handleForceRefresh = () => {
-            loadData();
-        };
-        window.addEventListener('refresh-assignments', handleForceRefresh);
-        return () => window.removeEventListener('refresh-assignments', handleForceRefresh);
-    }, [currentMonth, ministryId, orgId]); // dependências que o loadData usa indiretamente
-
     const prevTabRef = useRef(currentTab);
     useEffect(() => {
         if (prevTabRef.current === 'schedule-rules' && currentTab === 'schedule-editor') {
@@ -723,29 +714,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         setProcessing(true);
         setShowReviewAI(false);
         try {
-            // Atualização Otimista
-            const tempId = `temp-${Date.now()}`;
-            setAssignments(prev => {
-                const updated = [...prev];
-                aiSuggestions.forEach((ai, index) => {
-                    // Remover possível designação anterior para o mesmo lugar
-                    const filtered = updated.filter(a => !(a.event_date === ai.event_date && a.role === ai.role && a.event_rule_id === ai.event_rule_id));
-                    filtered.push({
-                        id: `${tempId}-${index}`,
-                        event_rule_id: ai.event_rule_id, 
-                        event_date: ai.event_date,
-                        role: ai.role,
-                        member_id: ai.member_id,
-                        confirmed: false,
-                        event_key: ai.event_rule_id
-                    });
-                    // Substituir o array com o novo
-                    updated.length = 0;
-                    updated.push(...filtered);
-                });
-                return updated;
-            });
-
             // Salvar um por um
             for (const item of aiSuggestions) {
                 await saveAssignmentV2(ministryId, orgId, {
@@ -758,7 +726,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             
             addToast(`${aiSuggestions.length} atribuições aplicadas com sucesso!`, 'success');
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
-            await loadData(); // Recarregar para garantir sincronia
+            loadData(); // Recarregar para garantir sincronia
         } catch (error) {
             console.error(error);
             addToast('Erro ao aplicar sugestões da IA', 'error');

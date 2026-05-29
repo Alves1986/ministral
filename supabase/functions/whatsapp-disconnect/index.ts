@@ -32,7 +32,65 @@ serve(async (req: Request) => {
       throw new Error("instance_name e ministry_id são obrigatórios");
     }
 
-    // ── CORREÇÃO: Verificar e tratar a resposta do DELETE ─────────────────
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // ── SEGURANÇA: Verificar se o ministério pertence à organização e validar o JWT (SEC-02) ──
+    // Tenta organization_ministries primeiro (padrão atual)
+    let { data: ministry, error: minErr } = await supabase
+      .from("organization_ministries")
+      .select("organization_id")
+      .eq("id", ministry_id)
+      .maybeSingle();
+
+    // Fallback para tabela ministries se necessário
+    if (!ministry) {
+      const { data: fallbackMin } = await supabase
+        .from("ministries")
+        .select("organization_id")
+        .eq("id", ministry_id)
+        .maybeSingle();
+      ministry = fallbackMin;
+    }
+
+    if (!ministry) {
+      throw new Error("Ministério não encontrado.");
+    }
+
+    const targetOrgId = ministry.organization_id;
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      throw new Error("Authorization header ausente.");
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !user) {
+      throw new Error("Usuário não autenticado: " + (userErr?.message || "Não encontrado"));
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_admin, is_super_admin, organization_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile) {
+      throw new Error("Perfil do usuário não encontrado.");
+    }
+
+    const isAuthorized =
+      profile.is_super_admin ||
+      (profile.is_admin && profile.organization_id === targetOrgId);
+
+    if (!isAuthorized) {
+      return new Response(
+        JSON.stringify({ error: "Acesso negado. Apenas administradores podem desconectar WhatsApp." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Executa a deleção física na Evolution API após aprovação de segurança ──
     const endpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
     const deleteResponse = await fetch(endpoint, {
       method: "DELETE",
@@ -47,8 +105,7 @@ serve(async (req: Request) => {
       throw new Error(`Evolution API retornou erro ao deletar (${deleteResponse.status}): ${body}`);
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    // Atualiza estado no banco
     await supabase.from("ministry_whatsapp").update({
       connected:    false,
       phone_number: null,

@@ -13,6 +13,7 @@ import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGener
 import { subscribeUserToPush } from './utils/pushUtils';
 import { getSupabase } from './services/supabase/client';
 import { handleLoginCallback } from './services/spotifyService';
+import { autoSyncIfConnected } from './services/googleCalendar';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -38,6 +39,10 @@ import { ToolsMenu } from './components/ToolsMenu';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { InstallBanner } from './components/InstallBanner';
+import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
+import { StatsModal } from './components/StatsModal';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { EventDetailsModal } from './components/EventDetailsModal';
 
 const ScheduleEditorV2 = lazy(() => import('./components/ScheduleEditorV2').then(m => ({ default: m.ScheduleEditorV2 })));
 const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
@@ -52,16 +57,10 @@ const MembersScreen = lazy(() => import('./components/MembersScreen').then(m => 
 const EventsScreen = lazy(() => import('./components/EventsScreen').then(m => ({ default: m.EventsScreen })));
 const ScheduleRulesScreen = lazy(() => import('./components/ScheduleRulesScreen').then(m => ({ default: m.ScheduleRulesScreen })));
 const AvailabilityReportScreen = lazy(() => import('./components/AvailabilityReportScreen').then(m => ({ default: m.AvailabilityReportScreen })));
-const MonthlyReportScreen = lazy(() => import('./components/MonthlyReportScreen').then(m => ({ default: m.MonthlyReportScreen })));
-const AdvancedAIScreen = lazy(() => import('./components/AdvancedAIScreen').then(m => ({ default: m.AdvancedAIScreen })));
+import { MonthlyReportScreen } from './components/MonthlyReportScreen';
+import { AdvancedAIScreen } from './components/AdvancedAIScreen';
 const HistoryScreen = lazy(() => import('./components/HistoryScreen').then(m => ({ default: m.HistoryScreen })));
 const AlertsManager = lazy(() => import('./components/AlertsManager').then(m => ({ default: m.AlertsManager })));
-const EventsModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.EventsModal })));
-const AvailabilityModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.AvailabilityModal })));
-const RolesModal = lazy(() => import('./components/ManagementModals').then(m => ({ default: m.RolesModal })));
-const EventDetailsModal = lazy(() => import('./components/EventDetailsModal').then(m => ({ default: m.EventDetailsModal })));
-const StatsModal = lazy(() => import('./components/StatsModal').then(m => ({ default: m.StatsModal })));
-const ConfirmationModal = lazy(() => import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal })));
 const PlanScreen = lazy(() => import('./components/PlanScreen').then(m => ({ default: m.PlanScreen })));
 const RegisterOrganizationScreen = lazy(() => import('./components/RegisterOrganizationScreen').then(m => ({ default: m.RegisterOrganizationScreen })));
 const PaymentSuccessScreen = lazy(() => import('./components/PaymentSuccessScreen').then(m => ({ default: m.PaymentSuccessScreen })));
@@ -215,7 +214,6 @@ const InnerApp = () => {
   const onlineUsers = useOnlinePresence(activeUser?.id, activeUser?.name);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isDashboardRefreshing, setIsDashboardRefreshing] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -365,35 +363,24 @@ const InnerApp = () => {
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
-            <div className="animate-slide-up flex justify-between items-center w-full">
+            <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0">
                 <div>
                     <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
                         Olá, <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
                         <button 
-                            onClick={async () => {
-                                if (isDashboardRefreshing) return;
-                                setIsDashboardRefreshing(true);
-                                try {
-                                    refreshData();
-                                    await new Promise(r => setTimeout(r, 1200));
-                                } finally {
-                                    setIsDashboardRefreshing(false);
-                                }
+                            onClick={() => {
+                                refreshData();
+                                addToast("Atualização solicitada...", "info");
                             }}
-                            disabled={isDashboardRefreshing}
-                            className={`p-2 rounded-full transition-all duration-300 ${
-                                isDashboardRefreshing 
-                                    ? 'text-secondary bg-secondary/10 cursor-not-allowed' 
-                                    : 'text-zinc-400 hover:text-secondary hover:bg-secondary/10'
-                            }`}
+                            className="p-2 text-zinc-400 hover:text-secondary hover:bg-secondary/10 rounded-full transition-all duration-500"
                             title="Atualizar dados do sistema"
                         >
-                            <RefreshCw size={20} className={isDashboardRefreshing ? 'animate-spin' : ''} />
+                            <RefreshCw size={20} />
                         </button>
                     </h1>
                     <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
                 </div>
-                <div className="hidden md:block animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
+                <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
             </div>
 
         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
@@ -421,6 +408,7 @@ const InnerApp = () => {
                 currentUser={activeUser!} 
             />
         </div>
+
 
         <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
@@ -450,7 +438,7 @@ const InnerApp = () => {
             <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
         </div>
     </div>
-  ), [activeUser, isDashboardRefreshing, refreshData, nextEvent, schedule, attendance, roles, publicMembers, ministryId, RAW_QUICK_ACTIONS, safeEnabledTabs, setCurrentTab, currentMonth]);
+  ), [activeUser, isRefreshing, refreshData, addToast, nextEvent, schedule, attendance, roles, publicMembers, ministryId, RAW_QUICK_ACTIONS, safeEnabledTabs, setCurrentTab, currentMonth]);
 
   const calendarScreen = useMemo(() => (
     <div className="space-y-6 animate-fade-in">
@@ -498,7 +486,6 @@ const InnerApp = () => {
                                 queryClient.setQueryData(['schedule', ministryId, orgId!, currentMonth], {});
                                 addToast("Escala limpa com sucesso", "success");
                                 refreshData();
-                                window.dispatchEvent(new Event('refresh-assignments'));
                             } catch (e) {
                                 addToast("Erro ao limpar escala", "error");
                             }
@@ -528,6 +515,7 @@ const InnerApp = () => {
   const settingsScreen = useMemo(() => (
     <SettingsScreen 
         initialTitle={ministryTitle} 
+        events={events}
         ministryId={ministryId} 
         themeMode={themeMode} 
         onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} 
@@ -570,11 +558,39 @@ const InnerApp = () => {
             }
             return url;
         }} 
+        onToggleWhatsApp={async (enabled) => {
+            if (!orgId) return;
+            const sb = getSupabase();
+            if (!sb) return;
+            const { error } = await sb.from('organizations').update({ whatsapp_enabled: enabled }).eq('id', orgId);
+            if (error) {
+                console.error(error);
+                addToast("Erro ao atualizar o WhatsApp na organização", "error");
+            } else {
+                addToast(`WhatsApp ${enabled ? 'ativado' : 'desativado'} com sucesso!`, "success");
+                await refreshSession();
+                refreshData();
+            }
+        }}
+        onToggleMinistryWhatsApp={async (minId, enabled) => {
+            if (!orgId) return;
+            const sb = getSupabase();
+            if (!sb) return;
+            const { error } = await sb.from('organization_ministries').update({ whatsapp_enabled: enabled }).eq('id', minId).eq('organization_id', orgId);
+            if (error) {
+                console.error(error);
+                addToast("Erro ao atualizar o WhatsApp do ministério (A coluna whatsapp_enabled pode não existir no banco).", "error");
+            } else {
+                addToast(`WhatsApp ${enabled ? 'ativado' : 'desativado'} para este ministério.`, "success");
+                await refreshSession();
+                refreshData();
+            }
+        }}
         ministryConfig={{ ...ministryConfig, ...integrations }} 
         organization={organization} 
         ministries={availableMinistries}
     />
-  ), [ministryTitle, ministryId, themeMode, availableMinistries, availabilityWindow, isAdmin, orgId, handleEnableNotifications, ministryConfig, integrations, organization, refreshData, refreshSession, setAvailableMinistries, addToast]);
+  ), [ministryTitle, events, ministryId, themeMode, availableMinistries, availabilityWindow, isAdmin, orgId, handleEnableNotifications, ministryConfig, integrations, organization, refreshData, refreshSession, setAvailableMinistries, addToast]);
 
   const membersScreen = useMemo(() => (
      <MembersScreen 
@@ -648,31 +664,7 @@ const InnerApp = () => {
   }
 
   if (status === 'locked_billing') {
-      return (
-          <DashboardLayout
-              onLogout={handleLogout}
-              title="Assinatura Pendente"
-              currentTab="plan"
-              onTabChange={() => {}}
-              mainNavItems={[]}
-              managementNavItems={[{ id: 'plan', label: 'Plano e Assinatura', icon: <Crown size={20}/> }]}
-              notifications={[]}
-              onNotificationsUpdate={() => {}}
-              onInstall={() => {}}
-              isStandalone={false}
-              onSwitchMinistry={() => {}}
-              onOpenJoinMinistry={() => {}}
-              activeMinistryId=""
-          >
-              <Suspense fallback={<LoadingFallback />}>
-                  <PlanScreen 
-                      organization={organization} 
-                      isAdmin={isAdmin ?? false} 
-                      onRefreshOrg={async () => { await refreshSession(); refreshData(); }} 
-                  />
-              </Suspense>
-          </DashboardLayout>
-      );
+      return <BillingLockScreen checkoutUrl={organization?.checkout_url} orgId={organization?.id} onLogout={handleLogout} onRefresh={async () => { await refreshSession(); refreshData(); }} />;
   }
 
   if (status === 'unauthenticated') {
@@ -736,7 +728,12 @@ const InnerApp = () => {
               setCurrentTab(tab);
           }}
           mainNavItems={MAIN_NAV}
-          managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
+          managementNavItems={(() => {
+              const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
+              if (isAdmin) return MANAGEMENT_NAV;
+              if (isMinister) return MANAGEMENT_NAV.filter(item => item.id === 'repertoire-manager' || item.id === 'send-announcements');
+              return [];
+          })()}
           notifications={notifications}
           onNotificationsUpdate={setNotifications}
           onInstall={() => {
@@ -759,14 +756,8 @@ const InnerApp = () => {
               }
               
               try {
-                  // 1. Cancela apenas as queries do ministério ATUAL para evitar
-                  // impacto em queries de outros contextos
-                  queryClient.cancelQueries({
-                      predicate: (query) => {
-                          const key = query.queryKey;
-                          return Array.isArray(key) && key.includes(ministryId);
-                      }
-                  });
+                  // 1. Cancela Queries pendentes para evitar processamento desnecessário
+                  queryClient.cancelQueries();
 
                   // Prefetch silencioso das queries mais pesadas do novo ministério
                   // (não bloqueia — roda em paralelo com as outras operações)
@@ -782,27 +773,24 @@ const InnerApp = () => {
                     staleTime: 5 * 60 * 1000
                   });
 
-                  // 2. Busca permissões para o NOVO ministério ANTES da troca
-                  // Isso garante que o store tenha os dados corretos para o render imediato
+                  // 2. Executa operações e fetches em paralelo para evitar delay sequencial
                   const [access, profileCheck] = await Promise.all([
                       Supabase.fetchUserMinistryAccess(uId, id, oId),
-                      Supabase.getSupabase()!.from('profiles').select('allowed_ministries').eq('id', uId).single()
+                      Supabase.getSupabase()!.from('profiles').select('allowed_ministries').eq('id', uId).single(),
+                      Supabase.updateProfileMinistry(uId, id, oId)
                   ]);
                   
-                  // 3. Atualiza no servidor em segundo plano ou aguarda brevemente
-                  await Supabase.updateProfileMinistry(uId, id, oId);
-                  
-                  // 4. Salva o ID antigo para limpeza seletiva e remove queries do ministério anterior
+                  // 3. Invalida cache do TanStack Query do ministério anterior
                   const oldMinistryId = ministryId;
                   queryClient.removeQueries({
                       predicate: (query) => query.queryKey[1] === oldMinistryId
                   });
+                  queryClient.invalidateQueries();
 
-                  // 5. Atualiza a sessão ANTES da troca de estado para garantir consistência
-                  await refreshSession();
+                  // 4. Atualiza a sessão em background sem travar a UI
+                  refreshSession().catch(console.error);
 
-                  // 6. Atualiza store LOCALMENTE de forma atômica
-                  // Usamos os dados que acabamos de buscar para evitar flickering
+                  // 5. Atualiza store LOCALMENTE (Cancela subscriptions antigas e cria novas no Realtime via hooks)
                   setMinistryId(id);
                   setCurrentUser({ 
                       ...activeUser!, 
@@ -830,9 +818,8 @@ const InnerApp = () => {
                   setIsRefreshing(false);
               }
           }}
-          onOpenJoinMinistry={() => setShowJoinModal(true)}
-          onRefreshData={refreshData}
-          activeMinistryId={ministryId}
+        onOpenJoinMinistry={() => setShowJoinModal(true)}
+        activeMinistryId={ministryId}
     >
         <Suspense fallback={<LoadingFallback />}>
             <div className="h-full">
@@ -855,7 +842,7 @@ const InnerApp = () => {
             
             {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && announcementsScreen}
             
-            {currentTab === 'profile' && <ProfileScreen user={activeUser!} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); await refreshSession(); refreshData(); }} availableRoles={roles} />}
+            {currentTab === 'profile' && <ProfileScreen user={activeUser!} events={events} schedule={schedule} ministryName={ministryTitle} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); await refreshSession(); refreshData(); }} availableRoles={roles} />}
             {currentTab === 'history' && <HistoryScreen user={activeUser!} />}
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && settingsScreen}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && status === 'ready' && ministryId.length === 36 && membersScreen}
@@ -900,7 +887,7 @@ const InnerApp = () => {
             )}
             {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && status === 'ready' && ministryId.length === 36 && <AvailabilityReportScreen availability={availability} availabilityNotes={availabilityNotes} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
             {currentTab === 'monthly-report' && isAdmin && safeEnabledTabs.includes('monthly-report') && status === 'ready' && ministryId.length === 36 && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
-            {currentTab === 'send-announcements' && isAdmin && safeEnabledTabs.includes('send-announcements') && status === 'ready' && ministryId.length === 36 && (
+            {currentTab === 'send-announcements' && (isAdmin || activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro'))) && safeEnabledTabs.includes('send-announcements') && status === 'ready' && ministryId.length === 36 && (
                 <AlertsManager 
                     orgName={organization?.name || ''}
                     ministryName={ministryTitle}
@@ -961,7 +948,11 @@ const InnerApp = () => {
             alreadyJoined={activeUser?.allowedMinistries || []} 
             isPro={activeUser?.isPro} 
         />
-        <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
+        <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { 
+            await Supabase.createMinistryEvent(ministryId, orgId!, e); 
+            await autoSyncIfConnected({ title: `${ministryTitle} - ${e.title}`, isoDate: `${e.date}T${e.time || '19:00:00'}` });
+            refreshData(); 
+        }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
         <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers} availability={availability} onUpdate={async (mId, d) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, ministryId, mId, d, {}, currentMonth); 
             refreshData(); 

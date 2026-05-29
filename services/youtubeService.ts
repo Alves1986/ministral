@@ -9,14 +9,27 @@ export interface YouTubeVideo {
 
 const getApiKey = () => {
     try {
-        // @ts-ignore
-        return import.meta.env.VITE_YOUTUBE_API_KEY || "";
+        return process.env.VITE_YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY || "";
     } catch (e) {
         return "";
     }
 };
 
 export const searchYouTubeVideos = async (query: string, customApiKey?: string): Promise<YouTubeVideo[]> => {
+    if (typeof window !== 'undefined') {
+        try {
+            const res = await fetch('/api/youtube/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, customApiKey })
+            });
+            if (!res.ok) throw new Error('YouTube Proxy API Error');
+            return await res.json();
+        } catch (error) {
+            console.error("Error calling YouTube API proxy", error);
+            return [];
+        }
+    }
     const apiKey = customApiKey || getApiKey();
     if (!apiKey) {
         console.warn("YouTube API Key missing");

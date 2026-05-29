@@ -1,60 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// ── Funções Inlined (Para suportar deploy via Dashboard em arquivo único) ──
-function formatBrazilPhone(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  let digits = raw.replace(/\D/g, '');
-  if (digits.startsWith('55')) digits = digits.slice(2);
-  if (digits.length < 10 || digits.length > 11) return null;
-  return '55' + digits;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
-  const { timeout = 8000, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(resource, { ...fetchOptions, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function sendWhatsAppMessage(
-  apiUrl: string, apiKey: string, instanceName: string, phone: string, text: string,
-  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused"; } = {}
-): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
-  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-  let lastError = "";
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetchWithTimeout(endpoint, {
-        method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
-        timeout,
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        lastError = `Evolution API ${response.status}: ${body}`;
-        if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
-        return { success: false, error: lastError };
-      }
-      return { success: true };
-    } catch (err: any) {
-      lastError = err?.message || String(err);
-      if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
-    }
-  }
-  return { success: false, error: lastError };
-}
-// ────────────────────────────────────────────────────────────────────────────
+import { formatBrazilPhone } from "./_shared/phoneFormatter.ts";
+import { sendWhatsAppMessage } from "./_shared/evolutionClient.ts";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -153,8 +100,7 @@ async function processNotification(
   }
 
   if (!assignments || assignments.length === 0) {
-    // CORREÇÃO: usar 'skipped' em vez de 'sent' — permite reprocessamento se assignments forem adicionados
-    await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
+    await supabase.from("whatsapp_scheduled_notifications").update({ status: "sent" }).eq("id", notif.id);
     return { notif_id: notif.id, date: targetDate, sent: 0, reason: "Sem assignments." };
   }
 
@@ -215,16 +161,7 @@ async function processNotification(
       if (sentToPhones.has(formattedPhone)) { skipped++; continue; }
       sentToPhones.add(formattedPhone);
 
-      // CORREÇÃO CRÍTICA: usar SEMPRE a instância específica do ministério.
-      // Se o ministério não tiver instância própria E não houver instância global (ou não for para usar a global),
-      // pular este membro (não enviar pelo WhatsApp errado de outra org).
       const currentInstance = ministryMap.get(a.ministry_id) || defaultInstance;
-      if (!currentInstance) {
-        console.warn(`[whatsapp-reminders] Ministério ${a.ministry_id} sem instância WhatsApp configurada. Pulando membro ${profile.name}.`);
-        skipped++;
-        continue;
-      }
-
       const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
         evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, msg,
         { timeout: 5000, retries: 2 }
@@ -279,11 +216,10 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const evolutionApiUrl    = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey    = Deno.env.get("EVOLUTION_API_KEY");
-    // CORREÇÃO: instanceName global é OPCIONAL — ministérios usam suas próprias instâncias
-    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME") || null;
+    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME");
 
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Variáveis Supabase não configuradas.");
-    if (!evolutionApiUrl || !evolutionApiKey) throw new Error("Credenciais Evolution API não configuradas.");
+    if (!evolutionApiUrl || !evolutionApiKey || !instanceName) throw new Error("Credenciais Evolution API não configuradas.");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight, CreditCard, Zap, CheckCircle2, MessageCircle, ExternalLink, X, Image as ImageIcon, Upload } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight, CreditCard, Zap, CheckCircle2, MessageCircle, ExternalLink, X, Image as ImageIcon, Upload, Crown, Sparkles } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode, Organization, MinistryDef } from '../types';
@@ -11,6 +11,7 @@ import { MinistryWhatsAppConnect } from './MinistryWhatsAppConnect';
 interface Props {
   initialTitle: string;
   ministryId: string | null;
+  events?: any[];
   themeMode: ThemeMode;
   onSetThemeMode: (mode: ThemeMode) => void;
   onSaveTheme?: () => void;
@@ -26,6 +27,8 @@ interface Props {
   organization: Organization | null;
   onSaveIntegrations?: (spotifyId?: string, spotifySecret?: string, youtubeKey?: string, quickAccessItems?: string[]) => Promise<void>;
   onSaveOrgLogo?: (file: File | null) => Promise<string | null>;
+  onToggleWhatsApp?: (enabled: boolean) => Promise<void>;
+  onToggleMinistryWhatsApp?: (ministryId: string, enabled: boolean) => Promise<void>;
   ministries?: MinistryDef[];
 }
 
@@ -52,7 +55,7 @@ export const SettingsScreen: React.FC<Props> = ({
     initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, 
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
     onSaveAvailabilityWindow, availabilityWindow, isAdmin = false, orgId,
-    onSaveEnabledTabs, ministryConfig, organization, onSaveIntegrations, onSaveOrgLogo, ministries
+    onSaveEnabledTabs, ministryConfig, organization, onSaveIntegrations, onSaveOrgLogo, ministries, onToggleWhatsApp, onToggleMinistryWhatsApp, events
 }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
@@ -310,84 +313,6 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
       )}
 
-      {activeTab === 'admin' && isAdmin && (
-        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-              <Zap size={16}/> Integrações de API
-            </h3>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
-                <Music size={14}/> Spotify
-              </h4>
-              <p className="text-[10px] text-zinc-500 leading-relaxed">
-                Para permitir que os membros busquem músicas e playlists. Crie um App em <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-secondary hover:underline inline-flex items-center gap-0.5">Spotify Dashboard <ExternalLink size={10}/></a>.
-                <br/><strong>Redirect URI:</strong> <code className="bg-zinc-100 dark:bg-zinc-900 px-1 rounded">{window.location.origin}</code>
-              </p>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Client ID</label>
-                <input 
-                  type="text" 
-                  placeholder="Seu Client ID do Spotify"
-                  defaultValue={ministryConfig?.spotifyClientId || ""}
-                  id="spotify-client-id"
-                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Client Secret</label>
-                <input 
-                  type="password" 
-                  placeholder="Seu Client Secret do Spotify"
-                  defaultValue={ministryConfig?.spotifyClientSecret || ""}
-                  id="spotify-client-secret"
-                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
-                <Youtube size={14} className="text-red-500"/> YouTube
-              </h4>
-              <p className="text-[10px] text-zinc-500 leading-relaxed">
-                Para buscar vídeos e referências musicais diretamente no YouTube. Obtenha sua chave no <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-secondary hover:underline inline-flex items-center gap-0.5">Google Cloud Console <ExternalLink size={10}/></a>.
-              </p>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">API Key do YouTube</label>
-                <input 
-                  type="text" 
-                  placeholder="Sua API Key do YouTube"
-                  defaultValue={ministryConfig?.youtubeApiKey || ""}
-                  id="youtube-api-key"
-                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button 
-              onClick={async () => {
-                const sId = (document.getElementById('spotify-client-id') as HTMLInputElement)?.value;
-                const sSec = (document.getElementById('spotify-client-secret') as HTMLInputElement)?.value;
-                const yKey = (document.getElementById('youtube-api-key') as HTMLInputElement)?.value;
-                
-                if (onSaveIntegrations) {
-                  await onSaveIntegrations(sId, sSec, yKey);
-                }
-              }}
-              className="bg-secondary hover:bg-secondaryHover text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-secondary/20 transition-all flex items-center gap-2"
-            >
-              <Save size={18}/> Salvar Integrações
-            </button>
-          </div>
-        </div>
-      )}
-
       {activeTab === 'admin' && isAdmin && onSaveEnabledTabs && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><ShieldCheck size={16}/> Abas Visíveis para Membros</h3>
@@ -585,21 +510,167 @@ export const SettingsScreen: React.FC<Props> = ({
 
       {/* WhatsApp Notifications Settings */}
       {activeTab === 'whatsapp' && isAdmin && orgId && (
-        <div className="space-y-6">
-          {ministries && (
-            <WhatsAppNotificationSettings
-              orgId={orgId}
-              ministryId={ministryId}
-              ministries={ministries}
-              onShowToast={addToast}
-            />
-          )}
-          {ministryId && (
-            <MinistryWhatsAppConnect
-              ministryId={ministryId}
-              orgId={orgId}
-              ministryName={ministries?.find(m => m.id === ministryId)?.label || initialTitle}
-            />
+        <div className="space-y-8 animate-slide-up">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white dark:bg-zinc-800 rounded-3xl shadow border border-zinc-200 dark:border-zinc-700 gap-4">
+              <div>
+                  <h3 className="text-xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                      <MessageCircle className="text-[#c9a84c]" />
+                      Recurso de WhatsApp da Organização
+                  </h3>
+                  <p className="text-sm text-zinc-500 mt-1">Integração global de WhatsApp para envios automatizados aos voluntários.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-zinc-500">{organization?.whatsapp_enabled ? 'Ativado' : 'Desativado'}</span>
+                  <button 
+                    onClick={() => {
+                        if (!isEnterprise) {
+                            addToast("Habilite o plano Enterprise para ativar o WhatsApp.", "error");
+                        } else if (onToggleWhatsApp) {
+                            onToggleWhatsApp(!organization?.whatsapp_enabled);
+                        }
+                    }}
+                    className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors ${organization?.whatsapp_enabled ? 'bg-[#c9a84c]' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow flex-shrink-0 ${organization?.whatsapp_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+              </div>
+          </div>
+
+          {!isEnterprise ? (
+            <div className="bg-gradient-to-br from-[#0f1f3d] via-[#152a52] to-black text-white p-8 md:p-12 rounded-[2.5rem] border border-[#c9a84c]/20 shadow-2xl relative overflow-hidden animate-slide-up">
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-15 brightness-150 contrast-150 mix-blend-overlay z-0"></div>
+              
+              <div className="relative z-10 space-y-6 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-[#c9a84c]/20 text-[#c9a84c] rounded-full border border-[#c9a84c]/30">
+                    Recurso Premium
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] font-black uppercase text-[#c9a84c] tracking-widest">
+                    <Crown size={12} fill="currentColor" /> Plano Enterprise
+                  </span>
+                </div>
+
+                <h3 className="text-3xl md:text-4xl font-black text-white leading-tight tracking-tight">
+                  Potencialize a Comunicação do seu Ministério via <span className="text-[#c9a84c]">WhatsApp</span>
+                </h3>
+
+                <p className="text-slate-300 text-sm md:text-base leading-relaxed">
+                  Automatize 100% da sua escala conectando as instâncias de WhatsApp diretamente com seus voluntários. Chega de esquecimentos ou mensagens manuais exaustivas.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                    <span className="p-2 bg-[#c9a84c]/10 text-[#c9a84c] rounded-xl shrink-0">
+                      <MessageCircle size={18} />
+                    </span>
+                    <div>
+                      <h5 className="font-extrabold text-sm text-white">Lembretes de Escala Automáticos</h5>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">Mensagens automáticas lembrando cada voluntário da sua respectiva escala com dia e horário.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                    <span className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl shrink-0">
+                      <Sparkles size={18} />
+                    </span>
+                    <div>
+                      <h5 className="font-extrabold text-sm text-white">Trocas Facilitadas</h5>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">Voluntários abrem solicitações de troca e o sistema dispara alertas imediatos com link direto.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                    <span className="p-2 bg-blue-500/10 text-blue-400 rounded-xl shrink-0">
+                      <CheckCircle2 size={18} />
+                    </span>
+                    <div>
+                      <h5 className="font-extrabold text-sm text-white">Check-in Instantâneo</h5>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">Confirmação de escala em 1 clique direto no link enviado pelo WhatsApp, sem precisar logar.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                    <span className="p-2 bg-purple-500/10 text-purple-400 rounded-xl shrink-0">
+                      <Zap size={18} />
+                    </span>
+                    <div>
+                      <h5 className="font-extrabold text-sm text-white">Multi-Instâncias</h5>
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">Configure números dedicados para cada ministério ou use o número padrão do sistema.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
+                  <button 
+                    onClick={() => {
+                      addToast("Entre em contato para ativar o plano Enterprise.", "info");
+                    }}
+                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#c9a84c] to-[#b2933d] hover:from-[#d8b95c] hover:to-[#c9a84c] text-[#0f1f3d] font-black uppercase tracking-widest text-xs rounded-2xl transition-all shadow-xl shadow-ministral-gold/20 active:scale-95 flex items-center justify-center gap-2 border border-[#c9a84c]/20"
+                  >
+                    <Crown size={16} fill="currentColor" /> Fazer Upgrade para Enterprise
+                  </button>
+                  <span className="text-[10px] text-slate-400 font-bold tracking-wider uppercase">Faturamento mensal recorrente. Cancele quando quiser.</span>
+                </div>
+              </div>
+            </div>
+          ) : organization?.whatsapp_enabled ? (
+            <div className="space-y-6">
+              {ministryId && (() => {
+                  const currentMinistry = ministries?.find(m => m.id === ministryId);
+                  const isMinistryWhatsappEnabled = currentMinistry?.whatsapp_enabled !== false; // Default to true if undefined to maintain backwards compatibility
+
+                  return (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white dark:bg-zinc-800 rounded-3xl shadow border border-zinc-200 dark:border-zinc-700 gap-4 mb-6">
+                          <div>
+                              <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                                  <MessageCircle className="text-emerald-500" />
+                                  WhatsApp neste Ministério
+                              </h3>
+                              <p className="text-sm text-zinc-500 mt-1">Ative ou desative o uso do WhatsApp especificamente para o ministério <strong>{currentMinistry?.label || initialTitle}</strong>.</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                              <span className="text-xs font-bold text-zinc-500">{isMinistryWhatsappEnabled ? 'Ativado' : 'Desativado'}</span>
+                              <button 
+                                onClick={() => {
+                                    if (onToggleMinistryWhatsApp) {
+                                        onToggleMinistryWhatsApp(ministryId, !isMinistryWhatsappEnabled);
+                                    }
+                                }}
+                                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors ${isMinistryWhatsappEnabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+                              >
+                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow flex-shrink-0 ${isMinistryWhatsappEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                          </div>
+                      </div>
+                  );
+              })()}
+
+              {ministryId && (() => {
+                 const currentMinistry = ministries?.find(m => m.id === ministryId);
+                 const isMinistryWhatsappEnabled = currentMinistry?.whatsapp_enabled !== false;
+                 if (!isMinistryWhatsappEnabled) return null;
+
+                 return (
+                     <>
+                        <WhatsAppNotificationSettings
+                          orgId={orgId}
+                          ministryId={ministryId}
+                          ministries={ministries || []}
+                          onShowToast={addToast}
+                        />
+                        <MinistryWhatsAppConnect
+                          ministryId={ministryId}
+                          orgId={orgId}
+                          ministryName={currentMinistry?.label || initialTitle}
+                        />
+                     </>
+                 );
+              })()}
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/50 rounded-3xl border border-zinc-200 dark:border-zinc-700">
+               <p className="text-zinc-500">Ative o recurso no botão acima para configurar as instâncias e mensagens de WhatsApp.</p>
+            </div>
           )}
         </div>
       )}
