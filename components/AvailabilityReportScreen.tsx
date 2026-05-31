@@ -46,7 +46,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       let functions: string[] = [];
       
       if (profile.ministry_functions && profile.ministry_functions.length > 0) {
-        functions = profile.ministry_functions; 
+        functions = Array.from(new Set(profile.ministry_functions)); 
       } else {
         // Fallback apenas se o array functions vier vazio do banco
         Object.entries(membersMap).forEach(([role, members]) => {
@@ -54,27 +54,43 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
               functions.push(role);
           }
         });
+        functions = Array.from(new Set(functions));
       }
 
       const dates = availability[profile.id] || [];
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
-      const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK'))
-        .map(d => {
-            const parts = d.split('_');
-            const dayNum = parseInt(d.split('-')[2]);
-            const type = parts.length > 1 ? parts[1] : 'FULL';
-            return { day: dayNum, type };
-        })
-        .filter(x => !isNaN(x.day) && x.day > 0 && x.day <= 31)
-        .sort((a, b) => a.day - b.day);
+      const dayMap = new Map<number, Set<string>>();
+      dates.forEach(d => {
+         if (d.startsWith(currentMonth) && !d.includes('BLK')) {
+             const parts = d.split('_');
+             const dayNum = parseInt(parts[0].split('-')[2]); // Ensure we split from the date part
+             if (!isNaN(dayNum) && dayNum > 0 && dayNum <= 31) {
+                 const type = parts.length > 1 ? parts[1] : 'FULL';
+                 if (!dayMap.has(dayNum)) {
+                     dayMap.set(dayNum, new Set());
+                 }
+                 dayMap.get(dayNum)!.add(type);
+             }
+         }
+      });
+
+      const monthDates = Array.from(dayMap.entries()).map(([day, types]) => {
+          let type = 'FULL';
+          if (types.has('FULL')) type = 'FULL';
+          else if (types.has('M') && types.has('N')) type = 'FULL';
+          else if (types.has('M')) type = 'M';
+          else if (types.has('N')) type = 'N';
+          else if (types.has('T')) type = 'T';
+          return { day, type };
+      }).sort((a, b) => a.day - b.day);
 
       // Get general note for this member and month
       const noteKey = `${profile.id}_${currentMonth}-00`;
       const note = availabilityNotes[noteKey] || "";
 
       return {
+        id: profile.id,
         name: profile.name,
         avatar_url: profile.avatar_url,
         ministry_functions: functions,
@@ -144,7 +160,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </div>
         ) : (
           reportData.map((item) => (
-            <div key={item.name} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col ${item.isBlocked ? 'border-red-200 dark:border-red-900/50 bg-red-50/10' : 'border-zinc-200 dark:border-zinc-700'}`}>
+            <div key={item.id} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col ${item.isBlocked ? 'border-red-200 dark:border-red-900/50 bg-red-50/10' : 'border-zinc-200 dark:border-zinc-700'}`}>
                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                      {item.avatar_url ? (
@@ -199,7 +215,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                            }
                            
                            return (
-                              <div key={day} className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg shadow-sm ${bgClass}`}>
+                              <div key={`${day}_${type}`} className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg shadow-sm ${bgClass}`}>
                                  <span className="text-xs font-bold">{day}</span>
                                  {type === 'M' && <span className="text-[8px] leading-none opacity-80"><Sun size={8} fill="currentColor"/></span>}
                                  {type === 'N' && <span className="text-[8px] leading-none opacity-80"><Moon size={8} fill="currentColor"/></span>}

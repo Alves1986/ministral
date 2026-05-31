@@ -483,7 +483,8 @@ const InnerApp = () => {
                         onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", async () => {
                             try {
                                 await Supabase.clearScheduleForMonth(ministryId, orgId!, currentMonth);
-                                queryClient.setQueryData(['schedule', ministryId, orgId!, currentMonth], {});
+                                queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+                                window.dispatchEvent(new CustomEvent('schedule-reloaded'));
                                 addToast("Escala limpa com sucesso", "success");
                                 refreshData();
                             } catch (e) {
@@ -1038,10 +1039,10 @@ const SupabaseHealthCheck: React.FC<{ children: React.ReactNode }> = ({ children
 const queryClientInstance = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes cache validity
+      staleTime: 1000 * 60 * 1, // 1 minute to ensure it triggers if they look away for a while
       gcTime: 1000 * 60 * 15, // 15 minutes garbage collection
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true, // Auto-sync when user returns to app
     },
   },
 });

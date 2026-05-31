@@ -614,6 +614,12 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         loadData();
     }, [currentMonth, ministryId, orgId]);
 
+    useEffect(() => {
+        const handleRevalidate = () => loadData();
+        window.addEventListener('schedule-reloaded', handleRevalidate);
+        return () => window.removeEventListener('schedule-reloaded', handleRevalidate);
+    }, [ministryId, orgId, currentMonth]);
+
     const prevTabRef = useRef(currentTab);
     useEffect(() => {
         if (prevTabRef.current === 'schedule-rules' && currentTab === 'schedule-editor') {
@@ -726,7 +732,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             
             addToast(`${aiSuggestions.length} atribuições aplicadas com sucesso!`, 'success');
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
-            loadData(); // Recarregar para garantir sincronia
+            await loadData(); // Recarregar para garantir sincronia
         } catch (error) {
             console.error(error);
             addToast('Erro ao aplicar sugestões da IA', 'error');

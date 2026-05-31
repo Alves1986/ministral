@@ -3,7 +3,7 @@ import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, L
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode, Organization, MinistryDef } from '../types';
-import { sendNotificationSQL } from '../services/supabaseService';
+import { sendNotificationSQL, getSupabase } from '../services/supabaseService';
 import { getSystemLogo } from '../utils/branding';
 import { WhatsAppNotificationSettings } from './WhatsAppNotificationSettings';
 import { MinistryWhatsAppConnect } from './MinistryWhatsAppConnect';
@@ -383,6 +383,67 @@ export const SettingsScreen: React.FC<Props> = ({
                 );
             })}
         </div>
+      </div>
+      )}
+
+      {activeTab === 'admin' && isAdmin && (
+      <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Upload size={16}/> Exportação de Dados</h3>
+        <p className="text-xs text-zinc-500 mb-6">Exporte todos os dados deste ministério (membros, escalas, histórico e disponibilidade) para um arquivo de backup em seu computador local ou nas suas pastas do Drive/OneDrive.</p>
+        
+        <button 
+            onClick={async () => {
+                if (!ministryId || !orgId) return;
+                try {
+                    const sb = getSupabase();
+                    addToast("Iniciando exportação, aguarde...", "info");
+                    
+                    const [members, availability, schedule, swaps, rules] = await Promise.all([
+                        sb.from('ministry_members').select('*, profiles(*)').eq('organization_id', orgId).eq('ministry_id', ministryId),
+                        sb.from('member_availability').select('*').eq('organization_id', orgId).eq('ministry_id', ministryId),
+                        sb.from('schedule_assignments').select('*').eq('organization_id', orgId).eq('ministry_id', ministryId),
+                        sb.from('swap_requests').select('*').eq('organization_id', orgId).eq('ministry_id', ministryId),
+                        sb.from('event_rules').select('*').eq('organization_id', orgId).eq('ministry_id', ministryId)
+                    ]);
+                    
+                    const exportData = {
+                        exportDate: new Date().toISOString(),
+                        ministryId,
+                        orgId,
+                        data: {
+                            members: members.data || [],
+                            availability: availability.data || [],
+                            schedule: schedule.data || [],
+                            swaps: swaps.data || [],
+                            rules: rules.data || []
+                        }
+                    };
+                    
+                    const jsonString = JSON.stringify(exportData, null, 0); // compact JSON
+                    const blob = new Blob([jsonString], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `backup_ministerio_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    addToast("Exportação concluída! Arquivo baixado.", "success");
+                } catch (e) {
+                    console.error("Erro na exportação", e);
+                    addToast("Erro ao exportar dados.", "error");
+                }
+            }}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 rounded-xl font-bold text-sm transition-all"
+        >
+            <Upload size={18} /> Baixar Arquivo JSON Formatado
+        </button>
       </div>
       )}
 

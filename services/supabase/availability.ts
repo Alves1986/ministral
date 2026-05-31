@@ -43,6 +43,10 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         }
     });
 
+    Object.keys(map).forEach(userId => {
+        map[userId] = [...new Set(map[userId])];
+    });
+
     return { availability: map, notes };
 };
 

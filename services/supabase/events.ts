@@ -108,6 +108,62 @@ export const updateMinistryEvent = async (
    ruleIdToUpdate = rule.id;
  }
  
+ const { data: currentRule, error: fetchRuleError } = await sb
+   .from('event_rules')
+   .select('id, type')
+   .eq('id', ruleIdToUpdate)
+   .single();
+
+ if (fetchRuleError || !currentRule) throw fetchRuleError || new Error("Regra não encontrada");
+
+ if (!applyToAll && currentRule.type === 'weekly') {
+   // 1. Ocorreu edição apenas nesta data. Vamos criar uma exclusão na regra original
+   const { error: excludeError } = await sb.from('schedule_assignments').insert({
+       organization_id: orgId,
+       ministry_id: ministryId,
+       event_rule_id: ruleIdToUpdate,
+       event_date: oldDate,
+       role: '__EVENT_EXCLUDED__'
+   });
+   
+   if (excludeError) throw excludeError;
+
+   // 2. Criar um novo evento single
+   const { data: newRules, error: newRuleError } = await sb.from('event_rules').insert({
+       organization_id: orgId,
+       ministry_id: ministryId,
+       title: newTitle,
+       type: 'single',
+       date: newDate,
+       time: newTime,
+       active: true
+   }).select();
+
+   if (newRuleError) throw newRuleError;
+
+   const newRuleId = newRules[0].id;
+
+   // 3. Opcional: Migrar os membros já escalados dessa data/regra antiga para a nova
+   const { data: oldAssignments } = await sb.from('schedule_assignments')
+       .select('*')
+       .eq('event_rule_id', ruleIdToUpdate)
+       .eq('event_date', oldDate)
+       .neq('role', '__EVENT_EXCLUDED__');
+
+   if (oldAssignments && oldAssignments.length > 0) {
+       for (const assignment of oldAssignments) {
+           await sb.from('schedule_assignments')
+               .update({
+                   event_rule_id: newRuleId,
+                   event_date: newDate
+               })
+               .eq('id', assignment.id);
+       }
+   }
+
+   return;
+ }
+ 
  const { error: updateError } = await sb
    .from('event_rules')
    .update({

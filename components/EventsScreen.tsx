@@ -21,8 +21,21 @@ export const EventsScreen: React.FC = () => {
   const [time, setTime] = useState('19:30');
   const [weekday, setWeekday] = useState(0); // 0 = Dom
   const [date, setDate] = useState('');
+  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().substring(0, 7));
 
   const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  const adjustMonth = (base: string, offset: number) => {
+      const [y, m] = base.split('-').map(Number);
+      const d = new Date(y, m - 1 + offset, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getMonthName = (iso: string) => {
+      const [y, m] = iso.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  };
 
   if (!ministryId || !orgId) {
     return <div>Selecione um ministerio para ver as regras de agenda.</div>;
@@ -135,7 +148,7 @@ export const EventsScreen: React.FC = () => {
   };
 
   const weeklyRules = rules.filter(r => r.type === 'weekly').sort((a, b) => (a.weekday || 0) - (b.weekday || 0));
-  const singleRules = rules.filter(r => r.type === 'single').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const singleRules = rules.filter(r => r.type === 'single' && r.date?.startsWith(filterMonth)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   return (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto pb-24">
@@ -282,9 +295,16 @@ export const EventsScreen: React.FC = () => {
 
                 {/* Single Rules */}
                 <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                        <Calendar size={16}/> Eventos Especiais (Únicos)
-                    </h3>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                            <Calendar size={16}/> Eventos Especiais (Únicos)
+                        </h3>
+                        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg">
+                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, -1))} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm">←</button>
+                            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 min-w-[120px] text-center capitalize">{getMonthName(filterMonth)}</span>
+                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, 1))} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm">→</button>
+                        </div>
+                    </div>
                     
                     {loading ? (
                         <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>

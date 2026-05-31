@@ -41,7 +41,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [dayModalOpen, setDayModalOpen] = useState<number | null>(null);
   
   // Flag para impedir que o Realtime do Supabase sobrescreva um optimistic update em andamento
-  const isSyncing = React.useRef<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -98,7 +98,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
     // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
     // com os dados mais recentes antes de repaginar a página pra Idle.
-    if (saveState !== 'idle' || isSyncing.current) return;
+    if (saveState !== 'idle' || isSyncing) return;
 
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
@@ -125,7 +125,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!canEdit) return;
       if (isSaveLocked) return; // Bloqueio visual
 
-      isSyncing.current = true;
+      setIsSyncing(true);
       setSaveState('dirty');
 
       if (isBlockedMonth) {
@@ -143,7 +143,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       
       if (isSaveLocked) return; // Bloqueio visual
 
-      isSyncing.current = true;
+      setIsSyncing(true);
       setSaveState('dirty');
       
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -159,6 +159,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const hadFull = newDates.includes(full);
       const hadMorning = newDates.includes(morning);
       const hadNight = newDates.includes(night);
+      const hadPartial = newDates.some(d => d.startsWith(`${dateBase}_`) && !d.endsWith('_M') && !d.endsWith('_N'));
       
       newDates = newDates.filter(d => !d.startsWith(dateBase));
 
@@ -167,7 +168,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           else if (hadFull) newDates.push(morning);
           else if (hadMorning) newDates.push(night);
       } else {
-          if (!hadFull) newDates.push(full);
+          if (!hadFull && !hadPartial) newDates.push(full);
       }
       
       setTempDates(newDates);
@@ -175,7 +176,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleToggleSpecificEvent = (eventTime: string, isSunday: boolean, day: number) => {
       if (isSaveLocked) return;
-      isSyncing.current = true;
+      setIsSyncing(true);
       setSaveState('dirty');
 
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
@@ -237,7 +238,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       if (isSaveLocked) return;
-      isSyncing.current = true;
+      setIsSyncing(true);
       setGeneralNote(e.target.value);
       setSaveState('dirty');
   };
@@ -247,7 +248,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
-      isSyncing.current = true;
+      setIsSyncing(true);
       setSaveState('saving');
 
       try {
@@ -296,12 +297,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
           });
           
           // ESTADO TERMINAL DE SUCESSO
-          isSyncing.current = false;
+          setIsSyncing(false);
           setSaveState('saved');
           
       } catch (error: unknown) {
           console.error(error);
-          isSyncing.current = false;
+          setIsSyncing(false);
           setSaveState('dirty'); // Permite tentar novamente
           const msg = error instanceof Error ? error.message : "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
@@ -314,6 +315,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (tempDates.includes(dateBase)) return 'full';
       if (tempDates.includes(`${dateBase}_M`)) return 'morning';
       if (tempDates.includes(`${dateBase}_N`)) return 'night';
+      if (tempDates.some(d => d.startsWith(`${dateBase}_`))) return 'partial';
       return 'none';
   };
 
@@ -349,7 +351,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-secondary outline-none max-w-[140px]"
                     >
-                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {[...members].sort((a,b) => a.name.localeCompare(b.name)).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                 )}
                 
@@ -457,6 +459,14 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             content = (
                                 <>
                                     <Moon size={12} className="mb-0.5 md:mb-1" />
+                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                </>
+                            );
+                        } else if (status === 'partial') {
+                            btnClass = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
+                            content = (
+                                <>
+                                    <CheckCircle2 size={12} className="mb-0.5 md:mb-1" />
                                     <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
                                 </>
                             );

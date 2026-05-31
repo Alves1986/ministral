@@ -41,11 +41,30 @@ export const fetchAvailabilityForEditor = async (ministryId: string, orgId: stri
     .select('user_id, available_date, note')
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
-  // Retorna: { userId: { 'YYYY-MM-DD': 'M'|'T'|'N'|'all' } }
+  // Retorna: { userId: { 'YYYY-MM-DD': 'M'|'T'|'N'|'all'|'BLK' } }
   const map: Record<string, Record<string, string>> = {};
   data?.forEach((row: any) => {
     if (!map[row.user_id]) map[row.user_id] = {};
-    map[row.user_id][row.available_date] = row.note || 'all';
+    
+    if (row.note === 'BLK') {
+        const monthKey = `${row.available_date.substring(0, 7)}-01`;
+        map[row.user_id][monthKey] = 'BLK';
+        return;
+    }
+
+    if (row.note && row.note.startsWith('NOTE:')) {
+        return; // Ignore general notes in the editor availability check
+    }
+
+    const existing = map[row.user_id][row.available_date];
+    const newNote = ['M', 'N', 'T'].includes(row.note) ? row.note : 'all';
+    
+    if (!existing || existing === 'unavailable') {
+        map[row.user_id][row.available_date] = newNote;
+    } else if (existing !== 'all' && newNote !== existing) {
+        // If they have multiple partials (e.g., M and N) or a partial and an 'all', we treat as 'all'
+        map[row.user_id][row.available_date] = 'all';
+    }
   });
   return map;
 };

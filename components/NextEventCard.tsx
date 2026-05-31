@@ -158,52 +158,123 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
 
   const getBackgroundUrl = () => {
     const name = (ministryName || "").toLowerCase();
+    
+    // Seed generator based on event string so it changes per event but is consistent
+    const seedString = (propEvent.id || "") + (propEvent.extendedProps?.isoDate || "");
+    const seed = seedString.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
+    
+    const pick = (arr: string[]) => arr[seed % arr.length];
+
     if (name.includes("mídia") || name.includes("midia") || name.includes("projeção") || name.includes("projecao") || name.includes("transmissão") || name.includes("transmissao") || name.includes("multimídia") || name.includes("multimidia")) {
-      return "https://images.unsplash.com/photo-1542204165-65bf26472b9b?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1542204165-65bf26472b9b?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516280440502-3162b7194639?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("som") || name.includes("áudio") || name.includes("audio")) {
-      return "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1614680376573-3e4e1202e5f1?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1520698188355-6b589417852c?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("louvor") || name.includes("música") || name.includes("musica") || name.includes("banda") || name.includes("canto") || name.includes("coral")) {
-      return "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1514320291840-2e0a9bf66f22?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("recep") || name.includes("boas") || name.includes("acolhimento") || name.includes("portaria")) {
-      return "https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1544928147774-4b5bd5fb93c2?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519671482749-fd098e382307?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("comunica") || name.includes("marketing") || name.includes("foto")) {
-      return "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1432888117247-efb57bceb7f1?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1493612278159-46be9eeeb1be?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("infantil") || name.includes("kids") || name.includes("criança") || name.includes("crianca")) {
-      return "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516627145497-196249252189?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1602329581711-cb631624c944?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("joven") || name.includes("juventude") || name.includes("adolescente") || name.includes("mocidade")) {
-      return "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1523301343968-6a6ebf63f773?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1517486808506-ce54de01e127?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("mulher") || name.includes("feminino") || name.includes("senhora")) {
-      return "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1522770141673-ff8d234cf780?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("homen") || name.includes("masculino") || name.includes("senhor") || name.includes("homem")) {
-      return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519085360753-af0118f7cbe8?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1480455450811-e4ab1aabccb1?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("dança") || name.includes("danca") || name.includes("teatro") || name.includes("artes") || name.includes("coreografia") || name.includes("teatro")) {
-      return "https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516450360452-8171b302c349?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1547153760022-a6f69fc35467?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("intercess") || name.includes("oraç") || name.includes("orac")) {
-      return "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1504052434569-70a18bb720c6?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1518062312678-bcf6b176cfd9?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("ensino") || name.includes("ebd") || name.includes("escola") || name.includes("estudo") || name.includes("professor")) {
-      return "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1524178232363-1ca2b0568d41?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("diaconia") || name.includes("diácono") || name.includes("diacono") || name.includes("ceia") || name.includes("serviço") || name.includes("servico")) {
-      return "https://images.unsplash.com/photo-1529070538774-1843cb3265df?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1529070538774-1843cb3265df?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1461360228725-b4618776654e?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1593113565985-1779ba3bb7a0?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("seguran") || name.includes("estacionamento")) {
-      return "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1555627579-3fb70fbabcb0?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1618331835717-801e976710b2?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
     if (name.includes("limpeza") || name.includes("zeladoria") || name.includes("manutenç") || name.includes("manutenc")) {
-      return "https://images.unsplash.com/photo-1585421514738-01798e348b17?q=80&w=600&auto=format&fit=crop";
+      return pick([
+        "https://images.unsplash.com/photo-1585421514738-01798e348b17?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1527515637462-8f69b82fc6d0?q=80&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1563453392212-326f5e81f441?q=80&w=600&auto=format&fit=crop"
+      ]);
     }
-    return "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=600&auto=format&fit=crop";
+    return pick([
+      "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1557682250-33bf4e6dc6ae?q=80&w=600&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1557683305-6447c21acb00?q=80&w=600&auto=format&fit=crop"
+    ]);
   };
 
   return (

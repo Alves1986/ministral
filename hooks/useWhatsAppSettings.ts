@@ -34,7 +34,6 @@ export function useWhatsAppSettings(orgId: string | null | undefined) {
     enabled: Boolean(orgId),
     staleTime: STALE_SLOW,
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false,
   });
 
   const mutation = useMutation({

@@ -44,9 +44,9 @@ const STALE_SLOW = 10 * 60 * 1000;
 // Dados que mudam com frequencia media (2 minutos)
 const STALE_MEDIUM = 2 * 60 * 1000;
 
-// Dados em tempo real (5 minutos de cache, mas o realtime invalida quando muda)
-// Aumentar o staleTime aqui evita refetches desnecessários se o realtime estiver funcionando
-const STALE_REALTIME = 5 * 60 * 1000;
+// Dados em tempo real (1 minuto de cache, atua como fallback caso a conexão websocket falhe em background)
+// Aumentar o staleTime aqui evita refetches desnecessários se o realtime estiver funcionando, mas 1min previne dados travados.
+const STALE_REALTIME = 1 * 60 * 1000;
 
 const GC_TIME = 15 * 60 * 1000;
 
@@ -65,8 +65,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchMinistrySettings(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: STALE_SLOW,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 2. Assignments (Schedule Map)
@@ -75,8 +74,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchScheduleAssignments(ministryId, currentMonth, orgId),
     enabled: isScheduleEnabled,
     staleTime: STALE_REALTIME,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 3. Members
@@ -86,7 +84,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled,
     staleTime: STALE_REALTIME, // Reduzido para garantir visibilidade de novos membros
     gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: true
   });
 
   // 4. Availability
@@ -95,8 +93,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchMinistryAvailability(ministryId, orgId),
     enabled: false,
     staleTime: STALE_REALTIME,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 5. Notifications
@@ -117,8 +114,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchAnnouncementsSQL(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: STALE_MEDIUM,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 7. Swap Requests
@@ -127,8 +123,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchSwapRequests(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: STALE_MEDIUM,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 8. Repertoire
@@ -137,8 +132,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchRepertoire(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: STALE_SLOW,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 9. Global Conflicts
@@ -147,8 +141,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchGlobalSchedules(currentMonth, ministryId, orgId),
     enabled: isScheduleEnabled,
     staleTime: STALE_REALTIME,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 11. Rules (New) - Agora usa a camada de infra correta
@@ -157,8 +150,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => fetchEventRules(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: STALE_SLOW,
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   // 12. Next Event (NEW)
@@ -167,7 +159,6 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => fetchNextEventCardData(ministryId, orgId),
     enabled: isQueryEnabled,
     retry: false,
-    refetchOnWindowFocus: false,
     staleTime: STALE_REALTIME,
     gcTime: GC_TIME
   });
@@ -178,8 +169,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryFn: () => Supabase.fetchMemberAvailabilityV2(ministryId, orgId),
     enabled: isQueryEnabled,
     staleTime: 1000 * 60 * 2, // 2 minutes
-    gcTime: GC_TIME,
-    refetchOnWindowFocus: false
+    gcTime: GC_TIME
   });
 
   return {
