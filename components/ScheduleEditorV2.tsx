@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
     fetchRulesV2, 
@@ -37,6 +37,70 @@ import { generateAISchedule } from '../services/aiScheduleService';
 
 // --- COMPONENTES AUXILIARES ---
 import { ScheduleCell, getMemberAvailStatus, Avatar } from './ScheduleCell';
+
+const MemoizedEditorCell = React.memo<{
+    occurrence: OccurrenceV2;
+    role: string;
+    members: MemberV2[];
+    onAssign: (date: string, role: string, memberId: string | null, ruleId: string) => void;
+    processing: boolean;
+    availability: any;
+    conflictRules: any;
+    assignments: AssignmentV2[];
+    memberCounts: Record<string, number>;
+    globalConflicts?: any;
+    allOccurrences?: any;
+}>(({ occurrence, role, members, onAssign, processing, availability, conflictRules, assignments, memberCounts, globalConflicts, allOccurrences }) => {
+    const assignment = assignments.find(a => {
+        const aDate = a.event_date?.slice(0, 10);
+        const oDate = occurrence.date?.slice(0, 10);
+        return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
+    });
+
+    return (
+        <ScheduleCell 
+            occurrence={occurrence}
+            role={role}
+            currentMemberId={assignment?.member_id || null}
+            members={members}
+            onAssign={onAssign}
+            processing={processing}
+            availability={availability}
+            eventTime={occurrence.time}
+            conflictRules={conflictRules}
+            assignments={assignments}
+            memberCounts={memberCounts}
+            globalConflicts={globalConflicts}
+            allOccurrences={allOccurrences}
+        />
+    );
+}, (prev, next) => {
+    if (prev.occurrence.date !== next.occurrence.date) return false;
+    if (prev.occurrence.ruleId !== next.occurrence.ruleId) return false;
+    if (prev.role !== next.role) return false;
+    if (prev.processing !== next.processing) return false;
+    if (prev.availability !== next.availability) return false;
+    if (prev.conflictRules !== next.conflictRules) return false;
+    if (prev.globalConflicts !== next.globalConflicts) return false;
+    if (prev.members !== next.members) return false;
+
+    const prevDateAssignments = prev.assignments.filter(a => a.event_date?.slice(0, 10) === prev.occurrence.date.slice(0, 10));
+    const nextDateAssignments = next.assignments.filter(a => a.event_date?.slice(0, 10) === next.occurrence.date.slice(0, 10));
+    
+    if (prevDateAssignments.length !== nextDateAssignments.length) return false;
+    const sameAssignments = prevDateAssignments.every(pa => 
+        nextDateAssignments.some(na => na.member_id === pa.member_id && na.role === pa.role && na.event_rule_id === pa.event_rule_id)
+    );
+    if (!sameAssignments) return false;
+
+    const baseRole = prev.role.replace(/\s\d+$/, '');
+    const roleMembers = prev.members.filter(m => m.ministry_functions?.includes(baseRole));
+    for (const m of roleMembers) {
+        if (prev.memberCounts[m.id] !== next.memberCounts[m.id]) return false;
+    }
+
+    return true;
+});
 
 // --- COMPONENTE PRINCIPAL ---
 
@@ -269,14 +333,15 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         }
     };
 
-    const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
+    const handleAssignmentChange = useCallback(async (date: string, role: string, memberId: string | null, ruleId: string) => {
         setProcessing(true);
         
         const tempId = `temp-${Date.now()}`;
-        const previousAssignments = [...assignments];
+        let previousAssignments: AssignmentV2[] = [];
         
         // Atualização Otimista
         setAssignments(prev => {
+            previousAssignments = [...prev];
             const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_rule_id === ruleId));
             const next = memberId
                 ? [...filtered, {
@@ -328,7 +393,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         } finally {
             setProcessing(false);
         }
-    };
+    }, [ministryId, orgId, currentMonth, availability, occurrences, queryClient, addToast]);
 
     const handleExcludeOccurrence = async (occ: OccurrenceV2) => {
         if (!window.confirm(`Deseja realmente excluir o evento "${occ.title}" do dia ${occ.date.split('-').reverse().join('/')}? Esta ação afetará apenas este mês.`)) {
@@ -497,23 +562,15 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     </td>
                                     
                                     {roles.map(role => {
-                                        const assignment = assignments.find(a => {
-                                            const aDate = a.event_date?.slice(0, 10);
-                                            const oDate = occurrence.date?.slice(0, 10);
-                                            return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
-                                        });
-
                                         return (
                                             <td key={`${occurrence.date}-${role}`} className="p-2 relative">
-                                                <ScheduleCell 
+                                                <MemoizedEditorCell 
                                                     occurrence={occurrence}
                                                     role={role}
-                                                    currentMemberId={assignment?.member_id || null}
                                                     members={members}
                                                     onAssign={handleAssignmentChange}
                                                     processing={processing}
                                                     availability={availability}
-                                                    eventTime={occurrence.time}
                                                     conflictRules={conflictRules}
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
@@ -564,23 +621,16 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                 </div>
                                 <div className="p-4 space-y-4">
                                     {roles.map(role => {
-                                        const assignment = assignments.find(a => {
-                                            const aDate = a.event_date?.slice(0, 10);
-                                            const oDate = occurrence.date?.slice(0, 10);
-                                            return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
-                                        });
                                         return (
                                             <div key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
                                                 <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider pl-1">{role}</label>
-                                                <ScheduleCell 
+                                                <MemoizedEditorCell 
                                                     occurrence={occurrence}
                                                     role={role}
-                                                    currentMemberId={assignment?.member_id || null}
                                                     members={members}
                                                     onAssign={handleAssignmentChange}
                                                     processing={processing}
                                                     availability={availability}
-                                                    eventTime={occurrence.time}
                                                     conflictRules={conflictRules}
                                                     assignments={assignments}
                                                     memberCounts={memberCounts}
