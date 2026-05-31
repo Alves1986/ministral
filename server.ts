@@ -57,7 +57,7 @@ async function startServer() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
         const cityRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`,
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`,
           { 
               signal: controller.signal,
               headers: { 'User-Agent': 'GestaoEscala/1.0' }
@@ -68,8 +68,19 @@ async function startServer() {
         if (cityRes.ok) {
           const cityJson = await cityRes.json();
           const addr = cityJson.address;
-          city = addr?.city || addr?.municipality || addr?.town || addr?.village || addr?.suburb || "Local";
-          city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
+          const suburb = addr?.suburb || addr?.neighbourhood || addr?.city_district || addr?.quarter;
+          const cityName = addr?.city || addr?.town || addr?.municipality || addr?.village;
+          
+          if (suburb && cityName) {
+            city = `${suburb}, ${cityName}`;
+          } else {
+            city = cityName || suburb || addr?.county || addr?.state || "Local";
+          }
+          city = city
+            .replace("Município de ", "")
+            .replace("Distrito de ", "")
+            .replace("Região Administrativa de ", "")
+            .trim();
         }
       } catch (e) {
         console.warn("Falha ao buscar cidade:", e);

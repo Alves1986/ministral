@@ -82,24 +82,39 @@ export const WeatherWidget: React.FC = () => {
               return;
           }
 
+          const options = { 
+            enableHighAccuracy: true, // Solicita dados mais precisos do GPS/WiFi
+            timeout: 5000, 
+            maximumAge: refreshing ? 0 : 600000 
+          };
+
           navigator.geolocation.getCurrentPosition(
               (pos) => {
                   fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
               },
               (err) => {
-                  console.warn("Erro de geolocalização:", err);
-                  if (isMounted) {
-                      setLoading(false);
-                      setRefreshing(false);
-                      // Se já temos dados em cache, não mostramos erro crítico na tela
-                      if (!weather) setError(true);
-                  }
+                  console.warn("Erro ao obter local de alta precisão, tentando fallback convencional:", err);
+                  navigator.geolocation.getCurrentPosition(
+                      (pos) => {
+                          fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
+                      },
+                      (err2) => {
+                          console.warn("Erro de geolocalização geral:", err2);
+                          if (isMounted) {
+                              setLoading(false);
+                              setRefreshing(false);
+                              // Se já temos dados em cache, não mostramos erro crítico na tela
+                              if (!weather) setError(true);
+                          }
+                      },
+                      { 
+                        enableHighAccuracy: false, 
+                        timeout: 10000, 
+                        maximumAge: refreshing ? 0 : 600000 
+                      }
+                  );
               },
-              { 
-                enableHighAccuracy: false, // Mais rápido e menos propenso a falhas
-                timeout: 10000, 
-                maximumAge: refreshing ? 0 : 600000 // 10 min de cache de posição se não for refresh manual
-              }
+              options
           );
       };
 
