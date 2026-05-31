@@ -163,10 +163,21 @@ const InnerApp = () => {
 
   useEffect(() => {
     const root = window.document.documentElement;
-    if (themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        root.classList.add('dark');
-    } else {
-        root.classList.remove('dark');
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const updateTheme = () => {
+        if (themeMode === 'dark' || (themeMode === 'system' && mediaQuery.matches)) {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+    };
+
+    updateTheme();
+
+    if (themeMode === 'system') {
+        mediaQuery.addEventListener('change', updateTheme);
+        return () => mediaQuery.removeEventListener('change', updateTheme);
     }
   }, [themeMode]);
 

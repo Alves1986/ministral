@@ -396,6 +396,10 @@ export const SettingsScreen: React.FC<Props> = ({
                 if (!ministryId || !orgId) return;
                 try {
                     const sb = getSupabase();
+                    if (!sb) {
+                        addToast("Erro ao carregar o cliente do banco de dados.", "error");
+                        return;
+                    }
                     addToast("Iniciando exportação, aguarde...", "info");
                     
                     const [members, availability, schedule, swaps, rules] = await Promise.all([

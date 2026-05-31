@@ -12,16 +12,18 @@ interface UseEventsProps {
 }
 
 export function useEvents({ ministryId, organizationId, startDate, endDate }: UseEventsProps) {
-  // Query Key Stability
-  const queryKey = useMemo(() => ['event_rules', ministryId, organizationId], [ministryId, organizationId]);
+  // Query Key Stability - Unificado com 'rules' do useMinistryQueries para compartilhar o cache
+  const queryKey = useMemo(() => ['rules', ministryId, organizationId], [ministryId, organizationId]);
 
-  // 1. Busca Regras (Cacheado pelo React Query mas sempre fresco)
+  // 1. Busca Regras com estratégia de cache agressiva (evita refetches desnecessários)
   const { data: rules, isLoading, error } = useQuery({
     queryKey,
     queryFn: () => fetchEventRules(ministryId, organizationId),
     enabled: !!ministryId && !!organizationId,
-    staleTime: 0, // GARANTIA: Dados sempre frescos ao invalidar
-    refetchOnWindowFocus: true
+    staleTime: 10 * 60 * 1000, // 10 minutos (Cache agressivo para reduzir frequencia de atualizacao de regras estaticas)
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // 2. Projeção em Memória (Memoizado)

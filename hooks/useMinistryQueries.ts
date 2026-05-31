@@ -144,13 +144,15 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     gcTime: GC_TIME
   });
 
-  // 11. Rules (New) - Agora usa a camada de infra correta
+  // 11. Rules (New) - Agora usa a camada de infra correta com cache agressivo
   const rulesQuery: UseQueryResult<EventRule[]> = useQuery({
     queryKey: keys.rules(ministryId, orgId),
     queryFn: () => fetchEventRules(ministryId, orgId),
     enabled: isQueryEnabled,
-    staleTime: STALE_SLOW,
-    gcTime: GC_TIME
+    staleTime: STALE_SLOW, // 10 minutos
+    gcTime: GC_TIME,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false
   });
 
   // 12. Next Event (NEW)

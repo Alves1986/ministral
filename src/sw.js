@@ -71,7 +71,28 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 3. Outras requisições: Network First
+  // 3. Requisições Supabase (Banco de Dados/API): Network First com Cache Dinâmico
+  // Salva no cache os retornos das consultas de escala e membros para visualização offline.
+  if (event.request.method === 'GET' && (event.request.url.includes('/rest/v1/') || event.request.url.includes('.supabase.co'))) {
+    event.respondWith(
+      fetch(event.request)
+        .then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // 4. Outras requisições: Network First padrão
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );

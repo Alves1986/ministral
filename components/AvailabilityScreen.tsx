@@ -108,13 +108,14 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // Note key format: ID_YYYY-MM-00
     const noteKey = `${selectedMemberId}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
-  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState]);
+  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState, isSyncing]);
 
   // Auto-dismiss do estado 'saved'
   useEffect(() => {
     if (saveState !== 'saved') return;
     
     const timeout = setTimeout(() => {
+      setIsSyncing(false);
       setSaveState('idle');
     }, 3000);
     
@@ -297,7 +298,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
           });
           
           // ESTADO TERMINAL DE SUCESSO
-          setIsSyncing(false);
           setSaveState('saved');
           
       } catch (error: unknown) {

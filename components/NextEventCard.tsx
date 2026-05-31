@@ -161,7 +161,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
     
     // Seed generator based on event string so it changes per event but is consistent
     const seedString = (propEvent.id || "") + (propEvent.extendedProps?.isoDate || "");
-    const seed = seedString.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
+    const seed = seedString.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0) || 0;
     
     const pick = (arr: string[]) => arr[seed % arr.length];
 

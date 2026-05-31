@@ -27,8 +27,12 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         }
 
         if (row.note && row.note.startsWith('NOTE:')) {
-            const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.note.substring(5);
+            const actualNote = row.note.substring(5);
+            // Ignorar horários salvos acidentalmente como observação geral
+            if (!/^\d{2}:\d{2}(:\d{2})?$/.test(actualNote.trim())) {
+                const monthKey = row.available_date.substring(0, 7) + '-00';
+                notes[`${row.user_id}_${monthKey}`] = actualNote;
+            }
             return;
         }
 
@@ -37,7 +41,7 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         map[row.user_id].push(key);
         
         // Fallback for legacy notes that don't have NOTE: prefix
-        if (row.note && !['M', 'N', 'T', 'BLK'].includes(row.note) && !row.note.startsWith('NOTE:')) {
+        if (row.note && !['M', 'N', 'T', 'BLK'].includes(row.note) && !row.note.startsWith('NOTE:') && !/^\d{2}:\d{2}(:\d{2})?$/.test(row.note.trim())) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
             notes[`${row.user_id}_${monthKey}`] = row.note;
         }
