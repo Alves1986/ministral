@@ -257,7 +257,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                 type="button"
                 onClick={() => !processing && setIsOpen(!isOpen)}
                 disabled={processing}
-                className={`schedule-cell button hover:scale-[1.02] active:scale-95 w-full h-full px-2 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
+                className={`schedule-cell button hover:scale-[1.02] active:scale-95 duration-200 w-full h-full px-2 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
                     ${currentMember 
                         ? 'bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white border-secondary/20 dark:border-secondary/30 hover:bg-secondary/20' 
                         : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
@@ -363,7 +363,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                                                         e.preventDefault();
                                                         handleSelect(member.id);
                                                     }}
-                                                    className={`schedule-cell button hover:scale-[1.02] active:scale-95 w-full text-left px-3 md:px-2 py-3 md:py-2 flex items-center gap-3 md:gap-2 rounded-xl text-sm md:text-xs transition-all border border-transparent
+                                                    className={`schedule-cell button hover:scale-[1.02] active:scale-95 duration-200 w-full text-left px-3 md:px-2 py-3 md:py-2 flex items-center gap-3 md:gap-2 rounded-xl text-sm md:text-xs transition-all border border-transparent
                                                         ${currentMemberId === member.id 
                                                             ? 'bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white border-secondary/20' 
                                                             : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700'}
@@ -408,7 +408,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                                                         e.preventDefault();
                                                         handleSelect(member.id);
                                                     }}
-                                                    className={`schedule-cell button hover:scale-[1.02] active:scale-95 w-full text-left px-3 md:px-2 py-3 md:py-2 flex items-center gap-3 md:gap-2 rounded-xl text-sm md:text-xs transition-all border border-transparent opacity-50 md:opacity-40
+                                                    className={`schedule-cell button hover:scale-[1.02] active:scale-95 duration-200 w-full text-left px-3 md:px-2 py-3 md:py-2 flex items-center gap-3 md:gap-2 rounded-xl text-sm md:text-xs transition-all border border-transparent opacity-50 md:opacity-40
                                                         ${currentMemberId === member.id 
                                                             ? 'bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white border-secondary/20' 
                                                             : 'text-zinc-500 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700'}

@@ -48,4 +48,8 @@
   .glass-panel {
     @apply bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800;
   }
+
+  .schedule-cell.button {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }

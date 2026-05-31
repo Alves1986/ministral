@@ -30,6 +30,21 @@ export const AI_MODELS = [
     id: 'gemini-3.1-pro-preview',
     name: 'Gemini 3.1 Pro (Maior Capacidade)',
     description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    description: 'Alternativa rápida para alta demanda.'
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    description: 'Alternativa rápida para alta demanda.'
+  },
+  {
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash (Estável)',
+    description: 'Modelo estável para alta demanda.'
   }
 ];
 

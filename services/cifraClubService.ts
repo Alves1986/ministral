@@ -43,26 +43,42 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
             Retorne APENAS um JSON array sem formatação adicional, markdown ou texto explicativo.
         `;
 
-        const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING, description: "Nome da música" },
-                            artist: { type: Type.STRING, description: "Nome do artista/banda" },
-                            url: { type: Type.STRING, description: "URL completa do Cifra Club" },
-                            key: { type: Type.STRING, description: "O tom provável da música (ex: G, Cm) ou N/A" }
-                        },
-                        required: ["title", "artist", "url", "key"]
+        const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+        let response;
+        let lastError;
+
+        for (const model of modelsToTry) {
+            try {
+                response = await ai.models.generateContent({
+                    model: model,
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING, description: "Nome da música" },
+                                    artist: { type: Type.STRING, description: "Nome do artista/banda" },
+                                    url: { type: Type.STRING, description: "URL completa do Cifra Club" },
+                                    key: { type: Type.STRING, description: "O tom provável da música (ex: G, Cm) ou N/A" }
+                                },
+                                required: ["title", "artist", "url", "key"]
+                            }
+                        }
                     }
-                }
+                });
+                if (response.text) break; // success
+            } catch (err) {
+                console.warn(`[CifraClub] Model ${model} failed, trying next...`);
+                lastError = err;
             }
-        });
+        }
+        
+        if (!response || !response.text) {
+             throw lastError || new Error("All AI models failed");
+        }
 
         const content = response.text || '';
 
