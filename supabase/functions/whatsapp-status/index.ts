@@ -86,7 +86,10 @@ serve(async (req: Request) => {
     }
 
     // ── Executa a consulta de status física na Evolution API ──
-    const endpoint = `${evolutionApiUrl}/instance/connectionState/${currentInstanceName}`;
+    const cleanApiUrl = evolutionApiUrl.trim().replace(/\/+$/, "");
+    const cleanInstance = currentInstanceName ? currentInstanceName.trim().replace(/^\/+|\/+$/g, "") : "";
+    if (!cleanInstance) throw new Error("Instância inválida.");
+    const endpoint = `${cleanApiUrl}/instance/connectionState/${cleanInstance}`;
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {

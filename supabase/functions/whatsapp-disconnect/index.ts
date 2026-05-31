@@ -91,7 +91,10 @@ serve(async (req: Request) => {
     }
 
     // ── Executa a deleção física na Evolution API após aprovação de segurança ──
-    const endpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
+    const cleanApiUrl = evolutionApiUrl.trim().replace(/\/+$/, "");
+    const cleanInstance = instance_name ? instance_name.trim().replace(/^\/+|\/+$/g, "") : "";
+    if (!cleanInstance) throw new Error("Instância inválida.");
+    const endpoint = `${cleanApiUrl}/instance/delete/${cleanInstance}`;
     const deleteResponse = await fetch(endpoint, {
       method: "DELETE",
       headers: {

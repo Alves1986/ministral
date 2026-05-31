@@ -28,7 +28,12 @@ export async function sendWhatsAppMessage(
     presence = "composing",
   } = options;
 
-  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
+  const cleanApiUrl = apiUrl.trim().replace(/\/+$/, "");
+  const cleanInstance = instanceName ? instanceName.trim().replace(/^\/+|\/+$/g, "") : "";
+  if (!cleanInstance) {
+    return { success: false, error: "Instance name is empty or invalid" };
+  }
+  const endpoint = `${cleanApiUrl}/message/sendText/${cleanInstance}`;
   let lastError = "";
 
   for (let attempt = 0; attempt <= retries; attempt++) {

@@ -83,7 +83,8 @@ serve(async (req: Request) => {
       instanceName = `${safeName}-${org_id.substring(0, 5)}`;
     }
 
-    const endpoint = `${evolutionApiUrl}/instance/create`;
+    const cleanApiUrl = evolutionApiUrl.trim().replace(/\/+$/, "");
+    const endpoint = `${cleanApiUrl}/instance/create`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
