@@ -56,7 +56,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
-            await queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
         }} 
         availabilityWindow={availabilityWindow} 
         ministryId={ministryId} 

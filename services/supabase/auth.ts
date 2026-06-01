@@ -41,27 +41,32 @@ export const updateUserProfile = async (
         // Converter base64 para Blob e fazer upload no Storage
         const base64Data = avatar_url.split(',')[1];
         const mimeType = avatar_url.split(';')[0].split(':')[1];
-        const byteCharacters = atob(base64Data);
-        const byteArray = new Uint8Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteArray[i] = byteCharacters.charCodeAt(i);
-        }
-        const blob = new Blob([byteArray], { type: mimeType });
-        // Using user.id as the folder name. This is the standard Supabase RLS pattern: 
-        // (storage.foldername(name))[1] == auth.uid()
-        const fileName = `${user.id}/${Date.now()}.jpg`;
-        const { data: uploadData, error: uploadError } = await sb.storage
-            .from('avatars')
-            .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
-        
-        if (uploadError) {
-            console.error('Avatar upload error:', uploadError);
-            throw new Error('Falha ao enviar arquivo para o Supabase: ' + uploadError.message);
-        }
+        try {
+            const byteCharacters = atob(base64Data);
+            const byteArray = new Uint8Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteArray[i] = byteCharacters.charCodeAt(i);
+            }
+            const blob = new Blob([byteArray], { type: mimeType });
+            // Using user.id as the folder name. This is the standard Supabase RLS pattern: 
+            // (storage.foldername(name))[1] == auth.uid()
+            const fileName = `${user.id}/${Date.now()}.jpg`;
+            const { data: uploadData, error: uploadError } = await sb.storage
+                .from('avatars')
+                .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
+            
+            if (uploadError) {
+                console.error('Avatar upload error:', uploadError);
+                throw new Error('Falha ao enviar arquivo para o Supabase: ' + uploadError.message);
+            }
 
-        if (uploadData) {
-            const { data: urlData } = sb.storage.from('avatars').getPublicUrl(fileName);
-            finalAvatarUrl = urlData.publicUrl;
+            if (uploadData) {
+                const { data: urlData } = sb.storage.from('avatars').getPublicUrl(fileName);
+                finalAvatarUrl = urlData.publicUrl;
+            }
+        } catch (e) {
+            console.error('Failed to decode avatar base64', e);
+            throw new Error('Formato de imagem inválido.');
         }
     } else if (avatar_url && avatar_url.startsWith('http')) {
         finalAvatarUrl = avatar_url; // ja e uma URL publica, manter

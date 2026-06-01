@@ -165,7 +165,7 @@ const SelectorDropdown = ({
                                     e.stopPropagation();
                                     handleSelect(opt);
                                 }}
-                                className={`schedule-cell button w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-all duration-200 hover:scale-[1.02] active:scale-95 mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
+                                className={`schedule-cell button w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-all duration-200 hover:scale-[1.02] mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pointer-events-none">
                                     <div className="relative shrink-0">
@@ -239,7 +239,7 @@ const MemberSelector = ({
                     e.preventDefault();
                     setIsOpen(!isOpen); 
                 }}
-                className={`schedule-cell button flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 bg-white dark:bg-zinc-900 shadow-sm ${
+                className={`schedule-cell button flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200 hover:scale-[1.02] bg-white dark:bg-zinc-900 shadow-sm ${
                     hasError 
                     ? 'border-red-300 bg-red-50 dark:bg-red-900/10' 
                     : hasWarning

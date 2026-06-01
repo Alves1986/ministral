@@ -206,7 +206,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     
     // Optimistic update
     const newItems = draftItems.map(item => ({
-        id: `temp-${Date.now()}-${Math.random()}`,
+        id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         title: item.title,
         link: item.link,
         date,

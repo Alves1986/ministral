@@ -29,13 +29,18 @@ export function urlBase64ToUint8Array(base64String: string) {
     .replace(/\-/g, '+')
     .replace(/_/g, '/');
 
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
+  try {
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
 
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  } catch (e) {
+    console.error("VAPID Key decoding failed. Invalid VAPID Key.", e);
+    return new Uint8Array(0);
   }
-  return outputArray;
 }
 
 export const subscribeUserToPush = async () => {

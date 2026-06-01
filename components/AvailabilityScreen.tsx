@@ -299,6 +299,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
+          setIsSyncing(false);
           
       } catch (error: unknown) {
           console.error(error);

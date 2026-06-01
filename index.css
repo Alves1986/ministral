@@ -56,4 +56,13 @@
   .schedule-cell.button:hover {
     transform: scale(1.02);
   }
+
+  .schedule-cell.button:active {
+    transform: scale(0.98);
+  }
+
+  .schedule-cell.button:focus {
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.3);
+    outline: none;
+  }
 }
