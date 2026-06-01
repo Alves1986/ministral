@@ -22,19 +22,14 @@ export enum AI_TASKS {
 
 export const AI_MODELS = [
   {
-    id: 'gemini-3.5-flash',
-    name: 'Gemini 3.5 Flash (Rápido)',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Rápido)',
     description: 'Modelo veloz e eficiente para análises e reescritas diárias.'
   },
   {
-    id: 'gemini-3.1-pro-preview',
-    name: 'Gemini 3.1 Pro (Maior Capacidade)',
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro (Maior Capacidade)',
     description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    description: 'Alternativa rápida para alta demanda.'
   },
   {
     id: 'gemini-2.0-flash',

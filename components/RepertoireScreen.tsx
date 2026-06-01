@@ -196,7 +196,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         return;
     }
 
-    if (!currentUser?.ministryId || !orgId) {
+    if (!ministryId || !orgId) {
         addToast("Erro: Ministério ou Organização não identificados.", "error");
         return;
     }
@@ -213,13 +213,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         addedBy: currentUser.name,
         content: item.content
     }));
-    queryClient.setQueryData(['repertoire', currentUser.ministryId, orgId], (old: any) => {
+    queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
         if (!old) return old;
         return [...old, ...newItems];
     });
 
     for (const item of draftItems) {
-        const success = await addToRepertoire(currentUser.ministryId, orgId, {
+        const success = await addToRepertoire(ministryId, orgId, {
             title: item.title,
             link: item.link,
             date,
@@ -258,7 +258,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       }
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
           // Optimistic update
-          queryClient.setQueryData(['repertoire', currentUser?.ministryId, orgId], (old: any) => {
+          queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
               if (!old) return old;
               return old.filter((item: any) => item.id !== id);
           });
