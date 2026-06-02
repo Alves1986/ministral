@@ -54,8 +54,12 @@ export const getClientCredentialsToken = async (customClientId?: string, customC
             tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; 
             return appToken;
         }
-    } catch (e) {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+    } catch (e: any) {
         console.error("Erro auth app spotify via server:", e);
+        throw e;
     }
     return null;
 };

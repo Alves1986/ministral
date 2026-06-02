@@ -23,11 +23,14 @@ export const searchYouTubeVideos = async (query: string, customApiKey?: string):
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query, customApiKey })
             });
-            if (!res.ok) throw new Error('YouTube Proxy API Error');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Erro na API do YouTube Proxy');
+            }
             return await res.json();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error calling YouTube API proxy", error);
-            return [];
+            throw error;
         }
     }
     const apiKey = customApiKey || getApiKey();
