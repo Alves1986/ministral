@@ -1023,7 +1023,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                 Analisar e Sugerir Melhorias
               </button>
               {scaleSuggestions && (
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar">
                   {scaleSuggestions}
                 </div>
               )}
@@ -1042,7 +1042,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                 Detectar Conflitos e Riscos
               </button>
               {preventiveAlerts && (
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar">
                   {preventiveAlerts}
                 </div>
               )}

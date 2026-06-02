@@ -180,7 +180,7 @@ async function callGeminiREST(
     ],
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
     },
   };
 
@@ -203,7 +203,8 @@ async function callGeminiREST(
   }
 
   const data = await response.json();
-  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const text: string = parts.map((p: any) => p.text).join('') || '';
   if (!text) throw new Error('Gemini retornou resposta vazia.');
   return text;
 }
