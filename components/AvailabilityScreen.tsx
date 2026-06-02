@@ -94,15 +94,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedMemberId) return;
 
-    if (saveState === 'dirty' || saveState === 'saving' || isSyncing) return;
+    // Se o usuário estiver ativamente editando (dirty), salvando (saving)
+    // ou se mal acabou de salvar (saved), NÃO sobrescrevemos a tela temporária
+    // com os dados atrasados. Damos tempo pro servidor responder via background (Realtime) 
+    // com os dados mais recentes antes de repaginar a página pra Idle.
+    if (saveState !== 'idle' || isSyncing) return;
 
+    // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
     setTempDates(monthDates);
     
+    // Note key format: ID_YYYY-MM-00
     const noteKey = `${selectedMemberId}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
-  }, [selectedMemberId, currentMonth, availability, availabilityNotes, saveState, isSyncing]);
+  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState, isSyncing]);
 
   // Sincroniza o estado de gravação quando os dados do backend batem com os locais
   useEffect(() => {
