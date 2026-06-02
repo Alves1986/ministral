@@ -104,23 +104,32 @@ export const fetchGlobalConflictsV2 = async (ministryId: string, orgId: string, 
 
 export const fetchConflictRules = async (ministryId: string, orgId: string) => {
   const sb = getSupabase();
-  if (!sb || ministryId.length !== 36) return { blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [] };
+  if (!sb || ministryId.length !== 36) return { blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [], eventRoleExcludes: {} };
   const { data } = await sb.from('schedule_conflict_rules')
     .select('rule_type, functions, label')
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
 
-  const blockGroups = data?.filter((r:any) => r.rule_type === 'block_group' && !r.label?.startsWith('[MEMBER_BLOCK]')).map((r:any) => r.functions) || [];
+  const blockGroups = data?.filter((r:any) => r.rule_type === 'block_group' && !r.label?.startsWith('[MEMBER_BLOCK]') && !r.label?.startsWith('[EVENT_ROLE_EXCLUDE]')).map((r:any) => r.functions) || [];
   const allowExceptions = data?.filter((r:any) => r.rule_type === 'allow_exception' && !r.label?.startsWith('[MEMBER_PREFER]')).map((r:any) => r.functions) || [];
   
   const memberBlocks = data?.filter((r:any) => r.label?.startsWith('[MEMBER_BLOCK]')).map((r:any) => r.functions.map((f: string) => f.replace('member:', ''))) || [];
   const memberPrefers = data?.filter((r:any) => r.label?.startsWith('[MEMBER_PREFER]')).map((r:any) => r.functions.map((f: string) => f.replace('member:', ''))) || [];
 
+  const eventRoleExcludes: Record<string, string[]> = {};
+  data?.filter((r: any) => r.label?.startsWith('[EVENT_ROLE_EXCLUDE]')).forEach((r: any) => {
+    const match = r.label?.match(/event_rule_id=([\/\w-]+)/);
+    if (match?.[1]) {
+      eventRoleExcludes[match[1]] = r.functions || [];
+    }
+  });
+
   return {
     blockGroups,
     allowExceptions,
     memberBlocks,
-    memberPrefers
+    memberPrefers,
+    eventRoleExcludes
   };
 };
 

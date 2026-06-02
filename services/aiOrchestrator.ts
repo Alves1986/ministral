@@ -364,6 +364,7 @@ interface ScheduleInput {
     memberPrefers?: string[][];
     allowExceptions?: string[][];
   };
+  eventRoleExcludes?: Record<string, string[]>; // { ruleId: ['Camera', 'Transmissao'] }
 }
 
 interface Assignment {
@@ -491,6 +492,10 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
 
   for (const occ of data.occurrences) {
     for (const role of data.roles) {
+      // Verifica se esta função está excluída para este evento específico
+      const excludedRoles = data.eventRoleExcludes?.[occ.ruleId] || [];
+      if (excludedRoles.includes(role)) continue;
+
       // Verifica se a vaga já está preenchida (normaliza datas para evitar mismatch com timestamps)
       const alreadyFilled = allAssignments().some(
         a => a.event_rule_id === occ.ruleId &&

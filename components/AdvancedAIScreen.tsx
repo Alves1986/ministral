@@ -324,6 +324,14 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const memberBlocks = rules.filter(r => r.rule_type === 'block_members' || r.ruleType === 'block_members').map(r => r.functions) || [];
       const memberPrefers = rules.filter(r => r.rule_type === 'prefer_together' || r.ruleType === 'prefer_together').map(r => r.functions) || [];
 
+      const eventRoleExcludes = rules
+        .filter((r: any) => r.rule_type === 'event_role_exclude' || r.label?.startsWith('[EVENT_ROLE_EXCLUDE]'))
+        .reduce((acc: Record<string, string[]>, r: any) => {
+          const match = r.label?.match(/event_rule_id=([\w-]+)/);
+          if (match?.[1]) acc[match[1]] = r.functions || [];
+          return acc;
+        }, {});
+
       const conflictRulesInput = {
         blockGroups,
         allowExceptions,
@@ -341,7 +349,8 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         })),
         availability: mappedAvailability,
         existingAssignments: existingAssignmentsInput,
-        rules: conflictRulesInput
+        rules: conflictRulesInput,
+        eventRoleExcludes
       };
 
       const aiAssignments = await generateAISchedule(input as any, selectedModel || undefined);

@@ -859,7 +859,7 @@ const InnerApp = () => {
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && settingsScreen}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && status === 'ready' && ministryId.length === 36 && membersScreen}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && status === 'ready' && ministryId.length === 36 && <EventsScreen />}
-            {currentTab === 'schedule-rules' && isAdmin && safeEnabledTabs.includes('schedule-rules') && status === 'ready' && ministryId.length === 36 && <ScheduleRulesScreen ministryId={ministryId} orgId={orgId!} availableRoles={roles} members={publicMembers} />}
+            {currentTab === 'schedule-rules' && isAdmin && safeEnabledTabs.includes('schedule-rules') && status === 'ready' && ministryId.length === 36 && <ScheduleRulesScreen ministryId={ministryId} orgId={orgId!} availableRoles={roles} members={publicMembers} availableEvents={events.map((e: any) => ({ id: e.id?.split('|')[0] || e.ruleId || e.id, title: e.title })).filter((e: any, i: number, arr: any[]) => arr.findIndex(x => x.id === e.id) === i)} />}
             {currentTab === 'plan' && isAdmin && status === 'ready' && <PlanScreen organization={organization} isAdmin={isAdmin} onRefreshOrg={async () => { await refreshSession(); }} />}
             {currentTab === 'advanced-ai' && isAdmin && isPro && status === 'ready' && ministryId.length === 36 && (
                 <AdvancedAIScreen 
