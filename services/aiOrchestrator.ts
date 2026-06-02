@@ -7,10 +7,8 @@ function getApiKey(): string {
     // VITE_GEMINI_API_KEY pode conter chaves de outras APIs (AQ.Ab8...)
     const primary = process.env.GEMINI_API_KEY || '';
     const fallback = process.env.VITE_GEMINI_API_KEY || '';
-    // Valida que a chave começa com AIzaSy (formato padrão do Gemini)
     if (primary.startsWith('AIzaSy')) return primary;
     if (fallback.startsWith('AIzaSy')) return fallback;
-    // Retorna o que tiver, mesmo que inválido
     return primary || fallback;
   }
   return '';
@@ -51,9 +49,8 @@ export const AI_MODELS = [
   }
 ];
 
-// exportação legada para compatibilidade se tiver algo estrito chamando:
+// exportação legada para compatibilidade
 export const OPENROUTER_MODELS = AI_MODELS;
-
 export const DEFAULT_MODEL = AI_MODELS[0].id;
 
 const GLOBAL_PERSONALITY = `
@@ -185,7 +182,7 @@ async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Prom
   if (!apiKey) throw new Error('GEMINI_API_KEY não configurada.');
 
   const isJson = JSON_TASKS.has(taskType);
-  const { GoogleGenAI, Type } = await import('@google/genai');
+  const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
 
   const config: any = {
@@ -193,7 +190,7 @@ async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Prom
   };
 
   if (isJson) {
-      config.responseMimeType = "application/json";
+    config.responseMimeType = "application/json";
   }
 
   try {
@@ -211,7 +208,6 @@ async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Prom
 }
 
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  // Garante que apenas modelos conhecidos sejam usados
   const knownModelIds = AI_MODELS.map(m => m.id);
   const validPreferred = preferredModel && knownModelIds.includes(preferredModel) ? preferredModel : undefined;
 
@@ -226,19 +222,16 @@ async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredMod
     } catch (err: any) {
       const errMsg: string = err.message || '';
       console.warn(`[runAI] Modelo ${model} falhou: ${errMsg}`);
-      // Se for 404 (modelo não existe), não há sentido em continuar
       if (errMsg.includes('404') || errMsg.includes('NOT_FOUND')) {
         console.error(`[runAI] Modelo ${model} não existe nesta API. Pulando.`);
         lastErr = err;
         continue;
       }
-      // Se for 429 (quota excedida), tenta próximo
       if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
         console.warn(`[runAI] Quota excedida para ${model}. Tentando próximo...`);
         lastErr = err;
         continue;
       }
-      // Outros erros: registra e tenta próximo
       lastErr = err;
     }
   }
@@ -255,13 +248,13 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
       body: JSON.stringify({ taskType, context, payload, preferredModel })
     });
     if (!res.ok) {
-        const text = await res.text();
-        try {
-            const err = JSON.parse(text);
-            throw new Error(err.error || 'Erro na camada de proxy da IA');
-        } catch(e) {
-            throw new Error(`Erro na API (${res.status}): ${text}`);
-        }
+      const text = await res.text();
+      try {
+        const err = JSON.parse(text);
+        throw new Error(err.error || 'Erro na camada de proxy da IA');
+      } catch (e) {
+        throw new Error(`Erro na API (${res.status}): ${text}`);
+      }
     }
     return res.json();
   }
@@ -308,18 +301,18 @@ function parseAIResponse(content: string, taskType: AI_TASKS): any {
   let cleaned = content;
   try {
     cleaned = cleaned.trim();
-    
+
     const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (jsonBlockMatch) {
       const parsed = JSON.parse(jsonBlockMatch[1].trim());
       return extractByTask(parsed, taskType);
     }
-    
+
     const firstBrace = cleaned.indexOf('{');
     const firstBracket = cleaned.indexOf('[');
     let jsonStart = -1;
     let jsonEnd = -1;
-    
+
     if (firstBrace !== -1 && firstBracket !== -1) {
       if (firstBrace < firstBracket) {
         jsonStart = firstBrace;
@@ -357,11 +350,13 @@ function extractByTask(parsed: any, taskType: AI_TASKS): any {
   return parsed;
 }
 
+// ─── Geração de Escala Local ───────────────────────────────
+
 interface ScheduleInput {
   occurrences: { date: string; time: string; ruleId: string; title: string }[];
   roles: string[];
   members: { id: string; name: string; functions: string[] }[];
-  availability: Record<string, Record<string, string>>;
+  availability: Record<string, string[] | Record<string, string>>;
   existingAssignments: { event_rule_id: string; event_date: string; role: string; member_id: string }[];
   rules?: {
     blockGroups?: string[][];
@@ -378,42 +373,53 @@ interface Assignment {
   member_id: string;
 }
 
+/** Normaliza qualquer formato de data para YYYY-MM-DD */
+function normalizeDate(d: string): string {
+  return d.slice(0, 10);
+}
+
 function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   const result: Assignment[] = [];
+
+  // FIX: Inicializa assignCount com membros JÁ escalados no mês
+  // Isso evita sobrecarga em quem já foi escalado manualmente
   const assignCount: Record<string, number> = {};
   data.members.forEach(m => { assignCount[m.id] = 0; });
+  data.existingAssignments.forEach(a => {
+    if (a.member_id && assignCount[a.member_id] !== undefined) {
+      assignCount[a.member_id] = (assignCount[a.member_id] || 0) + 1;
+    }
+  });
 
+  // Combina atribuições existentes + novas para verificações de conflito
   const allAssignments = (): Assignment[] => [...data.existingAssignments, ...result];
 
   function isMemberAvailable(memberId: string, date: string, time: string): boolean {
     const avail = data.availability[memberId];
     if (!avail) return false;
-    
-    // Support object format (legacy or from globalConflicts overrides)
+
     const monthKey = `${date.substring(0, 7)}-01`;
     if ((avail as any)[monthKey] === 'BLK') return false;
-    
+
     const dayVal = (avail as any)[date];
     if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
 
-    // Check Array format (the actual standard structure from useMinistryQueries)
+    // Formato array (padrão atual do useMinistryQueries)
     if (Array.isArray(avail)) {
-        if (avail.includes(date)) return true; // Full day
-        
-        // Exact event time (new format)
-        const timePart = time.slice(0, 5); // HH:mm
-        if (avail.includes(`${date}_${timePart}`)) return true;
-        
-        // Legacy Morning / Night blocks
-        const hour = parseInt(timePart.slice(0, 2), 10);
-        const isMorning = hour < 12; // Use standard \`< 12\` check
-        if (isMorning && avail.includes(`${date}_M`)) return true;
-        if (!isMorning && avail.includes(`${date}_N`)) return true;
-        
-        return false;
+      if (avail.includes(date)) return true; // dia inteiro disponível
+
+      const timePart = time.slice(0, 5); // HH:mm
+      if (avail.includes(`${date}_${timePart}`)) return true;
+
+      const hour = parseInt(timePart.slice(0, 2), 10);
+      const isMorning = hour < 12;
+      if (isMorning && avail.includes(`${date}_M`)) return true;
+      if (!isMorning && avail.includes(`${date}_N`)) return true;
+
+      return false;
     }
 
-    // Default object literal fallback if not array
+    // Formato objeto (legado)
     if (!dayVal) return false;
     if (dayVal === 'all') return true;
     const hour = parseInt(time.split(':')[0], 10);
@@ -429,8 +435,10 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
     const hour = parseInt(time.split(':')[0], 10);
     const isMorning = hour < 12;
     return allAssignments().some(a => {
-      if (a.member_id !== memberId || a.event_date.slice(0, 10) !== date) return false;
-      const occ = data.occurrences.find(o => o.ruleId === a.event_rule_id && o.date === a.event_date.slice(0, 10));
+      if (a.member_id !== memberId || normalizeDate(a.event_date) !== date) return false;
+      const occ = data.occurrences.find(
+        o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date)
+      );
       if (!occ) return false;
       const assignedHour = parseInt(occ.time.split(':')[0], 10);
       return isMorning !== (assignedHour < 12);
@@ -440,10 +448,21 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   function hasBlockGroupConflict(memberId: string, role: string, ruleId: string, date: string): boolean {
     if (!data.rules?.blockGroups?.length) return false;
     const memberInEvent = allAssignments().filter(
-      a => a.member_id === memberId && a.event_rule_id === ruleId && a.event_date.slice(0, 10) === date
+      a => a.member_id === memberId &&
+           a.event_rule_id === ruleId &&
+           normalizeDate(a.event_date) === date
     );
+
     for (const group of data.rules.blockGroups) {
-      if (group.includes(role) && memberInEvent.some(a => group.includes(a.role))) return true;
+      if (!group.includes(role)) continue;
+      const conflictingAssignment = memberInEvent.find(a => group.includes(a.role));
+      if (!conflictingAssignment) continue;
+
+      // Verifica se há exceção permitida para este par de funções
+      const hasException = data.rules?.allowExceptions?.some(exc =>
+        exc.includes(role) && exc.includes(conflictingAssignment.role)
+      );
+      if (!hasException) return true;
     }
     return false;
   }
@@ -451,7 +470,7 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   function hasMemberBlockConflict(memberId: string, ruleId: string, date: string): boolean {
     if (!data.rules?.memberBlocks?.length) return false;
     const membersInEvent = allAssignments()
-      .filter(a => a.event_rule_id === ruleId && a.event_date.slice(0, 10) === date)
+      .filter(a => a.event_rule_id === ruleId && normalizeDate(a.event_date) === date)
       .map(a => a.member_id);
     for (const block of data.rules.memberBlocks) {
       if (block.includes(memberId)) {
@@ -472,11 +491,15 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
 
   for (const occ of data.occurrences) {
     for (const role of data.roles) {
+      // Verifica se a vaga já está preenchida (normaliza datas para evitar mismatch com timestamps)
       const alreadyFilled = allAssignments().some(
-        a => a.event_rule_id === occ.ruleId && a.event_date.slice(0, 10) === occ.date && a.role === role
+        a => a.event_rule_id === occ.ruleId &&
+             normalizeDate(a.event_date) === occ.date &&
+             a.role === role
       );
-      if (alreadyFilled) continue;
+      if (alreadyFilled) continue; // Vaga já preenchida — pula para próxima
 
+      // Filtra membros elegíveis respeitando todas as regras
       const eligible = data.members.filter(m => {
         if (!m.functions.includes(role)) return false;
         if (!isMemberAvailable(m.id, occ.date, occ.time)) return false;
@@ -489,19 +512,28 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
       if (eligible.length === 0) continue;
 
       const membersInEvent = allAssignments()
-        .filter(a => a.event_rule_id === occ.ruleId && a.event_date.slice(0, 10) === occ.date)
+        .filter(a => a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
         .map(a => a.member_id);
 
+      // Prioridade 1: membros com parceiro preferido já no evento
       let chosen = eligible.find(m =>
         getPreferredPartners(m.id).some(p => membersInEvent.includes(p))
       );
 
+      // Prioridade 2: membro menos escalado no mês (inclui escalas já existentes)
       if (!chosen) {
-        eligible.sort((a, b) => (assignCount[a.id] || 0) - (assignCount[b.id] || 0));
-        chosen = eligible[0];
+        const sorted = [...eligible].sort(
+          (a, b) => (assignCount[a.id] || 0) - (assignCount[b.id] || 0)
+        );
+        chosen = sorted[0];
       }
 
-      result.push({ event_rule_id: occ.ruleId, event_date: occ.date, role, member_id: chosen.id });
+      result.push({
+        event_rule_id: occ.ruleId,
+        event_date: occ.date,
+        role,
+        member_id: chosen.id
+      });
       assignCount[chosen.id] = (assignCount[chosen.id] || 0) + 1;
     }
   }
