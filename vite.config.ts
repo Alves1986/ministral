@@ -37,6 +37,9 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './'),
       },
     },
+    optimizeDeps: {
+      exclude: ['canvg', 'jspdf']
+    },
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
       '__SUPABASE_URL__': JSON.stringify(env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || ''),
