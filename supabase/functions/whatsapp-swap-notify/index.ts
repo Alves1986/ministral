@@ -12,8 +12,69 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { formatBrazilPhone } from "../_shared/phoneFormatter.ts";
-import { sendWhatsAppMessage } from "../_shared/evolutionClient.ts";
+// --- INLINE UTILS ---
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
+  const { timeout = 8000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(resource, { ...fetchOptions, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+export async function sendWhatsAppMessage(
+  apiUrl: string,
+  apiKey: string,
+  instanceName: string,
+  phone: string,
+  text: string,
+  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused" } = {}
+): Promise<{ success: boolean; error?: string }> {
+  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
+  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
+  let lastError = "";
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: apiKey },
+        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
+        timeout,
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        lastError = `Evolution API ${response.status}: ${body}`;
+        if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
+        return { success: false, error: lastError };
+      }
+      return { success: true };
+    } catch (err: any) {
+      lastError = err?.message || String(err);
+      if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
+    }
+  }
+  return { success: false, error: lastError };
+}
+export function formatBrazilPhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  if (digits.length < 10 || digits.length > 11) return null;
+  return "55" + digits;
+}
+export function phoneFromJid(remoteJid: string): string | null {
+  const raw = remoteJid.split("@")[0];
+  const digits = raw.replace(/\D/g, "");
+  if (!digits || digits.length < 10) return null;
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  return formatBrazilPhone(digits);
+}
+// --------------------
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
