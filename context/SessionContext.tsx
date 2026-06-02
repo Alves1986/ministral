@@ -171,7 +171,15 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             setServiceOrgContext(orgId);
 
-            const orgDetails = await fetchOrganizationDetails(orgId);
+            let orgDetails: Organization | null = null;
+            let allowedMinistries: string[] = [];
+
+            const [details, ministries] = await Promise.all([
+                fetchOrganizationDetails(orgId),
+                fetchUserAllowedMinistries(profile.id, orgId)
+            ]);
+            orgDetails = details;
+            allowedMinistries = ministries;
             setOrganization(orgDetails);
 
             if (orgDetails) {
@@ -216,13 +224,11 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 }
             }
 
-            let allowedMinistries: string[] = [];
             let ministry_functions: string[] = [];
             let ministry_role = 'member';
             let activeMinistry = '';
 
             try {
-                allowedMinistries = await fetchUserAllowedMinistries(profile.id, orgId);
 
                 const currentMinistryId = useAppStore.getState().ministryId;
                 if (profile.ministry_id && !currentMinistryId) {

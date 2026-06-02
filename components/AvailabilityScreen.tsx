@@ -110,14 +110,37 @@ export const AvailabilityScreen: React.FC<Props> = ({
     setGeneralNote(availabilityNotes?.[noteKey] || "");
   }, [selectedMemberId, currentMonth, availability, availabilityNotes, members, saveState, isSyncing]);
 
-  // Auto-dismiss do estado 'saved'
+  // Sincroniza o estado de gravação quando os dados do backend batem com os locais
+  useEffect(() => {
+    if (saveState !== 'saved') return;
+
+    const currentBackendDates = availability[selectedMemberId] || [];
+    const currentBackendMonthDates = currentBackendDates.filter(d => d.startsWith(currentMonth));
+    
+    const noteKey = `${selectedMemberId}_${currentMonth}-00`;
+    const currentBackendNote = availabilityNotes?.[noteKey] || "";
+
+    const tempSorted = [...tempDates].sort();
+    const backendSorted = [...currentBackendMonthDates].sort();
+
+    const isDatesEqual = tempSorted.length === backendSorted.length && 
+                         tempSorted.every((val, idx) => val === backendSorted[idx]);
+    const isNoteEqual = generalNote.trim() === currentBackendNote.trim();
+
+    if (isDatesEqual && isNoteEqual) {
+        setIsSyncing(false);
+        setSaveState('idle');
+    }
+  }, [availability, availabilityNotes, selectedMemberId, currentMonth, saveState, tempDates, generalNote]);
+
+  // Timeout de segurança (fallback) para evitar travamento da tela se o realtime falhar
   useEffect(() => {
     if (saveState !== 'saved') return;
     
     const timeout = setTimeout(() => {
       setIsSyncing(false);
       setSaveState('idle');
-    }, 3000);
+    }, 8000);
     
     return () => clearTimeout(timeout);
   }, [saveState]);
@@ -299,7 +322,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
-          setIsSyncing(false);
+          // Mantemos isSyncing = true para que o useEffect de verificação
+          // aguarde a chegada das props atualizadas do backend.
           
       } catch (error: unknown) {
           console.error(error);
