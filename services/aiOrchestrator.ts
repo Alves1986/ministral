@@ -3,7 +3,15 @@
 
 function getApiKey(): string {
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+    // GEMINI_API_KEY tem prioridade (chave válida AIzaSy...)
+    // VITE_GEMINI_API_KEY pode conter chaves de outras APIs (AQ.Ab8...)
+    const primary = process.env.GEMINI_API_KEY || '';
+    const fallback = process.env.VITE_GEMINI_API_KEY || '';
+    // Valida que a chave começa com AIzaSy (formato padrão do Gemini)
+    if (primary.startsWith('AIzaSy')) return primary;
+    if (fallback.startsWith('AIzaSy')) return fallback;
+    // Retorna o que tiver, mesmo que inválido
+    return primary || fallback;
   }
   return '';
 }
@@ -22,24 +30,24 @@ export enum AI_TASKS {
 
 export const AI_MODELS = [
   {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash (Recomendado)',
+    description: 'Modelo rápido, estável e eficiente para análises e reescritas diárias.'
+  },
+  {
     id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Rápido)',
-    description: 'Modelo veloz e eficiente para análises e reescritas diárias.'
+    name: 'Gemini 2.5 Flash (Avançado)',
+    description: 'Modelo avançado com maior capacidade de raciocínio.'
   },
   {
     id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro (Maior Capacidade)',
+    name: 'Gemini 2.5 Pro (Máxima Capacidade)',
     description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
   },
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
-    description: 'Alternativa rápida para alta demanda.'
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash (Estável)',
-    description: 'Modelo estável para alta demanda.'
+    id: 'gemini-2.0-flash-lite',
+    name: 'Gemini 2.0 Flash Lite (Econômico)',
+    description: 'Opção leve e econômica para tarefas simples.'
   }
 ];
 
@@ -203,16 +211,34 @@ async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Prom
 }
 
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const order = preferredModel
-    ? [preferredModel, ...AI_MODELS.map(m => m.id).filter(id => id !== preferredModel)]
-    : AI_MODELS.map(m => m.id);
+  // Garante que apenas modelos conhecidos sejam usados
+  const knownModelIds = AI_MODELS.map(m => m.id);
+  const validPreferred = preferredModel && knownModelIds.includes(preferredModel) ? preferredModel : undefined;
+
+  const order = validPreferred
+    ? [validPreferred, ...knownModelIds.filter(id => id !== validPreferred)]
+    : knownModelIds;
 
   let lastErr: Error = new Error('Todos os modelos falharam.');
   for (const model of order) {
     try {
       return await callAI(prompt, taskType, model);
     } catch (err: any) {
-      console.warn(`[runAI] Modelo ${model} falhou: ${err.message}`);
+      const errMsg: string = err.message || '';
+      console.warn(`[runAI] Modelo ${model} falhou: ${errMsg}`);
+      // Se for 404 (modelo não existe), não há sentido em continuar
+      if (errMsg.includes('404') || errMsg.includes('NOT_FOUND')) {
+        console.error(`[runAI] Modelo ${model} não existe nesta API. Pulando.`);
+        lastErr = err;
+        continue;
+      }
+      // Se for 429 (quota excedida), tenta próximo
+      if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+        console.warn(`[runAI] Quota excedida para ${model}. Tentando próximo...`);
+        lastErr = err;
+        continue;
+      }
+      // Outros erros: registra e tenta próximo
       lastErr = err;
     }
   }
