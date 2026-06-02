@@ -92,7 +92,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   const loadUserProfile = async () => {
       const profile = await getUserProfile();
-      if (profile) setSpotifyUser(profile);
+      if (profile) {
+          setSpotifyUser(profile);
+          setIsSpotifyLoggedIn(true);
+      } else {
+          // Curar estado de conexão travada caso o token seja inválido/expirado
+          logoutSpotify();
+          setIsSpotifyLoggedIn(false);
+          setSpotifyUser(null);
+          setUserPlaylists([]);
+          setPlaylistTracks([]);
+          setSelectedPlaylist(null);
+      }
   };
 
   const handleSpotifyLogin = async () => {
@@ -349,6 +360,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                           logoutSpotify();
                                           setIsSpotifyLoggedIn(false);
                                           setSpotifyUser(null);
+                                          setUserPlaylists([]);
+                                          setPlaylistTracks([]);
+                                          setSelectedPlaylist(null);
+                                          localStorage.removeItem('spotify_just_connected');
+                                          localStorage.removeItem('spotify_login_origin_tab');
                                           addToast("Desconectado do Spotify com sucesso.", "info");
                                       }} 
                                       className="text-xs text-red-500 font-bold px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-all shrink-0 active:scale-95"
