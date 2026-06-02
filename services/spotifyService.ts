@@ -65,8 +65,27 @@ export const getClientCredentialsToken = async (customClientId?: string, customC
 };
 
 // --- 2. AUTENTICAÇÃO DO USUÁRIO (Implicit Grant) ---
-export const getLoginUrl = (customClientId?: string) => {
-    const { clientId } = getCredentials(customClientId);
+export const getLoginUrl = async (customClientId?: string): Promise<string | null> => {
+    let clientId = customClientId || "";
+    if (!clientId) {
+        try {
+            // @ts-ignore
+            if (import.meta.env) clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
+        } catch(e) {}
+    }
+
+    if (!clientId) {
+        try {
+            const response = await fetch('/api/spotify/config');
+            if (response.ok) {
+                const data = await response.json();
+                clientId = data.clientId || "";
+            }
+        } catch (e) {
+            console.error("Erro ao carregar o ID do cliente Spotify do servidor:", e);
+        }
+    }
+
     if (!clientId) return null;
 
     const redirectUri = window.location.origin; // Redireciona para a própria página

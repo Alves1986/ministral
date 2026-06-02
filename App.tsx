@@ -116,11 +116,17 @@ const InnerApp = () => {
     // Se estourar a URL e tirar o Hash, ele armazena antes que seja limpo.
     const token = handleLoginCallback();
     if (token) {
-        // Redireciona para a aba de repertório se for um callback de login
+        // Define a flag indicando que acabou de conectar para o RepertoireScreen saber
+        localStorage.setItem('spotify_just_connected', 'true');
+
+        // Redireciona para a aba de origem ou default para repertoire-manager
+        const originTab = localStorage.getItem('spotify_login_origin_tab') || 'repertoire-manager';
+        localStorage.removeItem('spotify_login_origin_tab');
+
         const url = new URL(window.location.href);
-        url.searchParams.set('tab', 'repertoire');
+        url.searchParams.set('tab', originTab);
         window.history.replaceState({}, '', url.toString());
-        setCurrentTab('repertoire');
+        setCurrentTab(originTab);
     }
   }, []);
 

@@ -386,6 +386,8 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
       )}
 
+
+
       {activeTab === 'admin' && isAdmin && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Upload size={16}/> Exportação de Dados</h3>

@@ -72,7 +72,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   // Init
   useEffect(() => {
       const tokenFromHash = handleLoginCallback();
-      if (tokenFromHash) {
+      const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
+
+      if (tokenFromHash || justConnected) {
+          localStorage.removeItem('spotify_just_connected');
           setIsSpotifyLoggedIn(true);
           setActiveTab('playlists');
           addToast("Spotify conectado com sucesso!", "success");
@@ -92,15 +95,23 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (profile) setSpotifyUser(profile);
   };
 
-  const handleSpotifyLogin = () => {
+  const handleSpotifyLogin = async () => {
       if (!ministryId) {
           addToast("Erro: ID do ministério não encontrado.", "error");
           return;
       }
       if(date) localStorage.setItem('repertoire_draft_date', date);
-      const url = getLoginUrl(integrations?.spotifyClientId);
-      if (url) window.location.href = url;
-      else addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
+      localStorage.setItem('spotify_login_origin_tab', mode === 'manage' ? 'repertoire-manager' : 'repertoire');
+      try {
+          const url = await getLoginUrl(integrations?.spotifyClientId);
+          if (url) {
+              window.location.href = url;
+          } else {
+              addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
+          }
+      } catch (err) {
+          addToast("Erro ao carregar link de conexão com o Spotify.", "error");
+      }
   };
 
   const handleLoadPlaylists = async () => {
@@ -316,12 +327,65 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
                   {activeTab === 'spotify' && (
                       <div className="space-y-4 animate-fade-in">
+                          {isSpotifyLoggedIn ? (
+                              <div className="flex items-center justify-between p-3.5 bg-green-500/10 dark:bg-green-500/5 border border-green-500/25 dark:border-green-500/10 rounded-xl">
+                                  <div className="flex items-center gap-3 overflow-hidden">
+                                      {spotifyUser?.images?.[0]?.url ? (
+                                          <img src={spotifyUser.images[0].url} className="w-9 h-9 rounded-full object-cover shadow-sm border border-green-500/20 shrink-0" referrerPolicy="no-referrer" />
+                                      ) : (
+                                          <div className="w-9 h-9 rounded-full bg-[#1DB954] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                              {spotifyUser?.display_name?.[0]?.toUpperCase() || 'S'}
+                                          </div>
+                                      )}
+                                      <div className="min-w-0">
+                                          <span className="inline-flex items-center gap-1.5 text-[10px] font-black tracking-wider text-green-600 dark:text-green-400 uppercase">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Spotify Conectado
+                                          </span>
+                                          <p className="text-sm font-bold text-zinc-800 dark:text-white truncate leading-tight">{spotifyUser?.display_name || 'Sua Conta Spotify'}</p>
+                                      </div>
+                                  </div>
+                                  <button 
+                                      onClick={() => {
+                                          logoutSpotify();
+                                          setIsSpotifyLoggedIn(false);
+                                          setSpotifyUser(null);
+                                          addToast("Desconectado do Spotify com sucesso.", "info");
+                                      }} 
+                                      className="text-xs text-red-500 font-bold px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-all shrink-0 active:scale-95"
+                                  >
+                                      Desconectar
+                                  </button>
+                              </div>
+                          ) : (
+                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-700/60 rounded-xl">
+                                  <div className="space-y-1">
+                                      <h4 className="text-xs font-black tracking-wider text-[#1DB954] uppercase flex items-center gap-1.5">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-ping" /> Desconectado (Modo Público Ativo)
+                                      </h4>
+                                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal max-w-md">
+                                          Você pode buscar músicas públicas de imediato. Conecte sua conta do Spotify se quiser sincronizar e adicionar músicas de suas <strong>Playlists particulares</strong>.
+                                      </p>
+                                      {typeof window !== 'undefined' && window.self !== window.top && (
+                                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1 bg-amber-500/10 p-2 rounded border border-amber-500/20 max-w-md leading-relaxed animate-pulse">
+                                              ⚠️ <strong>Aviso de Pré-visualização:</strong> No sandbox do estúdio, por favor clique no botão <strong>"Abrir em nova aba"</strong> no topo direito da tela antes de conectar seu Spotify para evitar que o navegador bloqueie o redirecionamento.
+                                          </p>
+                                      )}
+                                  </div>
+                                  <button 
+                                      onClick={handleSpotifyLogin} 
+                                      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#1DB954] hover:bg-[#1ed760] active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-all shrink-0 shadow-md shadow-[#1DB954]/15"
+                                  >
+                                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.565.387-.86.207-2.377-1.454-5.37-1.782-8.892-.98-.336.075-.668-.135-.744-.47-.077-.336.135-.668.47-.743 3.856-.88 7.15-.502 9.822 1.13.295.178.387.563.204.856zm1.225-2.72c-.227.367-.707.487-1.074.26-2.72-1.672-6.87-2.157-10.075-1.182-.413.125-.847-.107-.972-.52-.125-.413.107-.847.52-.972 3.666-1.112 8.232-.574 11.34 1.334.368.228.488.708.26 1.08zm.105-2.833C14.492 8.89 8.784 8.7 5.467 9.707a1 1 0 01-.577-1.915c3.81-1.155 10.12-.93 14.07 1.417a1 1 0 01-1.042 1.708z"/></svg>
+                                      Conectar Spotify
+                                  </button>
+                              </div>
+                          )}
+
                           <div className="flex gap-2">
                               <input type="text" placeholder="Digite música ou artista..." value={spotifyQuery} onChange={e => setSpotifyQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" />
                               <button onClick={handleSpotifySearch} disabled={spotifyLoading} className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{spotifyLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
                           </div>
                           {spotifyResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{spotifyResults.map(track => (<div key={track.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 overflow-hidden"><img src={track.album.images[2]?.url || track.album.images[0]?.url} className="w-10 h-10 rounded shadow-sm shrink-0" /><div className="min-w-0"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{track.name}</p><p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p></div></div><button onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-secondary/10 text-secondary hover:bg-secondary/20 flex items-center gap-1"><Plus size={14}/> Add</button></div>))}</div>}
-                          {!isSpotifyLoggedIn && <div className="p-3 bg-secondary/10 rounded-lg text-xs text-secondary dark:text-white flex justify-between items-center"><span>Conecte sua conta para acessar playlists.</span><button onClick={handleSpotifyLogin} className="font-bold underline hover:text-secondaryHover">Conectar Spotify</button></div>}
                       </div>
                   )}
 

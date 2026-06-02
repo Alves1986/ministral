@@ -135,13 +135,19 @@ async function startServer() {
   app.post("/api/youtube/search", async (req, res) => {
     try {
       const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
-      const { query, customApiKey } = req.body;
-      const result = await searchYouTubeVideos(query, customApiKey);
+      const { query } = req.body;
+      const result = await searchYouTubeVideos(query);
       res.json(result);
     } catch (error: any) {
       console.error("Error in /api/youtube/search:", error);
       res.status(500).json({ error: error.message || "Failed to search YouTube" });
     }
+  });
+
+  app.get("/api/spotify/config", (req, res) => {
+    res.json({
+      clientId: process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || ""
+    });
   });
 
   app.post("/api/spotify/token", async (req, res) => {
