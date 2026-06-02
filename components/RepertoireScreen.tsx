@@ -152,11 +152,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (!spotifyQuery.trim() || !ministryId) return;
       setSpotifyLoading(true);
       try {
-          const results = await searchSpotifyTracks(spotifyQuery, integrations?.spotifyClientId, integrations?.spotifyClientSecret);
+          const results = await searchSpotifyTracks(spotifyQuery);
           setSpotifyResults(results);
-          if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
+          if (results.length === 0) addToast('Nenhum resultado no Spotify.', 'warning');
       } catch (e: any) {
-          addToast(e.message || "Erro ao buscar no Spotify.", "error");
+          addToast(e.message || 'Erro ao buscar no Spotify.', 'error');
       } finally {
           setSpotifyLoading(false);
       }

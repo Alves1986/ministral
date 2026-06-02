@@ -174,7 +174,27 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - Pontos principais
     - Sugestões práticas
   `,
-  [AI_TASKS.SCALE_GENERATION]: (_data) => '',
+  [AI_TASKS.SCALE_GENERATION]: (data) => `
+    Gere uma escala mensal consistente para o ministério.
+    REGRAS OBRIGATÓRIAS:
+    1. Respeite as regras de conflito: blockGroups, allowExceptions, memberBlocks, memberPrefers e eventRoleExcludes.
+    2. Respeite a disponibilidade dos membros. Se houver bloqueio (BLK) ou ausência, não escalar.
+    3. Leia as observações/notas das disponibilidades antes de decidir: elas podem indicar impedimentos ou preferências.
+    4. Não mova atribuições já existentes; mantenha-as quando válidas.
+    5. Priorize equilíbrio de carga, devolva trocas/ajustes com motivação.
+    6. Retorne APENAS JSON puro.
+    ESTRUTURA ESPERADA:
+    {
+      "summary": "frase curta do que será feito",
+      "changes": [
+        {"event_rule_id": "uuid", "event_date": "YYYY-MM-DD", "role": "função", "member_id": "uuid", "reason": "ajuste/motivo"}
+      ],
+      "kept": [
+        {"event_rule_id": "uuid", "event_date": "YYYY-MM-DD", "role": "função", "member_id": "uuid"}
+      ]
+    }
+    DADOS: ${JSON.stringify(data)}
+  `,
 };
 
 async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
@@ -379,11 +399,9 @@ function normalizeDate(d: string): string {
   return d.slice(0, 10);
 }
 
-function generateScheduleLocally(data: ScheduleInput): Assignment[] {
+function generateScheduleLocally(data: ScheduleInput): { kept: Assignment[]; changes: Assignment[] } {
   const result: Assignment[] = [];
 
-  // FIX: Inicializa assignCount com membros JÁ escalados no mês
-  // Isso evita sobrecarga em quem já foi escalado manualmente
   const assignCount: Record<string, number> = {};
   data.members.forEach(m => { assignCount[m.id] = 0; });
   data.existingAssignments.forEach(a => {
@@ -392,35 +410,27 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
     }
   });
 
-  // Combina atribuições existentes + novas para verificações de conflito
   const allAssignments = (): Assignment[] => [...data.existingAssignments, ...result];
 
   function isMemberAvailable(memberId: string, date: string, time: string): boolean {
     const avail = data.availability[memberId];
     if (!avail) return false;
-
     const monthKey = `${date.substring(0, 7)}-01`;
     if ((avail as any)[monthKey] === 'BLK') return false;
-
     const dayVal = (avail as any)[date];
     if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
 
-    // Formato array (padrão atual do useMinistryQueries)
     if (Array.isArray(avail)) {
-      if (avail.includes(date)) return true; // dia inteiro disponível
-
-      const timePart = time.slice(0, 5); // HH:mm
+      if (avail.includes(date)) return true;
+      const timePart = time.slice(0, 5);
       if (avail.includes(`${date}_${timePart}`)) return true;
-
       const hour = parseInt(timePart.slice(0, 2), 10);
       const isMorning = hour < 12;
       if (isMorning && avail.includes(`${date}_M`)) return true;
       if (!isMorning && avail.includes(`${date}_N`)) return true;
-
       return false;
     }
 
-    // Formato objeto (legado)
     if (!dayVal) return false;
     if (dayVal === 'all') return true;
     const hour = parseInt(time.split(':')[0], 10);
@@ -437,9 +447,7 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
     const isMorning = hour < 12;
     return allAssignments().some(a => {
       if (a.member_id !== memberId || normalizeDate(a.event_date) !== date) return false;
-      const occ = data.occurrences.find(
-        o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date)
-      );
+      const occ = data.occurrences.find(o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date));
       if (!occ) return false;
       const assignedHour = parseInt(occ.time.split(':')[0], 10);
       return isMorning !== (assignedHour < 12);
@@ -449,17 +457,12 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   function hasBlockGroupConflict(memberId: string, role: string, ruleId: string, date: string): boolean {
     if (!data.rules?.blockGroups?.length) return false;
     const memberInEvent = allAssignments().filter(
-      a => a.member_id === memberId &&
-           a.event_rule_id === ruleId &&
-           normalizeDate(a.event_date) === date
+      a => a.member_id === memberId && a.event_rule_id === ruleId && normalizeDate(a.event_date) === date
     );
-
     for (const group of data.rules.blockGroups) {
       if (!group.includes(role)) continue;
       const conflictingAssignment = memberInEvent.find(a => group.includes(a.role));
-      if (!conflictingAssignment) continue;
-
-      // Verifica se há exceção permitida para este par de funções
+      if (conflictingAssignment) continue;
       const hasException = data.rules?.allowExceptions?.some(exc =>
         exc.includes(role) && exc.includes(conflictingAssignment.role)
       );
@@ -490,21 +493,37 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
       .filter(Boolean);
   }
 
+  const kept: Assignment[] = [];
+  const changes: Assignment[] = [];
+  const addedKeys = new Set<string>();
+
+  // Valida atribuições existentes
+  data.existingAssignments.forEach(a => {
+    if (!a.member_id) return;
+    const occ = data.occurrences.find(
+      o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date)
+    );
+    if (!occ) return;
+
+    const valid = isMemberAvailable(a.member_id, normalizeDate(a.event_date), occ.time) &&
+                  !hasBlockGroupConflict(a.member_id, a.role, a.event_rule_id, occ.date) &&
+                  !hasMemberBlockConflict(a.member_id, a.event_rule_id, occ.date) &&
+                  !hasSundayTurnConflict(a.member_id, normalizeDate(a.event_date), occ.time);
+
+    if (valid) {
+      kept.push(a);
+      addedKeys.add(`${a.event_rule_id}|${normalizeDate(a.event_date)}|${a.role}`);
+    }
+  });
+
   for (const occ of data.occurrences) {
     for (const role of data.roles) {
-      // Verifica se esta função está excluída para este evento específico
       const excludedRoles = data.eventRoleExcludes?.[occ.ruleId] || [];
       if (excludedRoles.includes(role)) continue;
 
-      // Verifica se a vaga já está preenchida (normaliza datas para evitar mismatch com timestamps)
-      const alreadyFilled = allAssignments().some(
-        a => a.event_rule_id === occ.ruleId &&
-             normalizeDate(a.event_date) === occ.date &&
-             a.role === role
-      );
-      if (alreadyFilled) continue; // Vaga já preenchida — pula para próxima
+      const key = `${occ.ruleId}|${occ.date}|${role}`;
+      if (addedKeys.has(key)) continue;
 
-      // Filtra membros elegíveis respeitando todas as regras
       const eligible = data.members.filter(m => {
         if (!m.functions.includes(role)) return false;
         if (!isMemberAvailable(m.id, occ.date, occ.time)) return false;
@@ -520,12 +539,10 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
         .filter(a => a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
         .map(a => a.member_id);
 
-      // Prioridade 1: membros com parceiro preferido já no evento
       let chosen = eligible.find(m =>
         getPreferredPartners(m.id).some(p => membersInEvent.includes(p))
       );
 
-      // Prioridade 2: membro menos escalado no mês (inclui escalas já existentes)
       if (!chosen) {
         const sorted = [...eligible].sort(
           (a, b) => (assignCount[a.id] || 0) - (assignCount[b.id] || 0)
@@ -533,19 +550,21 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
         chosen = sorted[0];
       }
 
-      result.push({
+      const assignment: Assignment = {
         event_rule_id: occ.ruleId,
         event_date: occ.date,
         role,
         member_id: chosen.id
-      });
+      };
+
+      changes.push(assignment);
+      addedKeys.add(key);
       assignCount[chosen.id] = (assignCount[chosen.id] || 0) + 1;
     }
   }
 
-  return result;
+  return { kept, changes };
 }
-
-export async function generateScheduleWithAI(data: any, model?: string): Promise<Assignment[]> {
+export async function generateScheduleWithAI(data: any, model?: string): Promise<{ kept: Assignment[]; changes: Assignment[] }> {
   return Promise.resolve(generateScheduleLocally(data));
 }

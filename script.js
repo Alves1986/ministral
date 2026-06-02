@@ -80,7 +80,7 @@ const newMethods =
         try {
             if (existingRule) {
                 if (existingRule.functions.includes(roleToExclude)) {
-                    addToast('Função já excluída neste evento', 'warning');
+                    addToast('Funï¿½ï¿½o jï¿½ excluï¿½da neste evento', 'warning');
                     return;
                 }
                 const updatedFunctions = [...existingRule.functions, roleToExclude];
@@ -121,7 +121,7 @@ const newMethods =
             } else {
                 await sb.from('schedule_conflict_rules').update({ functions: updatedFunctions }).eq('id', ruleId).eq('organization_id', orgId);
             }
-            addToast('Função removida', 'success');
+            addToast('Funï¿½ï¿½o removida', 'success');
             loadData();
         } catch (error: any) {
             addToast(\Erro: \\, 'error');
@@ -136,14 +136,14 @@ content = content.replace(/if \(loading\) \{/, newMethods);
 // 9. Component rendering - Section 1 insertion (putting between Sections 1 and 2 or BEFORE section 1? We'll put it BEFORE section 1 because it's about roles which makes sense at the top).
 
 const newSection = \
-            {/* SEÇÃO: FUNÇÕES OPCIONAIS POR EVENTO */}
+            {/* SEï¿½ï¿½O: FUNï¿½ï¿½ES OPCIONAIS POR EVENTO */}
             <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
                     <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                        <CalendarX size={20} className="text-amber-500" /> Funções Opcionais por Evento
+                        <CalendarX size={20} className="text-amber-500" /> Funï¿½ï¿½es Opcionais por Evento
                     </h3>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                        Defina quais funções a IA <strong>não deve preencher</strong> em eventos específicos (ex: não há câmera no Culto de Oração).
+                        Defina quais funï¿½ï¿½es a IA <strong>nï¿½o deve preencher</strong> em eventos especï¿½ficos (ex: nï¿½o hï¿½ cï¿½mera no Culto de Oraï¿½ï¿½o).
                     </p>
                 </div>
 
@@ -163,14 +163,14 @@ const newSection = \
                             </select>
                         </div>
                         <div className="flex-1 w-full">
-                            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Função a Excluir</label>
+                            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Funï¿½ï¿½o a Excluir</label>
                             <select
                                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                                 onChange={(e) => { if (e.target.value) { handleCreateEventRoleExclude(e.target.value); e.target.value = ''; } }}
                                 defaultValue=""
                                 disabled={!selectedEventId}
                             >
-                                <option value="" disabled>{selectedEventId ? '+ Adicionar função a excluir...' : 'Selecione um evento primeiro'}</option>
+                                <option value="" disabled>{selectedEventId ? '+ Adicionar funï¿½ï¿½o a excluir...' : 'Selecione um evento primeiro'}</option>
                                 {availableRoles
                                     .filter(role => {
                                         const existingRule = rules.find(r => r.label?.includes(\event_rule_id=\\));
@@ -187,7 +187,7 @@ const newSection = \
                     {eventExcludeRules.length === 0 ? (
                         <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 flex flex-col items-center gap-3">
                             <CalendarX size={48} className="opacity-20" />
-                            <p>Nenhuma exclusão de função por evento configurada.</p>
+                            <p>Nenhuma exclusï¿½o de funï¿½ï¿½o por evento configurada.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -231,10 +231,10 @@ const newSection = \
                 </div>
             </section>
 
-            {/* SEÇÃO 1: REGRAS ENTRE MEMBROS (NOVO) */}
+            {/* SEï¿½ï¿½O 1: REGRAS ENTRE MEMBROS (NOVO) */}
 \;
 
-content = content.replace(/\\{\\/\\* SEÇÃO 1: REGRAS ENTRE MEMBROS \\(NOVO\\) \\*\\/\\}/, newSection);
+content = content.replace(/\\{\\/\\* SEï¿½ï¿½O 1: REGRAS ENTRE MEMBROS \\(NOVO\\) \\*\\/\\}/, newSection);
 
 fs.writeFileSync(file, content);
 console.log('Update complete.');
