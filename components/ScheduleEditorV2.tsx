@@ -131,7 +131,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
     const [availability, setAvailability] = useState<Record<string, Record<string, string>>>({});
-    const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [] });
+    const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][], eventRoleExcludes: Record<string, string[]> }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [], eventRoleExcludes: {} });
     const [globalConflicts, setGlobalConflicts] = useState<Record<string, { date: string, ministryId: string, role: string }[]>>({});
 
     // -- DERIVED STATE --
@@ -270,7 +270,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     role: a.role,
                     member_id: a.member_id
                 })),
-                rules: conflictRules
+                rules: conflictRules,
+                eventRoleExcludes: conflictRules.eventRoleExcludes
             };
 
             const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
