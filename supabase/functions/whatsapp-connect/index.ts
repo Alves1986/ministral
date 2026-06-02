@@ -26,10 +26,14 @@ serve(async (req: Request) => {
       throw new Error("Credenciais da Evolution API não configuradas.");
     }
 
-    const { ministry_id, org_id, instance_name, ministry_name } = await req.json();
+    const reqBody = await req.json();
+    const ministry_id = reqBody.ministry_id;
+    const orgId = reqBody.organization_id || reqBody.org_id;
+    const instance_name = reqBody.instance_name;
+    const ministry_name = reqBody.ministry_name;
 
-    if (!ministry_id || !org_id) {
-      throw new Error("ministry_id e org_id são obrigatórios");
+    if (!ministry_id || !orgId) {
+      throw new Error("ministry_id e organization_id são obrigatórios");
     }
 
     // ── CORREÇÃO: Verificar JWT e papel do usuário (admin/super_admin) ─────
@@ -61,7 +65,7 @@ serve(async (req: Request) => {
 
     const isAuthorized =
       profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === org_id);
+      (profile.is_admin && profile.organization_id === orgId);
 
     if (!isAuthorized) {
       return new Response(
@@ -80,11 +84,10 @@ serve(async (req: Request) => {
             .replace(/[^a-zA-Z0-9]/g, "")
             .substring(0, 25)
         : ministry_id.substring(0, 8);
-      instanceName = `${safeName}-${org_id.substring(0, 5)}`;
+      instanceName = `${safeName}-${orgId.substring(0, 5)}`;
     }
 
-    const cleanApiUrl = evolutionApiUrl.trim().replace(/\/+$/, "");
-    const endpoint = `${cleanApiUrl}/instance/create`;
+    const endpoint = `${evolutionApiUrl}/instance/create`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -108,7 +111,7 @@ serve(async (req: Request) => {
         instance_name: instanceName,
         connected:     true,
         updated_at:    new Date().toISOString(),
-      }, { onConflict: "ministry_id" });
+      }, { onConflict: "ministry_id,organization_id" });
 
       if (dbErr) throw dbErr;
 
@@ -135,7 +138,7 @@ serve(async (req: Request) => {
       instance_name: instanceName,
       connected:     false,
       updated_at:    new Date().toISOString(),
-    }, { onConflict: "ministry_id" });
+    }, { onConflict: "ministry_id,organization_id" });
 
     if (dbErr) throw dbErr;
 
