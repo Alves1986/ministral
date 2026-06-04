@@ -38,7 +38,7 @@ import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
 
 // --- COMPONENTES AUXILIARES ---
-import { ScheduleCell, getMemberAvailStatus, Avatar } from './ScheduleCell';
+import { ScheduleCell, getMemberAvailStatus, Avatar, isConflict } from './ScheduleCell';
 
 const MemoizedEditorCell = React.memo<{
     occurrence: OccurrenceV2;
@@ -526,7 +526,11 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         const occurrence = occurrences.find(o => o.date === a.event_date && o.ruleId === a.event_rule_id);
         if (!occurrence) return false;
         const status = getMemberAvailStatus(a.member_id, a.event_date, occurrence.time, availability);
-        return status === 'unavailable';
+        if (status === 'unavailable') return true;
+
+        const otherAssignments = assignments.filter(other => !(other.member_id === a.member_id && other.role === a.role && other.event_rule_id === occurrence.ruleId && other.event_date === occurrence.date));
+        const conflict = isConflict(a.member_id, a.role, occurrence.ruleId, occurrence.date, otherAssignments, conflictRules, globalConflicts, occurrences, occurrence.time);
+        return conflict.conflict;
     }).length;
 
     return (
