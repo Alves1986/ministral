@@ -219,6 +219,8 @@ export function useScheduleMutations(ministryId: string, currentMonth: string, o
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+      queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
+      queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
     }
   });
 
@@ -229,6 +231,7 @@ export function useScheduleMutations(ministryId: string, currentMonth: string, o
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+      queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
     }
   });
 

@@ -365,6 +365,8 @@ interface ScheduleInput {
     allowExceptions?: string[][];
   };
   eventRoleExcludes?: Record<string, string[]>; // { ruleId: ['Camera', 'Transmissao'] }
+  memberNotes?: Record<string, string>;          // { 'userId_YYYY-MM': 'texto da observação' }
+  mode?: 'fill' | 'rebalance';
 }
 
 interface Assignment {
@@ -372,123 +374,153 @@ interface Assignment {
   event_date: string;
   role: string;
   member_id: string;
+  replacedMemberId?: string; // Modo rebalance: quem está sendo substituído
+  memberNote?: string;       // Observação deixada pelo membro para o mês
 }
+
+type ExistingAssignment = ScheduleInput['existingAssignments'][number];
 
 /** Normaliza qualquer formato de data para YYYY-MM-DD */
 function normalizeDate(d: string): string {
   return d.slice(0, 10);
 }
 
-function generateScheduleLocally(data: ScheduleInput): Assignment[] {
+// ─── Helpers de Disponibilidade e Regras (module-level) ────────────────────
+
+function isMemberAvailable(
+  memberId: string,
+  date: string,
+  time: string,
+  availability: Record<string, string[] | Record<string, string>>
+): boolean {
+  const avail = availability[memberId];
+  if (!avail) return false;
+
+  const monthKey = `${date.substring(0, 7)}-01`;
+  if ((avail as Record<string, string>)[monthKey] === 'BLK') return false;
+
+  const dayVal = (avail as Record<string, string>)[date];
+  if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
+
+  // Formato array (padrão do useMinistryQueries / AvancedAIScreen)
+  if (Array.isArray(avail)) {
+    if (avail.includes(date)) return true;
+
+    const timePart = time.slice(0, 5);
+    if (avail.includes(`${date}_${timePart}`)) return true;
+
+    const hour = parseInt(timePart.slice(0, 2), 10);
+    const isMorning = hour < 12;
+    if (isMorning && avail.includes(`${date}_M`)) return true;
+    if (!isMorning && avail.includes(`${date}_N`)) return true;
+
+    return false;
+  }
+
+  // Formato objeto (ScheduleEditorV2 / legado)
+  if (!dayVal) return false;
+  if (dayVal === 'all') return true;
+  const hour = parseInt(time.split(':')[0], 10);
+  if (dayVal === 'M') return hour < 12;
+  if (dayVal === 'N') return hour >= 18;
+  if (dayVal === 'T') return hour >= 12 && hour < 18;
+  return true;
+}
+
+function hasSundayTurnConflict(
+  memberId: string,
+  date: string,
+  time: string,
+  allAssignments: ExistingAssignment[],
+  occurrences: ScheduleInput['occurrences']
+): boolean {
+  const weekday = new Date(date + 'T12:00:00').getDay();
+  if (weekday !== 0) return false;
+  const hour = parseInt(time.split(':')[0], 10);
+  const isMorning = hour < 12;
+  return allAssignments.some(a => {
+    if (a.member_id !== memberId || normalizeDate(a.event_date) !== date) return false;
+    const occ = occurrences.find(
+      o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date)
+    );
+    if (!occ) return false;
+    const assignedHour = parseInt(occ.time.split(':')[0], 10);
+    return isMorning !== (assignedHour < 12);
+  });
+}
+
+function hasBlockGroupConflict(
+  memberId: string,
+  role: string,
+  ruleId: string,
+  date: string,
+  allAssignments: ExistingAssignment[],
+  rules?: ScheduleInput['rules']
+): boolean {
+  if (!rules?.blockGroups?.length) return false;
+  const memberInEvent = allAssignments.filter(
+    a => a.member_id === memberId &&
+         a.event_rule_id === ruleId &&
+         normalizeDate(a.event_date) === date
+  );
+  for (const group of rules.blockGroups) {
+    if (!group.includes(role)) continue;
+    const conflicting = memberInEvent.find(a => group.includes(a.role));
+    if (!conflicting) continue;
+    const hasException = rules.allowExceptions?.some(exc =>
+      exc.includes(role) && exc.includes(conflicting.role)
+    );
+    if (!hasException) return true;
+  }
+  return false;
+}
+
+function hasMemberBlockConflict(
+  memberId: string,
+  ruleId: string,
+  date: string,
+  allAssignments: ExistingAssignment[],
+  rules?: ScheduleInput['rules']
+): boolean {
+  if (!rules?.memberBlocks?.length) return false;
+  const membersInEvent = allAssignments
+    .filter(a => a.event_rule_id === ruleId && normalizeDate(a.event_date) === date)
+    .map(a => a.member_id);
+  for (const block of rules.memberBlocks) {
+    if (block.includes(memberId)) {
+      const blocked = block.find(id => id !== memberId);
+      if (blocked && membersInEvent.includes(blocked)) return true;
+    }
+  }
+  return false;
+}
+
+function getPreferredPartners(memberId: string, rules?: ScheduleInput['rules']): string[] {
+  if (!rules?.memberPrefers?.length) return [];
+  return rules.memberPrefers
+    .filter(pair => pair.includes(memberId))
+    .map(pair => pair.find(id => id !== memberId)!)
+    .filter(Boolean);
+}
+
+// ─── Modo Fill: preenche vagas vazias ───────────────────────────────────────
+
+function fillSchedule(data: ScheduleInput): Assignment[] {
   const result: Assignment[] = [];
 
-  // FIX: Inicializa assignCount com membros JÁ escalados no mês
-  // Isso evita sobrecarga em quem já foi escalado manualmente
+  // Inicializa contadores com escalas já existentes (evita sobrecarregar quem já foi escalado)
   const assignCount: Record<string, number> = {};
   data.members.forEach(m => { assignCount[m.id] = 0; });
   data.existingAssignments.forEach(a => {
-    if (a.member_id && assignCount[a.member_id] !== undefined) {
+    if (a.member_id && a.role !== '__EVENT_EXCLUDED__' && assignCount[a.member_id] !== undefined) {
       assignCount[a.member_id] = (assignCount[a.member_id] || 0) + 1;
     }
   });
 
-  // Combina atribuições existentes + novas para verificações de conflito
-  const allAssignments = (): Assignment[] => [...data.existingAssignments, ...result];
-
-  function isMemberAvailable(memberId: string, date: string, time: string): boolean {
-    const avail = data.availability[memberId];
-    if (!avail) return false;
-
-    const monthKey = `${date.substring(0, 7)}-01`;
-    if ((avail as any)[monthKey] === 'BLK') return false;
-
-    const dayVal = (avail as any)[date];
-    if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
-
-    // Formato array (padrão atual do useMinistryQueries)
-    if (Array.isArray(avail)) {
-      if (avail.includes(date)) return true; // dia inteiro disponível
-
-      const timePart = time.slice(0, 5); // HH:mm
-      if (avail.includes(`${date}_${timePart}`)) return true;
-
-      const hour = parseInt(timePart.slice(0, 2), 10);
-      const isMorning = hour < 12;
-      if (isMorning && avail.includes(`${date}_M`)) return true;
-      if (!isMorning && avail.includes(`${date}_N`)) return true;
-
-      return false;
-    }
-
-    // Formato objeto (legado)
-    if (!dayVal) return false;
-    if (dayVal === 'all') return true;
-    const hour = parseInt(time.split(':')[0], 10);
-    if (dayVal === 'M') return hour < 12;
-    if (dayVal === 'N') return hour >= 18;
-    if (dayVal === 'T') return hour >= 12 && hour < 18;
-    return true;
-  }
-
-  function hasSundayTurnConflict(memberId: string, date: string, time: string): boolean {
-    const weekday = new Date(date + 'T12:00:00').getDay();
-    if (weekday !== 0) return false;
-    const hour = parseInt(time.split(':')[0], 10);
-    const isMorning = hour < 12;
-    return allAssignments().some(a => {
-      if (a.member_id !== memberId || normalizeDate(a.event_date) !== date) return false;
-      const occ = data.occurrences.find(
-        o => o.ruleId === a.event_rule_id && o.date === normalizeDate(a.event_date)
-      );
-      if (!occ) return false;
-      const assignedHour = parseInt(occ.time.split(':')[0], 10);
-      return isMorning !== (assignedHour < 12);
-    });
-  }
-
-  function hasBlockGroupConflict(memberId: string, role: string, ruleId: string, date: string): boolean {
-    if (!data.rules?.blockGroups?.length) return false;
-    const memberInEvent = allAssignments().filter(
-      a => a.member_id === memberId &&
-           a.event_rule_id === ruleId &&
-           normalizeDate(a.event_date) === date
-    );
-
-    for (const group of data.rules.blockGroups) {
-      if (!group.includes(role)) continue;
-      const conflictingAssignment = memberInEvent.find(a => group.includes(a.role));
-      if (!conflictingAssignment) continue;
-
-      // Verifica se há exceção permitida para este par de funções
-      const hasException = data.rules?.allowExceptions?.some(exc =>
-        exc.includes(role) && exc.includes(conflictingAssignment.role)
-      );
-      if (!hasException) return true;
-    }
-    return false;
-  }
-
-  function hasMemberBlockConflict(memberId: string, ruleId: string, date: string): boolean {
-    if (!data.rules?.memberBlocks?.length) return false;
-    const membersInEvent = allAssignments()
-      .filter(a => a.event_rule_id === ruleId && normalizeDate(a.event_date) === date)
-      .map(a => a.member_id);
-    for (const block of data.rules.memberBlocks) {
-      if (block.includes(memberId)) {
-        const blocked = block.find(id => id !== memberId);
-        if (blocked && membersInEvent.includes(blocked)) return true;
-      }
-    }
-    return false;
-  }
-
-  function getPreferredPartners(memberId: string): string[] {
-    if (!data.rules?.memberPrefers?.length) return [];
-    return data.rules.memberPrefers
-      .filter(pair => pair.includes(memberId))
-      .map(pair => pair.find(id => id !== memberId)!)
-      .filter(Boolean);
-  }
+  const allAssignments = (): ExistingAssignment[] => [
+    ...data.existingAssignments,
+    ...result
+  ];
 
   for (const occ of data.occurrences) {
     for (const role of data.roles) {
@@ -496,21 +528,21 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
       const excludedRoles = data.eventRoleExcludes?.[occ.ruleId] || [];
       if (excludedRoles.includes(role)) continue;
 
-      // Verifica se a vaga já está preenchida (normaliza datas para evitar mismatch com timestamps)
+      // Vaga já preenchida — pula
       const alreadyFilled = allAssignments().some(
         a => a.event_rule_id === occ.ruleId &&
              normalizeDate(a.event_date) === occ.date &&
              a.role === role
       );
-      if (alreadyFilled) continue; // Vaga já preenchida — pula para próxima
+      if (alreadyFilled) continue;
 
       // Filtra membros elegíveis respeitando todas as regras
       const eligible = data.members.filter(m => {
         if (!m.functions.includes(role)) return false;
-        if (!isMemberAvailable(m.id, occ.date, occ.time)) return false;
-        if (hasSundayTurnConflict(m.id, occ.date, occ.time)) return false;
-        if (hasBlockGroupConflict(m.id, role, occ.ruleId, occ.date)) return false;
-        if (hasMemberBlockConflict(m.id, occ.ruleId, occ.date)) return false;
+        if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
+        if (hasSundayTurnConflict(m.id, occ.date, occ.time, allAssignments(), data.occurrences)) return false;
+        if (hasBlockGroupConflict(m.id, role, occ.ruleId, occ.date, allAssignments(), data.rules)) return false;
+        if (hasMemberBlockConflict(m.id, occ.ruleId, occ.date, allAssignments(), data.rules)) return false;
         return true;
       });
 
@@ -520,12 +552,12 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
         .filter(a => a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
         .map(a => a.member_id);
 
-      // Prioridade 1: membros com parceiro preferido já no evento
+      // Prioridade 1: membro com parceiro preferido já no evento
       let chosen = eligible.find(m =>
-        getPreferredPartners(m.id).some(p => membersInEvent.includes(p))
+        getPreferredPartners(m.id, data.rules).some(p => membersInEvent.includes(p))
       );
 
-      // Prioridade 2: membro menos escalado no mês (inclui escalas já existentes)
+      // Prioridade 2: membro menos escalado no mês
       if (!chosen) {
         const sorted = [...eligible].sort(
           (a, b) => (assignCount[a.id] || 0) - (assignCount[b.id] || 0)
@@ -533,11 +565,16 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
         chosen = sorted[0];
       }
 
+      // Verifica se o membro escolhido tem observação para o mês
+      const monthKey = occ.date.substring(0, 7);
+      const memberNote = data.memberNotes?.[`${chosen.id}_${monthKey}`];
+
       result.push({
         event_rule_id: occ.ruleId,
         event_date: occ.date,
         role,
-        member_id: chosen.id
+        member_id: chosen.id,
+        ...(memberNote ? { memberNote } : {})
       });
       assignCount[chosen.id] = (assignCount[chosen.id] || 0) + 1;
     }
@@ -546,6 +583,121 @@ function generateScheduleLocally(data: ScheduleInput): Assignment[] {
   return result;
 }
 
-export async function generateScheduleWithAI(data: any, model?: string): Promise<Assignment[]> {
+// ─── Modo Rebalance: sugere trocas para equilibrar a carga mensal ───────────
+
+function rebalanceSchedule(data: ScheduleInput): Assignment[] {
+  // Contagem atual de escalas por membro
+  const currentCount: Record<string, number> = {};
+  data.members.forEach(m => { currentCount[m.id] = 0; });
+  data.existingAssignments.forEach(a => {
+    if (a.member_id && a.role !== '__EVENT_EXCLUDED__' && currentCount[a.member_id] !== undefined) {
+      currentCount[a.member_id]++;
+    }
+  });
+
+  const totalAssigned = Object.values(currentCount).reduce((s, c) => s + c, 0);
+  const memberCount = data.members.length;
+  if (memberCount === 0 || totalAssigned === 0) return [];
+
+  const avgLoad = totalAssigned / memberCount;
+  const overloadThreshold = Math.ceil(avgLoad);
+
+  // Membros com mais escalas que a média (mais sobrecarregados primeiro)
+  const overloaded = data.members
+    .filter(m => (currentCount[m.id] || 0) > overloadThreshold)
+    .sort((a, b) => (currentCount[b.id] || 0) - (currentCount[a.id] || 0));
+
+  if (overloaded.length === 0) return [];
+
+  const result: Assignment[] = [];
+  const mutableCounts = { ...currentCount };
+  const swappedKeys = new Set<string>();
+
+  for (const heavyMember of overloaded) {
+    // Pega as escalas do membro sobrecarregado (mais recentes primeiro para trocar as últimas)
+    const memberAssignments = [...data.existingAssignments]
+      .filter(a => a.member_id === heavyMember.id && a.role !== '__EVENT_EXCLUDED__')
+      .sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+    for (const assign of memberAssignments) {
+      // Parar quando este membro já estiver equilibrado
+      if ((mutableCounts[heavyMember.id] || 0) <= overloadThreshold) break;
+
+      const key = `${assign.event_rule_id}|${normalizeDate(assign.event_date)}|${assign.role}`;
+      if (swappedKeys.has(key)) continue;
+
+      // Encontra a ocorrência para obter o horário
+      const occ = data.occurrences.find(
+        o => o.ruleId === assign.event_rule_id && o.date === normalizeDate(assign.event_date)
+      );
+      if (!occ) continue;
+
+      // Assignments restantes neste evento (excluindo o membro sendo trocado)
+      const remainingEventAssignments = data.existingAssignments.filter(
+        a => a.event_rule_id === assign.event_rule_id &&
+             normalizeDate(a.event_date) === normalizeDate(assign.event_date) &&
+             a.member_id !== heavyMember.id
+      );
+      const membersInEvent = remainingEventAssignments.map(a => a.member_id);
+
+      // Busca substituto elegível com menor carga
+      const candidates = data.members.filter(m => {
+        if (m.id === heavyMember.id) return false;
+        // Só substitui se reduzir efetivamente o desequilíbrio
+        if ((mutableCounts[m.id] || 0) >= (mutableCounts[heavyMember.id] || 0) - 1) return false;
+        if (!m.functions.includes(assign.role)) return false;
+        if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
+        // Não pode já estar neste evento nesta função
+        if (membersInEvent.includes(m.id)) return false;
+        if (hasBlockGroupConflict(m.id, assign.role, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
+        if (hasMemberBlockConflict(m.id, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
+        // Verifica conflito de turno no domingo
+        const tempAll: ExistingAssignment[] = [
+          ...data.existingAssignments.filter(
+            a => !(a.member_id === heavyMember.id &&
+                   a.event_rule_id === assign.event_rule_id &&
+                   normalizeDate(a.event_date) === normalizeDate(assign.event_date))
+          ),
+          ...result
+        ];
+        if (hasSundayTurnConflict(m.id, occ.date, occ.time, tempAll, data.occurrences)) return false;
+        return true;
+      }).sort((a, b) => (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0));
+
+      if (candidates.length === 0) continue;
+
+      const replacement = candidates[0];
+      const monthKey = occ.date.substring(0, 7);
+      const memberNote = data.memberNotes?.[`${replacement.id}_${monthKey}`];
+
+      result.push({
+        event_rule_id: assign.event_rule_id,
+        event_date: normalizeDate(assign.event_date),
+        role: assign.role,
+        member_id: replacement.id,
+        replacedMemberId: heavyMember.id,
+        ...(memberNote ? { memberNote } : {})
+      });
+
+      mutableCounts[heavyMember.id]--;
+      mutableCounts[replacement.id]++;
+      swappedKeys.add(key);
+    }
+  }
+
+  return result;
+}
+
+// ─── Entry Point ────────────────────────────────────────────────────────────
+
+function generateScheduleLocally(data: ScheduleInput): Assignment[] {
+  if (data.mode === 'rebalance') {
+    return rebalanceSchedule(data);
+  }
+  return fillSchedule(data);
+}
+
+export async function generateScheduleWithAI(data: ScheduleInput, _model?: string): Promise<Assignment[]> {
   return Promise.resolve(generateScheduleLocally(data));
 }
+

@@ -43,7 +43,10 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
         setLoading(true);
         try {
             // Passa o label do ministério para gerar o slug na URL e o ID do usuário para agilizar
-            const res = await createInviteToken(ministryId, orgId, currentMinistry?.label, currentUser?.id);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido')), 10000));
+            const fetchPromise = createInviteToken(ministryId, orgId, currentMinistry?.label, currentUser?.id);
+            const res = await Promise.race([fetchPromise, timeoutPromise]) as any;
+            
             if (res.success && res.url) {
                 setGeneratedLink(res.url);
                 addToast('Link gerado com sucesso!', 'success');
@@ -86,6 +89,7 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                         </div>
                         
                         <button 
+                            type="button"
                             onClick={handleGenerate}
                             disabled={loading}
                             className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-ministral-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
@@ -101,7 +105,9 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                                 <Check size={24}/>
                             </div>
                             <h3 className="font-bold text-zinc-800 dark:text-white">Convite Gerado!</h3>
-                            <p className="text-xs text-zinc-500 mt-1">Qualquer pessoa com este link poderá se cadastrar neste ministério.</p>
+                            <p className="text-xs text-zinc-500 mt-1">
+                                Este link é de <strong>uso único</strong> (válido para apenas um cadastro). Para convidar outro membro, não reutilize este link, clique em "Gerar Outro" abaixo.
+                            </p>
                         </div>
                         
                         <div className="flex gap-2">
@@ -111,23 +117,23 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                                     value={generatedLink} 
                                     className="flex-1 bg-transparent text-xs text-zinc-600 dark:text-zinc-300 font-mono outline-none"
                                 />
-                                <button onClick={handleCopy} className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-ministral-500 transition-colors" title="Copiar Link">
+                                <button type="button" onClick={handleCopy} className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-ministral-500 transition-colors" title="Copiar Link">
                                     <Copy size={16}/>
                                 </button>
                             </div>
-                            <button 
-                                onClick={() => {
-                                    const text = encodeURIComponent(`Olá! Você foi convidado para participar do ministério ${currentMinistry?.label || 'Ministral'}. Clique no link para se cadastrar: ${generatedLink}`);
-                                    window.open(`https://wa.me/?text=${text}`, '_blank');
-                                }} 
+                            <a 
+                                href={`https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para participar do ministério ${currentMinistry?.label || 'Ministral'}. Clique no link para se cadastrar: ${generatedLink}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="p-3 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-lg shadow-green-500/20 transition-all active:scale-95 flex items-center justify-center"
                                 title="Compartilhar via WhatsApp"
                             >
                                 <MessageCircle size={20} />
-                            </button>
+                            </a>
                         </div>
 
                         <button 
+                            type="button"
                             onClick={reset}
                             className="w-full text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-white py-2"
                         >

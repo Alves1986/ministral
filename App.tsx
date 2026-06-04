@@ -1,5 +1,5 @@
-import React, { useState, useEffect, Suspense, useMemo, lazy } from 'react';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, Suspense, useMemo, lazy, useRef, useCallback } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient, focusManager } from '@tanstack/react-query';
 import { useAppStore } from './store/appStore';
 import { useSession, SessionProvider } from './context/SessionContext';
 import { useToast, ToastProvider } from './components/Toast';
@@ -58,6 +58,69 @@ const EventsScreen = lazy(() => import('./components/EventsScreen').then(m => ({
 const ScheduleRulesScreen = lazy(() => import('./components/ScheduleRulesScreen').then(m => ({ default: m.ScheduleRulesScreen })));
 const AvailabilityReportScreen = lazy(() => import('./components/AvailabilityReportScreen').then(m => ({ default: m.AvailabilityReportScreen })));
 import { MonthlyReportScreen } from './components/MonthlyReportScreen';
+
+const PullToRefreshContainer: React.FC<{ onRefresh: () => Promise<void>; children: React.ReactNode }> = ({ onRefresh, children }) => {
+    const [pullDistance, setPullDistance] = useState(0);
+    const [refreshing, setRefreshing] = useState(false);
+    const startY = useRef(-1);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        // Apenas inicia se a tela estiver rolada para o topo
+        if (window.scrollY === 0) {
+            startY.current = e.touches[0].clientY;
+        } else {
+            startY.current = -1;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (startY.current < 0 || refreshing) return;
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - startY.current;
+        // Puxando para baixo quando está no topo
+        if (diff > 0 && window.scrollY <= 0) {
+            setPullDistance(Math.min(diff * 0.4, 70));
+            // e.preventDefault(); // Opcional: pode interferir no scroll natural se não for cuidadoso
+        }
+    };
+
+    const handleTouchEnd = async () => {
+        if (pullDistance >= 50 && !refreshing) {
+            setRefreshing(true);
+            setPullDistance(50);
+            try {
+                await onRefresh();
+            } finally {
+                setRefreshing(false);
+                setPullDistance(0);
+            }
+        } else {
+            setPullDistance(0);
+        }
+        startY.current = -1;
+    };
+
+    return (
+        <div 
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className="min-h-full"
+        >
+            <div 
+                className="overflow-hidden flex justify-center items-center transition-all duration-300" 
+                style={{ height: pullDistance, opacity: pullDistance / 70 }}
+            >
+                <div className="bg-white dark:bg-slate-800 shadow-lg rounded-full p-2 mb-2">
+                    <Loader2 size={24} className={`text-secondary ${refreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${pullDistance * 5}deg)` }} />
+                </div>
+            </div>
+            <div style={{ transform: `translateY(${refreshing ? 10 : 0}px)`, transition: 'transform 0.3s' }}>
+                {children}
+            </div>
+        </div>
+    );
+};
 import { AdvancedAIScreen } from './components/AdvancedAIScreen';
 const HistoryScreen = lazy(() => import('./components/HistoryScreen').then(m => ({ default: m.HistoryScreen })));
 const AlertsManager = lazy(() => import('./components/AlertsManager').then(m => ({ default: m.AlertsManager })));
@@ -112,6 +175,13 @@ const InnerApp = () => {
   // A limpeza só deve ocorrer após validação/uso bem-sucedido no InviteScreen
 
   useEffect(() => {
+    // Force logout spotify once if needed 
+    if (localStorage.getItem('force_logout_spotify_v1') !== 'done') {
+      localStorage.removeItem('spotify_user_token');
+      localStorage.removeItem('spotify_token_expiry');
+      localStorage.setItem('force_logout_spotify_v1', 'done');
+    }
+
     // Processa redirecionamentos do Spotify em qualquer aba logada ou deslogada
     // Se estourar a URL e tirar o Hash, ele armazena antes que seja limpo.
     const token = handleLoginCallback();
@@ -383,17 +453,7 @@ const InnerApp = () => {
             <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0">
                 <div>
                     <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
-                        Olá, <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
-                        <button 
-                            onClick={() => {
-                                refreshData();
-                                addToast("Atualização solicitada...", "info");
-                            }}
-                            className="p-2 text-zinc-400 hover:text-secondary hover:bg-secondary/10 rounded-full transition-all duration-500"
-                            title="Atualizar dados do sistema"
-                        >
-                            <RefreshCw size={20} />
-                        </button>
+                        <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
                     </h1>
                     <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
                 </div>
@@ -921,7 +981,10 @@ const InnerApp = () => {
                             
                             // (b) Operação secundária (sem await)
                             Supabase.sendNotificationSQL(ministryId, orgId, { title: t, message: m, type, actionLink: extLink || 'announcements' })
-                                .catch(err => console.error("Erro na notificação (secundário):", err));
+                                .catch(err => {
+                                    console.error("Erro na notificação (secundário):", err);
+                                    addToast("Aviso publicado, mas houve falha ao disparar as notificações Push/WhatsApp.", "warning");
+                                });
                             
                             // (c) Invalidação de cache substituindo refreshData
                             await queryClient.invalidateQueries({ queryKey: ['announcements', ministryId, orgId] });
@@ -1052,6 +1115,32 @@ const SupabaseHealthCheck: React.FC<{ children: React.ReactNode }> = ({ children
 
   return <>{children}</>;
 };
+
+// Integração do React Query com o Supabase Auth para renovação de token ao focar a janela
+focusManager.setEventListener((handleFocus) => {
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    const visibilitychange = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const sb = getSupabase();
+          if (sb) {
+            // Força a renovação do token caso tenha expirado em background.
+            // O await garante que a sessão está válida ANTES do React Query refazer os fetches pendentes,
+            // evitando 401s e loops de carregamento.
+            await sb.auth.getSession();
+          }
+        } catch (e) {
+          console.error("Erro ao renovar sessão no retorno da aba:", e);
+        }
+        handleFocus();
+      }
+    };
+    
+    window.addEventListener('visibilitychange', visibilitychange, false);
+    return () => window.removeEventListener('visibilitychange', visibilitychange);
+  }
+  return () => {};
+});
 
 const queryClientInstance = new QueryClient({
   defaultOptions: {

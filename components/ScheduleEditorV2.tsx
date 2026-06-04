@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { 
     fetchRulesV2, 
     fetchAssignmentsV2, 
@@ -30,7 +30,9 @@ import {
     Sparkles,
     X,
     CheckCircle2,
-    User
+    User,
+    RefreshCw,
+    AlertCircle
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
@@ -124,14 +126,17 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [processing, setProcessing] = useState(false);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [showConfirmAI, setShowConfirmAI] = useState(false);
+    const [showConfirmRebalance, setShowConfirmRebalance] = useState(false);
     const [showReviewAI, setShowReviewAI] = useState(false);
+    const [isRebalanceMode, setIsRebalanceMode] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
     
     const [members, setMembers] = useState<MemberV2[]>([]);
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
     const [availability, setAvailability] = useState<Record<string, Record<string, string>>>({});
-    const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][] }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [] });
+    const [memberNotes, setMemberNotes] = useState<Record<string, string>>({});
+    const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][], eventRoleExcludes: Record<string, string[]> }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [], eventRoleExcludes: {} });
     const [globalConflicts, setGlobalConflicts] = useState<Record<string, { date: string, ministryId: string, role: string }[]>>({});
 
     // -- DERIVED STATE --
@@ -157,11 +162,26 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         });
     }, [occurrences, excludedOccurrences]);
 
+    // -- REACT QUERY FOR SYNC --
+    const { data: realtimeAssignments, isFetching: isFetchingAssignments } = useQuery({
+        queryKey: ['assignments', ministryId, currentMonth, orgId, 'v2'],
+        queryFn: () => fetchAssignmentsV2(ministryId, orgId, currentMonth),
+        enabled: Boolean(ministryId && orgId && ministryId.length === 36 && orgId.length === 36),
+        staleTime: 60 * 1000,
+    });
+
+    // Update local state when realtime assignments change from outside
+    useEffect(() => {
+        if (realtimeAssignments && !processing && !isGeneratingAI) {
+             setAssignments(realtimeAssignments);
+        }
+    }, [realtimeAssignments, processing, isGeneratingAI]);
+
     // -- LOAD DATA --
     const loadData = async () => {
         setLoading(true);
         try {
-            const [membersData, rules, availData, conflictRulesData, globalData] = await Promise.all([
+            const [membersData, rules, availResult, conflictRulesData, globalData] = await Promise.all([
                 fetchMembersV2(ministryId, orgId),
                 fetchRulesV2(ministryId, orgId),
                 fetchAvailabilityForEditor(ministryId, orgId),
@@ -170,7 +190,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             ]);
 
             setMembers(membersData);
-            setAvailability(availData);
+            setAvailability(availResult.availability);
+            setMemberNotes(availResult.memberNotes);
             setConflictRules(conflictRulesData);
             setGlobalConflicts(globalData);
 
@@ -181,13 +202,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             
             const generatedOccurrences = generateOccurrencesV2(rules, year, month);
             setOccurrences(generatedOccurrences);
-
-            // Buscar escalas existentes (Passa YYYY-MM como string)
-            const monthStr = currentMonth;
             
-            const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
-            setAssignments(existingAssignments);
-
+            // Note: assignments are now loaded and synced via useQuery
         } catch (error) {
             console.error(error);
             addToast('Erro ao carregar dados da escala', 'error');
@@ -270,7 +286,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     role: a.role,
                     member_id: a.member_id
                 })),
-                rules: conflictRules
+                rules: conflictRules,
+                eventRoleExcludes: conflictRules.eventRoleExcludes,
+                memberNotes,
+                mode: 'fill' as const
             };
 
             const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
@@ -311,8 +330,15 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         setProcessing(true);
         setShowReviewAI(false);
         try {
-            // Salvar um por um
             for (const item of aiSuggestions) {
+                // Modo rebalance: remove a atribuição antiga antes de salvar a nova
+                if (item.replacedMemberId) {
+                    await removeAssignmentV2(ministryId, orgId, {
+                        event_rule_id: item.event_rule_id,
+                        event_date: item.event_date,
+                        role: item.role
+                    });
+                }
                 await saveAssignmentV2(ministryId, orgId, {
                     event_rule_id: item.event_rule_id,
                     event_date: item.event_date,
@@ -320,16 +346,65 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     member_id: item.member_id
                 });
             }
-            
-            addToast(`${aiSuggestions.length} atribuições aplicadas com sucesso!`, 'success');
+            const label = isRebalanceMode ? 'trocas de equilíbrio aplicadas' : 'atribuições aplicadas';
+            addToast(`${aiSuggestions.length} ${label} com sucesso!`, 'success');
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
-            await loadData(); // Recarregar para garantir sincronia
+            queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
+            await loadData();
         } catch (error) {
             console.error(error);
             addToast('Erro ao aplicar sugestões da IA', 'error');
         } finally {
             setProcessing(false);
             setAiSuggestions([]);
+            setIsRebalanceMode(false);
+        }
+    };
+
+    const handleRebalanceAI = async () => {
+        setShowConfirmRebalance(false);
+        setIsGeneratingAI(true);
+        try {
+            const aiAvailability = JSON.parse(JSON.stringify(availability));
+            Object.entries(globalConflicts).forEach(([memberId, conflicts]) => {
+                if (!aiAvailability[memberId]) aiAvailability[memberId] = {};
+                conflicts.forEach(c => { aiAvailability[memberId][c.date] = 'unavailable'; });
+            });
+            const input = {
+                occurrences: occurrences.map(o => ({ date: o.date, time: o.time, ruleId: o.ruleId, title: o.title })),
+                roles,
+                members: members.map(m => ({ id: m.id, name: m.name, functions: m.ministry_functions || [] })),
+                availability: aiAvailability,
+                existingAssignments: assignments.map(a => ({
+                    event_rule_id: a.event_rule_id,
+                    event_date: a.event_date,
+                    role: a.role,
+                    member_id: a.member_id
+                })),
+                rules: conflictRules,
+                eventRoleExcludes: conflictRules.eventRoleExcludes,
+                memberNotes,
+                mode: 'rebalance' as const
+            };
+            const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
+            const aiAssignments = await generateAISchedule(input as any, savedModel || undefined);
+            const safeAi = Array.isArray(aiAssignments)
+                ? aiAssignments.filter((a: any) => a && typeof a.event_date === 'string' && a.role && a.event_rule_id)
+                : [];
+            if (safeAi.length === 0) {
+                addToast('A escala já está bem equilibrada! Nenhuma troca necessária.', 'info');
+                return;
+            }
+            setAiSuggestions(safeAi);
+            setIsRebalanceMode(true);
+            setShowReviewAI(true);
+        } catch (error: any) {
+            console.error(error);
+            const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+            addToast(`Erro ao reequilibrar escala: ${msg}`, 'error');
+        } finally {
+            setIsGeneratingAI(false);
         }
     };
 
@@ -386,6 +461,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 addToast('Removido da escala', 'success');
             }
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
         } catch (error) {
             console.error(error);
             addToast('Erro ao salvar alteração', 'error');
@@ -410,6 +487,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             });
             addToast('Evento removido da escala deste mês', 'success');
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
             await loadData();
         } catch (error) {
             console.error(error);
@@ -418,6 +497,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             setProcessing(false);
         }
     };
+
+    const hasExistingAssignments = assignments.some(a => a.role !== '__EVENT_EXCLUDED__' && a.member_id);
 
     if (loading || isGeneratingAI) {
         return (
@@ -489,24 +570,37 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     </div>
 
                     {isAdmin && (
-                        <div className="relative group w-full sm:w-auto">
-                            <button
-                                onClick={() => isPro && setShowConfirmAI(true)}
-                                disabled={!isPro || isGeneratingAI}
-                                className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all active:scale-95 shadow-lg
-                                    ${isPro 
-                                        ? 'bg-gradient-to-r from-secondary to-secondaryHover hover:from-secondaryHover hover:to-secondary text-white shadow-secondary/20' 
-                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed shadow-none'
-                                    }
-                                `}
-                            >
-                                <Sparkles size={18} className={isPro ? 'animate-pulse' : ''} />
-                                Gerar Escala Automática
-                            </button>
-                            {!isPro && (
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                                    Disponível no Plano Pro
-                                </div>
+                        <div className="flex gap-2 w-full sm:w-auto">
+                            <div className="relative group flex-1 sm:flex-none">
+                                <button
+                                    onClick={() => isPro && setShowConfirmAI(true)}
+                                    disabled={!isPro || isGeneratingAI}
+                                    className={`w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all active:scale-95 shadow-lg
+                                        ${isPro 
+                                            ? 'bg-gradient-to-r from-secondary to-secondaryHover hover:from-secondaryHover hover:to-secondary text-white shadow-secondary/20' 
+                                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed shadow-none'
+                                        }
+                                    `}
+                                >
+                                    <Sparkles size={18} className={isPro ? 'animate-pulse' : ''} />
+                                    Gerar Automático
+                                </button>
+                                {!isPro && (
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                        Disponível no Plano Pro
+                                    </div>
+                                )}
+                            </div>
+                            {isPro && hasExistingAssignments && (
+                                <button
+                                    onClick={() => setShowConfirmRebalance(true)}
+                                    disabled={isGeneratingAI}
+                                    title="Sugerir trocas para equilibrar a carga do mês"
+                                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all active:scale-95 shadow-lg bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20 disabled:opacity-60"
+                                >
+                                    <RefreshCw size={16} />
+                                    Equilibrar
+                                </button>
                             )}
                         </div>
                     )}
@@ -653,15 +747,22 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-secondary/10 dark:bg-secondary/5 rounded-full flex items-center justify-center text-secondary">
-                                    <Sparkles size={20} />
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isRebalanceMode ? 'bg-amber-500/10 text-amber-500' : 'bg-secondary/10 dark:bg-secondary/5 text-secondary'}`}>
+                                    {isRebalanceMode ? <RefreshCw size={20} /> : <Sparkles size={20} />}
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white leading-tight">Revisar Sugestões da IA</h3>
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{aiSuggestions.length} novas atribuições encontradas</p>
+                                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white leading-tight">
+                                        {isRebalanceMode ? 'Revisar Trocas de Equilíbrio' : 'Revisar Sugestões da IA'}
+                                    </h3>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                                        {isRebalanceMode
+                                            ? `${aiSuggestions.length} trocas sugeridas para equilibrar o mês`
+                                            : `${aiSuggestions.length} novas atribuições encontradas`
+                                        }
+                                    </p>
                                 </div>
                             </div>
-                            <button onClick={() => setShowReviewAI(false)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
+                            <button onClick={() => { setShowReviewAI(false); setIsRebalanceMode(false); }} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
@@ -670,23 +771,39 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {aiSuggestions.map((item, i) => {
                                     const member = members.find(m => m.id === item.member_id);
+                                    const replacedMember = item.replacedMemberId ? members.find(m => m.id === item.replacedMemberId) : null;
                                     const dateObj = new Date(`${item.event_date}T12:00:00`);
                                     const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' });
                                     const dayNum = dateObj.toLocaleDateString('pt-BR', { day: '2-digit' });
-                                    
+                                    const currentCount = memberCounts[item.member_id] || 0;
+                                    const replacedCount = item.replacedMemberId ? (memberCounts[item.replacedMemberId] || 0) : 0;
                                     return (
-                                        <div key={i} className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50 transition-all hover:border-secondary/20 group">
-                                            <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg w-10 h-10 shrink-0 shadow-sm">
-                                                <span className="text-[8px] font-bold text-red-500 uppercase leading-none mb-0.5">{dayName}</span>
-                                                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 leading-none">{dayNum}</span>
+                                        <div key={i} className="flex flex-col gap-1.5 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50 transition-all hover:border-secondary/20">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg w-10 h-10 shrink-0 shadow-sm">
+                                                    <span className="text-[8px] font-bold text-red-500 uppercase leading-none mb-0.5">{dayName}</span>
+                                                    <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 leading-none">{dayNum}</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[9px] font-black text-secondary uppercase tracking-wider truncate mb-0.5">{item.role}</div>
+                                                    <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                                                        {member?.name || 'Membro'}
+                                                        <span className="ml-1 text-[10px] font-normal text-zinc-400">({currentCount}x mês)</span>
+                                                    </div>
+                                                    {replacedMember && (
+                                                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5 truncate">
+                                                            ⇔ substitui {replacedMember.name} ({replacedCount}x)
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <CheckCircle2 size={16} className="text-secondary opacity-40 shrink-0" />
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-[9px] font-black text-secondary uppercase tracking-wider truncate mb-0.5">{item.role}</div>
-                                                <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate">{member?.name || 'Membro'}</div>
-                                            </div>
-                                            <div className="shrink-0">
-                                                <CheckCircle2 size={16} className="text-secondary opacity-40 group-hover:opacity-100 transition-opacity" />
-                                            </div>
+                                            {item.memberNote && (
+                                                <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
+                                                    <AlertCircle size={10} className="shrink-0 mt-0.5" />
+                                                    <span><strong>Obs do membro:</strong> {item.memberNote}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -695,7 +812,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
 
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 flex justify-end gap-3 border-t border-zinc-100 dark:border-zinc-800">
                             <button 
-                                onClick={() => setShowReviewAI(false)}
+                                onClick={() => { setShowReviewAI(false); setIsRebalanceMode(false); }}
                                 className="px-4 py-2 text-sm font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
                             >
                                 Descartar
@@ -703,10 +820,14 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             <button 
                                 onClick={handleApplyAISuggestions}
                                 disabled={processing}
-                                className="px-6 py-2 bg-secondary hover:bg-secondaryHover text-white text-sm font-bold rounded-xl shadow-lg shadow-secondary/20 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70"
+                                className={`px-6 py-2 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 ${
+                                    isRebalanceMode
+                                        ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'
+                                        : 'bg-secondary hover:bg-secondaryHover shadow-secondary/20'
+                                }`}
                             >
-                                {processing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                                Aplicar na Escala
+                                {processing ? <Loader2 size={16} className="animate-spin" /> : isRebalanceMode ? <RefreshCw size={16} /> : <Sparkles size={16} />}
+                                {isRebalanceMode ? 'Aplicar Trocas' : 'Aplicar na Escala'}
                             </button>
                         </div>
                     </div>
@@ -723,7 +844,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             </div>
                             <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Gerar Escala Automática?</h3>
                             <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
-                                A Inteligência Artificial vai analisar a disponibilidade dos membros e as regras de conflito para preencher as posições vazias da escala deste mês.
+                                A Inteligência Artificial vai analisar a disponibilidade, regras de conflito e observações dos membros para preencher as posições <strong>vazias</strong> da escala deste mês.
                                 <br/><br/>
                                 Posições já preenchidas <strong>não serão alteradas</strong>. Deseja continuar?
                             </p>
@@ -741,6 +862,40 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             >
                                 <Sparkles size={16} />
                                 Gerar Escala
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Confirmação de Reequilíbrio */}
+            {showConfirmRebalance && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6">
+                            <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500 mb-4 shadow-sm">
+                                <RefreshCw size={24} />
+                            </div>
+                            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Reequilibrar Escala?</h3>
+                            <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
+                                A IA vai analisar a distribuição atual do mês e sugerir <strong>trocas</strong> para equilibrar a carga entre os membros, sem sobrecarregar ninguém.
+                                <br/><br/>
+                                Você revisará cada troca antes de aplicar. Membros já escalados <strong>poderão ser substituídos</strong> por outros com menos escalas no mês.
+                            </p>
+                        </div>
+                        <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 flex justify-end gap-3 border-t border-zinc-100 dark:border-zinc-800">
+                            <button 
+                                onClick={() => setShowConfirmRebalance(false)}
+                                className="px-4 py-2 text-sm font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleRebalanceAI}
+                                className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
+                            >
+                                <RefreshCw size={16} />
+                                Analisar e Equilibrar
                             </button>
                         </div>
                     </div>

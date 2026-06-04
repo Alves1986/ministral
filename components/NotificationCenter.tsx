@@ -62,19 +62,20 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   };
 
   const handleClearAll = async () => {
-      if (!ministryId || !orgId) return;
+      if (!orgId) return;
       
       confirmAction(
           "Limpar Notificações",
-          "Deseja ocultar todas as notificações atuais deste ministério? Isso não afetará os outros membros.",
+          "Deseja ocultar todas as suas notificações? Isso não afetará os outros membros.",
           async () => {
               if (!currentUser?.id) return;
               
-              // Optimistic update
-              const updated = notifications.filter(n => n.ministryId !== ministryId);
-              onNotificationsUpdate(updated, false);
+              const idsToClear = notifications.map(n => n.id);
               
-              await clearAllNotificationsSQL(ministryId, orgId, currentUser.id);
+              // Optimistic update
+              onNotificationsUpdate([], false);
+              
+              await clearNotificationsSQL(idsToClear, currentUser.id, orgId);
           }
       );
   };
@@ -190,7 +191,7 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                                                 )}
                                                 <button 
                                                     onClick={(e) => handleClearSingle(e, n)}
-                                                    className="p-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    className="p-1 text-zinc-400 hover:text-red-500 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity"
                                                     title="Limpar notificação"
                                                 >
                                                     <X size={12} />

@@ -8,7 +8,7 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data_v4';
+const CACHE_KEY = 'widget_weather_data_v5';
 const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {

@@ -26,7 +26,7 @@ async function startServer() {
       
       // If a specific model is requested, use the orchestrator
       if (model) {
-        const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules, model });
+        const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules }, model);
         return res.json(result);
       }
 
@@ -71,11 +71,12 @@ async function startServer() {
           const suburb = addr?.suburb || addr?.neighbourhood || addr?.city_district || addr?.quarter;
           const cityName = addr?.city || addr?.town || addr?.municipality || addr?.village;
           
-          if (suburb && cityName) {
-            city = `${suburb}, ${cityName}`;
+          if (cityName) {
+            city = cityName;
           } else {
-            city = cityName || suburb || addr?.county || addr?.state || "Local";
+            city = suburb || addr?.county || addr?.state || "Local";
           }
+          
           city = city
             .replace("Município de ", "")
             .replace("Distrito de ", "")

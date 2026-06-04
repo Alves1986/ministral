@@ -174,10 +174,26 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             let orgDetails: Organization | null = null;
             let allowedMinistries: string[] = [];
 
-            const [details, ministries] = await Promise.all([
+            // Adivinhar activeMinistry para paralelizar
+            let guessedMinistry = '';
+            if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id)) {
+                guessedMinistry = profile.ministry_id;
+            } else {
+                const localStored = localStorage.getItem('ministry_id');
+                if (localStored && UUID_REGEX.test(localStored)) {
+                    guessedMinistry = localStored;
+                }
+            }
+
+            const [details, ministries, guessedAccess] = await Promise.all([
                 fetchOrganizationDetails(orgId),
-                fetchUserAllowedMinistries(profile.id, orgId)
+                fetchUserAllowedMinistries(profile.id, orgId),
+                guessedMinistry ? fetchUserMinistryAccess(profile.id, guessedMinistry, orgId).catch((e) => {
+                    console.error("Guessed access fetch failed:", e);
+                    return null;
+                }) : Promise.resolve(null)
             ]);
+            
             orgDetails = details;
             allowedMinistries = ministries;
             setOrganization(orgDetails);
@@ -235,21 +251,21 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     useAppStore.getState().setMinistryId(profile.ministry_id);
                 }
 
-                if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id) && allowedMinistries.includes(profile.ministry_id)) {
-                    activeMinistry = profile.ministry_id;
-                } else {
-                    const localStored = localStorage.getItem('ministry_id');
-                    if (localStored && UUID_REGEX.test(localStored) && allowedMinistries.includes(localStored)) {
-                        activeMinistry = localStored;
-                    } else if (allowedMinistries.length > 0) {
-                        activeMinistry = allowedMinistries[0];
-                    }
+                if (guessedMinistry && allowedMinistries.includes(guessedMinistry)) {
+                    activeMinistry = guessedMinistry;
+                } else if (allowedMinistries.length > 0) {
+                    activeMinistry = allowedMinistries[0];
                 }
 
                 if (activeMinistry) {
-                    const access = await fetchUserMinistryAccess(profile.id, activeMinistry, orgId);
-                    ministry_functions = access.functions;
-                    ministry_role = access.role;
+                    if (activeMinistry === guessedMinistry && guessedAccess) {
+                        ministry_functions = guessedAccess.functions;
+                        ministry_role = guessedAccess.role;
+                    } else {
+                        const access = await fetchUserMinistryAccess(profile.id, activeMinistry, orgId);
+                        ministry_functions = access.functions;
+                        ministry_role = access.role;
+                    }
                 }
             } catch (e) {
                 console.error("[SessionProvider] Error fetching details (non-critical):", e);

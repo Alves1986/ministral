@@ -140,10 +140,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
     const timeout = setTimeout(() => {
       setIsSyncing(false);
       setSaveState('idle');
+      addToast("Salvo localmente (aguardando confirmação do servidor)", "info");
     }, 8000);
     
     return () => clearTimeout(timeout);
-  }, [saveState]);
+  }, [saveState, addToast]);
 
   const handleToggleBlockMonth = () => {
       if (!canEdit) return;
@@ -349,6 +350,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           if (!window.confirm("Há alterações não salvas. Descartar?")) return;
       }
       setSaveState('idle');
+      setIsSyncing(false);
       onMonthChange(adjustMonth(currentMonth, dir));
   };
 
@@ -372,6 +374,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         onChange={(e) => {
                             if(saveState === 'dirty' && !confirm("Descartar alterações?")) return;
                             setSaveState('idle');
+                            setIsSyncing(false);
                             setSelectedMemberId(e.target.value);
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-secondary outline-none max-w-[140px]"

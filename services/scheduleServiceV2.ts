@@ -34,18 +34,24 @@ export interface MemberV2 {
   ministry_functions?: string[];
 }
 
-export const fetchAvailabilityForEditor = async (ministryId: string, orgId: string) => {
+export const fetchAvailabilityForEditor = async (ministryId: string, orgId: string): Promise<{
+  availability: Record<string, Record<string, string>>;
+  memberNotes: Record<string, string>;
+}> => {
   const sb = getSupabase();
-  if (!sb || ministryId.length !== 36 || orgId.length !== 36) return {};
+  if (!sb || ministryId.length !== 36 || orgId.length !== 36) return { availability: {}, memberNotes: {} };
   const { data } = await sb.from('member_availability')
     .select('user_id, available_date, note')
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
-  // Retorna: { userId: { 'YYYY-MM-DD': 'M'|'T'|'N'|'all'|'BLK' } }
+  // availability: { userId: { 'YYYY-MM-DD': 'M'|'T'|'N'|'all'|'BLK' } }
+  // memberNotes: { 'userId_YYYY-MM': 'texto da observação' }
   const map: Record<string, Record<string, string>> = {};
+  const memberNotes: Record<string, string> = {};
+
   data?.forEach((row: any) => {
     if (!map[row.user_id]) map[row.user_id] = {};
-    
+
     if (row.note === 'BLK') {
         const monthKey = `${row.available_date.substring(0, 7)}-01`;
         map[row.user_id][monthKey] = 'BLK';
@@ -53,20 +59,25 @@ export const fetchAvailabilityForEditor = async (ministryId: string, orgId: stri
     }
 
     if (row.note && row.note.startsWith('NOTE:')) {
-        return; // Ignore general notes in the editor availability check
+        const actualNote = row.note.substring(5).trim();
+        // Ignorar horários salvos acidentalmente como observação
+        if (!/^\d{2}:\d{2}(:\d{2})?$/.test(actualNote)) {
+            const noteKey = `${row.user_id}_${row.available_date.substring(0, 7)}`;
+            memberNotes[noteKey] = actualNote;
+        }
+        return;
     }
 
     const existing = map[row.user_id][row.available_date];
     const newNote = ['M', 'N', 'T'].includes(row.note) ? row.note : 'all';
-    
+
     if (!existing || existing === 'unavailable') {
         map[row.user_id][row.available_date] = newNote;
     } else if (existing !== 'all' && newNote !== existing) {
-        // If they have multiple partials (e.g., M and N) or a partial and an 'all', we treat as 'all'
         map[row.user_id][row.available_date] = 'all';
     }
   });
-  return map;
+  return { availability: map, memberNotes };
 };
 
 export const fetchGlobalConflictsV2 = async (ministryId: string, orgId: string, month: string) => {

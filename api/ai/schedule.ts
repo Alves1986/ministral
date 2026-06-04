@@ -7,7 +7,7 @@ export default async function handler(req: any, res: any) {
     const { occurrences, roles, members, availability, existingAssignments, rules, model } = req.body;
     
     if (model) {
-      const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules, model });
+      const result = await generateScheduleWithAI({ occurrences, roles, members, availability, existingAssignments, rules }, model);
       return res.status(200).json(result);
     }
 
