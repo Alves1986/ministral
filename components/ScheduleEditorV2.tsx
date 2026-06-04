@@ -130,6 +130,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [showReviewAI, setShowReviewAI] = useState(false);
     const [isRebalanceMode, setIsRebalanceMode] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+    const [showAlertsList, setShowAlertsList] = useState(false);
     
     const [members, setMembers] = useState<MemberV2[]>([]);
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
@@ -522,16 +523,63 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         return Object.keys(memberAvail).some(date => date.startsWith(currentMonth));
     }).length;
 
-    const alertas = assignments.filter(a => {
+    const detailedAlerts: { 
+        id: string;
+        memberId: string;
+        memberName: string;
+        date: string;
+        ruleId: string;
+        eventTitle: string;
+        time: string;
+        role: string;
+        type: 'unavailable' | 'conflict';
+        message: string;
+    }[] = [];
+
+    assignments.forEach(a => {
         const occurrence = occurrences.find(o => o.date === a.event_date && o.ruleId === a.event_rule_id);
-        if (!occurrence) return false;
+        if (!occurrence || a.role === '__EVENT_EXCLUDED__' || !a.member_id) return;
+        
+        const member = members.find(m => m.id === a.member_id);
+        const memberName = member ? member.name : 'Membro Desconhecido';
+        
         const status = getMemberAvailStatus(a.member_id, a.event_date, occurrence.time, availability);
-        if (status === 'unavailable') return true;
+        if (status === 'unavailable') {
+            detailedAlerts.push({
+                id: `${a.member_id}-${a.event_date}-${occurrence.ruleId}-${a.role}`,
+                memberId: a.member_id,
+                memberName,
+                date: a.event_date,
+                ruleId: occurrence.ruleId,
+                eventTitle: occurrence.title,
+                time: occurrence.time,
+                role: a.role,
+                type: 'unavailable',
+                message: `${memberName} marcou indisponibilidade para este dia.`
+            });
+            return;
+        }
 
         const otherAssignments = assignments.filter(other => !(other.member_id === a.member_id && other.role === a.role && other.event_rule_id === occurrence.ruleId && other.event_date === occurrence.date));
         const conflict = isConflict(a.member_id, a.role, occurrence.ruleId, occurrence.date, otherAssignments, conflictRules, globalConflicts, occurrences, occurrence.time);
-        return conflict.conflict;
-    }).length;
+        
+        if (conflict.conflict) {
+            detailedAlerts.push({
+                id: `${a.member_id}-${a.event_date}-${occurrence.ruleId}-${a.role}`,
+                memberId: a.member_id,
+                memberName,
+                date: a.event_date,
+                ruleId: occurrence.ruleId,
+                eventTitle: occurrence.title,
+                time: occurrence.time,
+                role: a.role,
+                type: 'conflict',
+                message: conflict.existingRole ? `Conflito com a função: ${conflict.existingRole}` : `Conflito de regra de escala.`
+            });
+        }
+    });
+
+    const alertas = detailedAlerts.length;
 
     return (
         <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-full">
@@ -545,12 +593,22 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                         <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
                             Resumo do Mês
                         </h2>
-                        <p className="text-sm text-zinc-500 truncate">
+                        <div className="text-sm text-zinc-500 mt-1 leading-relaxed">
                             {occurrences.length} eventos • {members.length} membros ativos
                             <br className="hidden sm:block" />
                             <span className="sm:hidden"> • </span>
-                            {disponiveisNoMes} disponíveis este mês • <span className={alertas > 0 ? 'text-red-500 font-bold' : ''}>{alertas} alertas</span>
-                        </p>
+                            {disponiveisNoMes} disponíveis este mês • {' '}
+                            {alertas > 0 ? (
+                                <button 
+                                    onClick={() => setShowAlertsList(true)}
+                                    className="text-red-500 font-bold hover:underline"
+                                >
+                                    {alertas} {alertas === 1 ? 'alerta' : 'alertas'}
+                                </button>
+                            ) : (
+                                <span>0 alertas</span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -661,7 +719,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     
                                     {roles.map(role => {
                                         return (
-                                            <td key={`${occurrence.date}-${role}`} className="p-2 relative">
+                                            <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="p-2 relative">
                                                 <MemoizedEditorCell 
                                                     occurrence={occurrence}
                                                     role={role}
@@ -720,7 +778,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                 <div className="p-4 space-y-4">
                                     {roles.map(role => {
                                         return (
-                                            <div key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
+                                            <div id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
                                                 <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider pl-1">{role}</label>
                                                 <MemoizedEditorCell 
                                                     occurrence={occurrence}
@@ -900,6 +958,75 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             >
                                 <RefreshCw size={16} />
                                 Analisar e Equilibrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showAlertsList && detailedAlerts.length > 0 && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-lg p-6 border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[80vh]">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-black text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                                <AlertCircle size={24} className="text-red-500" />
+                                Alertas na Escala
+                            </h3>
+                            <button 
+                                onClick={() => setShowAlertsList(false)}
+                                className="p-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-500 rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                            {detailedAlerts.map((alert, i) => (
+                                <div key={i} className="flex flex-col p-3 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 gap-1 relative overflow-hidden group">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></div>
+                                            <span className="font-bold text-sm text-red-700 dark:text-red-400">
+                                                {alert.memberName}
+                                            </span>
+                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                setShowAlertsList(false);
+                                                setTimeout(() => {
+                                                    const elements = document.querySelectorAll(`[id="cell-${alert.date}-${alert.role}"]`);
+                                                    for (const el of Array.from(elements)) {
+                                                        if (window.getComputedStyle(el).display !== 'none') {
+                                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                            el.classList.add('ring-4', 'ring-red-500', 'transition-all', 'rounded-xl');
+                                                            setTimeout(() => el.classList.remove('ring-4', 'ring-red-500', 'rounded-xl'), 3000);
+                                                            break;
+                                                        }
+                                                    }
+                                                }, 100);
+                                            }}
+                                            className="text-[10px] font-bold bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                        >
+                                            <Search size={12} />
+                                            Ver Local
+                                        </button>
+                                    </div>
+                                    <div className="text-xs text-zinc-600 dark:text-zinc-400 pl-3 border-l-2 border-red-200 dark:border-red-800/50 ml-0.5">
+                                        <p><strong>Motivo:</strong> {alert.message}</p>
+                                        <p><strong>Data:</strong> {alert.date.split('-').reverse().join('/')} ({alert.time})</p>
+                                        <p><strong>Evento:</strong> {alert.eventTitle}</p>
+                                        <p><strong>Função:</strong> {alert.role}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
+                            <button 
+                                onClick={() => setShowAlertsList(false)}
+                                className="px-6 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm font-bold rounded-xl transition-colors"
+                            >
+                                Fechar
                             </button>
                         </div>
                     </div>
