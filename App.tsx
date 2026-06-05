@@ -30,6 +30,7 @@ import { InviteScreen } from './components/InviteScreen';
 import { BillingLockScreen, OrganizationInactiveScreen } from './components/LockScreens';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DashboardLayout } from './components/DashboardLayout';
+import { SuperAdminLayout } from './components/SuperAdminLayout';
 import { WeatherWidget } from './components/WeatherWidget';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
@@ -207,9 +208,11 @@ const InnerApp = () => {
           // 1. Sincroniza usuário
           setCurrentUser(sessionUser);
 
-          // 2. Super Admin puro (sem org): redireciona SEMPRE para a aba super-admin
+          // 2. Super Admin puro (sem org): redireciona SEMPRE para a aba sa-organizations
           if (sessionUser.isSuperAdmin && !sessionUser.organizationId) {
-              setCurrentTab('super-admin');
+              if (!['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab)) {
+                  setCurrentTab('sa-organizations');
+              }
               setAppReady(true);
               return;
           }
@@ -806,6 +809,17 @@ const InnerApp = () => {
         </div>
       )}
       
+      {activeUser?.isSuperAdmin && !activeUser?.organizationId ? (
+          <SuperAdminLayout
+              currentTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab) ? currentTab : 'sa-organizations'}
+              onTabChange={setCurrentTab}
+              onLogout={handleLogout}
+          >
+              <Suspense fallback={<LoadingFallback />}>
+                  <SuperAdminDashboard activeTab={currentTab} />
+              </Suspense>
+          </SuperAdminLayout>
+      ) : (
       <DashboardLayout
           onLogout={handleLogout}
           title={activeUser?.isSuperAdmin && !activeUser?.organizationId ? 'Ministral' : (ministryTitle || 'Carregando...')}
@@ -1061,7 +1075,8 @@ const InnerApp = () => {
         <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} monthName={getMonthName(currentMonth)} />
         <ConfirmationModal isOpen={!!confirmModalData} onClose={() => setConfirmModalData(null)} data={confirmModalData} onConfirm={async () => { if (confirmModalData) { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, confirmModalData.key); refreshData(); setConfirmModalData(null); addToast("Presença confirmada!", "success"); }}} />
         </Suspense>
-    </DashboardLayout>
+            </DashboardLayout>
+      )}
     </>
   );
 };
