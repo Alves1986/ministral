@@ -279,8 +279,8 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const evolutionApiUrl    = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey    = Deno.env.get("EVOLUTION_API_KEY");
-    // CORREÇÃO: instanceName global é OPCIONAL — ministérios usam suas próprias instâncias
-    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME") || null;
+    // CORREÇÃO: Usar 'ministral-global' como padrão para a instância global se não definido
+    const instanceName       = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global";
 
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Variáveis Supabase não configuradas.");
     if (!evolutionApiUrl || !evolutionApiKey) throw new Error("Credenciais Evolution API não configuradas.");
