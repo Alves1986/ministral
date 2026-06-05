@@ -254,8 +254,8 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     let query = sb
       .from('profiles')
       .select('id, organization_id')
-      .or(`is_super_admin.eq.true${orgId ? `,and(is_admin.eq.true,organization_id.eq.${orgId})` : ''}`)
-      .not('organization_id', 'is', null);
+      .or(`is_super_admin.eq.true${orgId ? `,and(is_admin.eq.true,organization_id.eq.${orgId})` : ''}`);
+      // REMOVIDO: .not('organization_id', 'is', null)
 
     const { data: admins } = await query;
 
@@ -308,6 +308,7 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     const targetMap = new Map<string, { orgId: string, minId: string }>();
 
     for (const admin of uniqueAdmins) {
+        if (!admin.organization_id) continue; // SA sem org: skip (sem ministério para notificar)
         const minId = targetMinistryId || ministryByOrg.get(admin.organization_id);
         const oId   = orgId || admin.organization_id;
         if (minId && oId) {

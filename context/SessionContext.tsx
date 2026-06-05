@@ -94,6 +94,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     },
                     (payload: any) => {
                         console.log("[SessionProvider] Realtime profile update:", payload);
+                        // Guard: se já autenticado como SA sem org, não reprocessar
+                        if (userRef.current?.isSuperAdmin && !userRef.current?.organizationId) return;
                         if (payload.new && payload.new.organization_id) {
                             isProcessingRef.current = false;
                             processSession(sessionUser);
@@ -132,6 +134,42 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             }
 
             const orgId = profile.organization_id || '';
+
+            // ─── BYPASS SUPER ADMIN SEM ORG ─────────────────────────────────────────────
+            // Conta contato.ministral@gmail.com: is_super_admin=true, organization_id=NULL.
+            // Não precisa de org para funcionar — acessa apenas o SuperAdminDashboard.
+            if (!orgId && profile.is_super_admin) {
+                if (activeChannelRef.current) {
+                    activeChannelRef.current.unsubscribe();
+                    activeChannelRef.current = null;
+                }
+                const saUser: User = {
+                    id: profile.id,
+                    name: profile.name || 'Super Admin',
+                    email: profile.email || sessionUser.email,
+                    access_role: 'admin',
+                    isSuperAdmin: true,
+                    isOrgAdmin: false,
+                    isPro: false,
+                    isEnterprise: false,
+                    organizationId: '',
+                    ministryId: '',
+                    allowedMinistries: [],
+                    ministry_functions: [],
+                    avatar_url: profile.avatar_url,
+                    whatsapp: profile.whatsapp,
+                    birthDate: profile.birth_date,
+                };
+                if (isMountedRef.current) {
+                    setUser(saUser);
+                    setOrganization(null);
+                    setStatus('ready');
+                }
+                isProcessingRef.current = false;
+                return;
+            }
+            // ────────────────────────────────────────────────────────────────────────────
+
             if (!orgId) {
                 isProcessingRef.current = false;
                 setTimeout(() => {
