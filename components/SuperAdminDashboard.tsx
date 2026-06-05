@@ -32,6 +32,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     created_at,
                     org_id,
                     ministry_id,
+                    instance_name,
                     organizations ( name ),
                     organization_ministries ( label )
                 `)
@@ -512,6 +513,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                             <th className="px-6 py-3">Data / Hora</th>
                                             <th className="px-6 py-3">Organização</th>
                                             <th className="px-6 py-3">Ministério</th>
+                                            <th className="px-6 py-3 text-center">Instância</th>
                                             <th className="px-6 py-3 text-center">Status</th>
                                         </tr>
                                     </thead>
@@ -529,6 +531,11 @@ export const SuperAdminDashboard: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-3.5 text-zinc-600 dark:text-zinc-400 font-bold">
                                                     {log.organization_ministries?.label || `Min #${log.ministry_id}`}
+                                                </td>
+                                                <td className="px-6 py-3.5 text-center">
+                                                    <span className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                                        {log.instance_name || 'Desconhecida'}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-3.5 text-center">
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
