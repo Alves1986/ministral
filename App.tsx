@@ -347,9 +347,11 @@ const InnerApp = () => {
       }
   }, [currentTab, ministryConfig]);
 
-  // --- IMPERCEPTIBLE UPDATE ON TAB CHANGE ---
-  // Removido para otimizar performance conforme solicitado pelo usuário.
-  // O sistema agora conta com o botão de refresh manual e invalidação via Realtime.
+  // --- UPDATE ON TAB CHANGE ---
+  // Atualiza os dados imperceptivelmente ao trocar de aba, como solicitado.
+  useEffect(() => {
+      refreshData();
+  }, [currentTab, refreshData]);
 
   const handleLogout = () => {
    if (status === 'ready') {

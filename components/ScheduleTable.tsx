@@ -54,15 +54,23 @@ const SelectorDropdown = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
     // Close on outside click
     useClickOutside(dropdownRef, () => {
         onClose();
     });
 
     useEffect(() => {
-        // Auto-focus search with a slight delay to ensure render
-        setTimeout(() => searchInputRef.current?.focus(), 50);
-    }, []);
+        // Auto-focus search apenas no desktop para evitar que o teclado suba no mobile e jogue as opções para fora da tela
+        if (!isMobile) {
+            setTimeout(() => searchInputRef.current?.focus(), 50);
+        }
+    }, [isMobile]);
 
     const filteredOptions = useMemo(() => {
         return options
