@@ -816,7 +816,7 @@ const InnerApp = () => {
               onLogout={handleLogout}
           >
               <Suspense fallback={<LoadingFallback />}>
-                  <SuperAdminDashboard activeTab={currentTab} />
+                  <SuperAdminDashboard activeTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab) ? currentTab : 'sa-organizations'} />
               </Suspense>
           </SuperAdminLayout>
       ) : (

@@ -213,9 +213,11 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
 
     return (
         <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
-            {activeTab === 'sa-whatsapp' ? (
+            {activeTab === 'sa-whatsapp' && (
                 <GlobalWhatsAppConnect />
-            ) : activeTab === 'sa-organizations' ? (
+            )}
+            
+            {activeTab === 'sa-organizations' && (
                 <>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
                         <div>
