@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Building2, Users, Layers, Activity, Plus, Edit2, 
     ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock, Link as LinkIcon,
-    MessageSquare, BarChart3, Clock, Crown, ShieldAlert, Wifi
+    MessageSquare, BarChart3, Clock, Crown, ShieldAlert, Wifi, RefreshCw
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabase/client';
