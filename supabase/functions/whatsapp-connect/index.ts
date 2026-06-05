@@ -82,10 +82,31 @@ serve(async (req: Request) => {
 
       const raw = await fetchResponse.json();
       const list = Array.isArray(raw) ? raw : [];
-      const instances = list.map((i: any) => ({
-        instanceName: i.instance?.instanceName || i.instanceName || i.name || "desconhecido",
-        state: i.instance?.state || i.state || "close",
-        phone: i.instance?.owner || i.owner || undefined,
+      
+      const instances = await Promise.all(list.map(async (i: any) => {
+        const instanceName = i.instance?.instanceName || i.instanceName || i.name || "desconhecido";
+        let state = i.instance?.status || i.instance?.state || i.status || i.connectionStatus || i.state || "close";
+        
+        // Busca o estado real da conexão (necessário na v2)
+        try {
+          const stateEndpoint = `${evolutionApiUrl}/instance/connectionState/${instanceName}`;
+          const stateRes = await fetch(stateEndpoint, {
+            headers: { "apikey": evolutionApiKey }
+          });
+          if (stateRes.ok) {
+            const stateJson = await stateRes.json();
+            const realState = stateJson?.instance?.state || stateJson?.state || stateJson?.instance?.status || stateJson?.status;
+            if (realState) state = realState;
+          }
+        } catch (e) {
+          console.error("Erro ao buscar connectionState para", instanceName, e);
+        }
+
+        return {
+          instanceName,
+          state,
+          phone: i.instance?.owner || i.owner || undefined,
+        };
       }));
 
       return new Response(
@@ -111,7 +132,7 @@ serve(async (req: Request) => {
         : null;
 
       if (existing) {
-        const state = existing.instance?.state || existing.state;
+        const state = existing.instance?.status || existing.instance?.state || existing.status || existing.connectionStatus || existing.state || "close";
         if (state === "open") {
           return new Response(
             JSON.stringify({ connected: true, instanceName, state }),
@@ -178,7 +199,8 @@ serve(async (req: Request) => {
     }
 
     // Já conectado
-    if (result.instance?.state === "open" || result.state === "open") {
+    const createdState = result.instance?.status || result.instance?.state || result.status || result.connectionStatus || result.state;
+    if (createdState === "open") {
       return new Response(
         JSON.stringify({ connected: true, instanceName }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
