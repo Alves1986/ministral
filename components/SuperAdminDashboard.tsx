@@ -213,34 +213,33 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
 
     return (
         <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                        <Building2 className="text-purple-600"/> Gestão Global
-                    </h2>
-                    <p className="text-zinc-500 text-sm mt-1">Administração de Organizações (Multi-Tenant)</p>
-                </div>
-                <div className="flex gap-2">
-                    <button 
-                        onClick={handleCopyRegisterLink}
-                        className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all active:scale-95 border border-zinc-200 dark:border-zinc-700"
-                        title="Copiar link público de cadastro"
-                    >
-                        <LinkIcon size={18}/> Link de Cadastro
-                    </button>
-                    <button 
-                        onClick={handleCreate}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20"
-                    >
-                        <Plus size={18}/> Nova Organização
-                    </button>
-                </div>
-            </div>
-
             {activeTab === 'sa-whatsapp' ? (
                 <GlobalWhatsAppConnect />
             ) : activeTab === 'sa-organizations' ? (
                 <>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                                <Building2 className="text-purple-600"/> Gestão Global
+                            </h2>
+                            <p className="text-zinc-500 text-sm mt-1">Administração de Organizações (Multi-Tenant)</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={handleCopyRegisterLink}
+                                className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all active:scale-95 border border-zinc-200 dark:border-zinc-700"
+                                title="Copiar link público de cadastro"
+                            >
+                                <LinkIcon size={18}/> Link de Cadastro
+                            </button>
+                            <button 
+                                onClick={handleCreate}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20"
+                            >
+                                <Plus size={18}/> Nova Organização
+                            </button>
+                        </div>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
                             <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600">
