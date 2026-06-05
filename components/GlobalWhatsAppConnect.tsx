@@ -42,16 +42,16 @@ export const GlobalWhatsAppConnect: React.FC = () => {
     if (!supabase) return;
     setInstancesLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        body: { list_all: true },
+      // Chama whatsapp-connect com action='list' para listar instâncias da Evolution API
+      const { data, error } = await supabase.functions.invoke('whatsapp-connect', {
+        body: { action: 'list' },
       });
       if (!isMounted.current) return;
-      if (!error && data?.instances) {
+      if (!error && Array.isArray(data?.instances)) {
         setInstances(data.instances);
         const hasOpen = data.instances.some((i: Instance) => i.state === 'open');
-        if (hasOpen && status === 'idle') setStatus('connected');
-      } else if (!error && Array.isArray(data)) {
-        setInstances(data);
+        if (hasOpen) setStatus('connected');
+        else if (status === 'connected') setStatus('idle');
       }
     } catch (err) {
       console.error('[GlobalWhatsAppConnect] fetchInstances error:', err);

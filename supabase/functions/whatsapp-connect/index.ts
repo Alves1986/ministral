@@ -59,7 +59,37 @@ serve(async (req: Request) => {
 
     // ── Parâmetros opcionais do body ──
     const reqBody = await req.json().catch(() => ({}));
+    const action: string | undefined = reqBody.action;
     const instance_name: string | undefined = reqBody.instance_name;
+
+    // ── action='list': retorna todas as instâncias existentes na Evolution API ──
+    if (action === "list") {
+      const fetchEndpoint = `${evolutionApiUrl}/instance/fetchInstances`;
+      const fetchResponse = await fetch(fetchEndpoint, {
+        method: "GET",
+        headers: { "apikey": evolutionApiKey },
+      });
+
+      if (!fetchResponse.ok) {
+        return new Response(
+          JSON.stringify({ instances: [] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const raw = await fetchResponse.json();
+      const list = Array.isArray(raw) ? raw : [];
+      const instances = list.map((i: any) => ({
+        instanceName: i.instance?.instanceName || i.instanceName || i.name || "desconhecido",
+        state: i.instance?.state || i.state || "close",
+        phone: i.instance?.owner || i.owner || undefined,
+      }));
+
+      return new Response(
+        JSON.stringify({ instances }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Nome da instância global do sistema
     const instanceName = instance_name || "ministral-global";
