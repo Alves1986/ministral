@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, MessageCircle, Calendar, Clock, Trash2, Check, Send, CalendarClock, AlertTriangle, RefreshCw, CalendarDays, Sparkles, Edit3, RotateCcw, Save } from 'lucide-react';
+import { Loader2, MessageCircle, Calendar, Clock, Trash2, Check, Send, CalendarClock, AlertTriangle, RefreshCw, CalendarDays, Sparkles, Edit3, RotateCcw, Save, Wand2, ChevronDown } from 'lucide-react';
 import { scheduleWhatsAppNotification, cancelWhatsAppNotification, fetchScheduledNotifications } from '../services/supabase/misc';
 import { fetchRulesV2, generateOccurrencesV2, EventRuleV2, OccurrenceV2 } from '../services/scheduleServiceV2';
 import { fetchMinistrySettings, saveMinistrySettings } from '../services/supabase/ministries';
+import { runAI, AI_TASKS } from '../services/aiOrchestrator';
 import { MinistryDef } from '../types';
 
 interface Props {
@@ -55,6 +56,11 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
   const [savedCustomMessage, setSavedCustomMessage] = useState<string | undefined>(undefined);
   const [savingMsg, setSavingMsg] = useState(false);
   const [editingMsg, setEditingMsg] = useState(false);
+
+  // Reescrita com IA
+  const [aiTone, setAiTone] = useState<'motivador' | 'formal' | 'acolhedor' | 'direto'>('motivador');
+  const [aiRewriting, setAiRewriting] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Weekly rule inputs: { ruleId: { daysBefore, time } }
   const [weeklyInputs, setWeeklyInputs] = useState<Record<string, { daysBefore: number; time: string }>>({});
@@ -175,6 +181,32 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
       onShowToast?.('Erro ao salvar mensagem.', 'error');
     } finally {
       setSavingMsg(false);
+    }
+  };
+
+  const handleAIRewrite = async () => {
+    const textToRewrite = customMessage.trim() || template.orientations;
+    if (!textToRewrite) {
+      onShowToast?.('Digite uma mensagem antes de pedir à IA para reescrever.', 'error');
+      return;
+    }
+    setAiRewriting(true);
+    setAiError(null);
+    try {
+      const result = await runAI(
+        AI_TASKS.WHATSAPP_MSG_REWRITE,
+        { organization_name: '', ministry_name: activeMinistry?.label || 'Ministério', total_members: 0, active_members: 0, roles: [] },
+        { text: textToRewrite, tone: aiTone, ministry_name: activeMinistry?.label || 'Ministério' }
+      );
+      // A IA retorna texto puro — pode ser string direta ou objeto
+      const rewritten = typeof result === 'string' ? result : (result?.text || result?.message || JSON.stringify(result));
+      setCustomMessage(rewritten.trim());
+    } catch (e: any) {
+      const msg = e?.message || 'Erro ao contatar a IA.';
+      setAiError(msg);
+      onShowToast?.(`IA: ${msg}`, 'error');
+    } finally {
+      setAiRewriting(false);
     }
   };
 
@@ -385,10 +417,61 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
                 />
                 <p className="text-[10px] text-zinc-400 mt-1">Deixe em branco para usar o template inteligente automático.</p>
               </div>
+
+              {/* Barra de ferramentas IA */}
+              <div className="rounded-xl border border-[#c9a84c]/30 bg-gradient-to-r from-[#c9a84c]/5 to-[#0f1f3d]/5 dark:from-[#c9a84c]/10 dark:to-[#0f1f3d]/20 p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Wand2 size={13} className="text-[#c9a84c] shrink-0" />
+                  <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-200">Reescrever com IA</span>
+                  <span className="text-[9px] text-zinc-400 ml-auto">Gemini</span>
+                </div>
+
+                {/* Seletor de tom */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {([
+                    { key: 'motivador',  label: '🔥 Motivador' },
+                    { key: 'acolhedor',  label: '💛 Acolhedor' },
+                    { key: 'formal',     label: '📋 Formal'    },
+                    { key: 'direto',     label: '⚡ Direto'    },
+                  ] as const).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setAiTone(key)}
+                      className={`py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                        aiTone === key
+                          ? 'bg-[#c9a84c] text-white shadow-sm'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:border-[#c9a84c]/50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleAIRewrite}
+                  disabled={aiRewriting}
+                  className="w-full bg-[#c9a84c] hover:bg-[#b8943e] text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 text-xs"
+                >
+                  {aiRewriting
+                    ? <><Loader2 size={13} className="animate-spin" /> Reescrevendo…</>
+                    : <><Wand2 size={13} /> Reescrever texto com IA</>
+                  }
+                </button>
+                {aiError && (
+                  <p className="text-[10px] text-red-500 flex items-center gap-1">
+                    <AlertTriangle size={10} /> {aiError}
+                  </p>
+                )}
+                <p className="text-[9px] text-zinc-400 leading-relaxed">
+                  A IA reescreve suas orientações no tom escolhido, formatado para WhatsApp. Você pode editar o resultado antes de salvar.
+                </p>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveCustomMessage}
-                  disabled={savingMsg}
+                  disabled={savingMsg || aiRewriting}
                   className="flex-1 bg-[#0f1f3d] hover:bg-[#1a2d52] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm"
                 >
                   {savingMsg ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}

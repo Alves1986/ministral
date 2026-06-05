@@ -23,7 +23,8 @@ export enum AI_TASKS {
   SCALE_SUGGESTION = 'SCALE_SUGGESTION',
   MEMBER_ANALYSIS  = 'MEMBER_ANALYSIS',
   PREVENTIVE_ALERT = 'PREVENTIVE_ALERT',
-  SCALE_GENERATION = 'SCALE_GENERATION'
+  SCALE_GENERATION = 'SCALE_GENERATION',
+  WHATSAPP_MSG_REWRITE = 'WHATSAPP_MSG_REWRITE'
 }
 
 export const AI_MODELS = [
@@ -175,6 +176,33 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
     - Sugestões práticas
   `,
   [AI_TASKS.SCALE_GENERATION]: (_data) => '',
+  [AI_TASKS.WHATSAPP_MSG_REWRITE]: (data) => {
+    const tones: Record<string, string> = {
+      motivador:    'Reescreva as orienta\u00e7\u00f5es de forma animada, motivadora e inspiradora. Use emojis relevantes.',
+      formal:       'Reescreva as orienta\u00e7\u00f5es de forma formal, clara e respeitosa. Evite emojis em excesso.',
+      acolhedor:    'Reescreva as orienta\u00e7\u00f5es de forma carinhosa, acolhedora e gentil. Use emojis suaves.',
+      direto:       'Reescreva as orienta\u00e7\u00f5es de forma direta, objetiva e simples. Listas n\u00fameras curtas.',
+    };
+    const tone = data.tone as string || 'motivador';
+    return `
+      Voc\u00ea \u00e9 um especialista em comunica\u00e7\u00e3o para minist\u00e9rios de igrejas e grupos de WhatsApp.
+      ${tones[tone] || tones.motivador}
+
+      Minist\u00e9rio: ${data.ministry_name || 'Minist\u00e9rio'}
+      Tom solicitado: ${tone}
+      Texto original a reescrever:
+      ---
+      ${data.text}
+      ---
+
+      REGRAS OBRIGAT\u00d3RIAS:
+      1. Retorne APENAS o texto puro reescrito, sem explica\u00e7\u00f5es, sem t\u00edtulos adicionais.
+      2. O texto deve ser formatado para WhatsApp: use *negrito* com asteriscos, n\u00e3o HTML.
+      3. Mantenha o formato de lista numerada se o original tiver.
+      4. N\u00e3o adicione conte\u00fado inventado — apenas reescreva o que foi dado.
+      5. Ao final, inclua uma frase de fechamento inspiradora para o minist\u00e9rio ${data.ministry_name || ''}.
+    `;
+  },
 };
 
 async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
