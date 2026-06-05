@@ -347,11 +347,9 @@ const InnerApp = () => {
       }
   }, [currentTab, ministryConfig]);
 
-  // --- UPDATE ON TAB CHANGE ---
-  // Atualiza os dados imperceptivelmente ao trocar de aba, como solicitado.
-  useEffect(() => {
-      refreshData();
-  }, [currentTab, refreshData]);
+  // Nota: NÃO chamar refreshData() no tab change — isso causa flash/piscar.
+  // O cache do TanStack Query + Realtime Supabase já mantém os dados atualizados.
+  // refreshData() é chamado apenas em ações explícitas do usuário (salvar, trocar ministério, etc.)
 
   const handleLogout = () => {
    if (status === 'ready') {

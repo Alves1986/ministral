@@ -158,20 +158,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }), [settingsQuery.data]);
 
   const refreshData = useCallback(async () => {
-      const sb = getSupabase();
-      if (sb) {
-          try {
-              const { data: { session }, error } = await sb.auth.getSession();
-              if (error || !session) {
-                   console.error("Sessão expirada durante refreshData", error);
-                   window.location.reload();
-                   return;
-              }
-          } catch(e) {}
-      }
-
-      // 1. Reseta as queries para o estado inicial (limpa cache e refetch se enabled)
+      // Invalida o cache para todas as queries relevantes.
+      // Usa refetchType: 'active' para só re-buscar queries com observers ativos
+      // (aba visível), evitando re-renders e flashes desnecessários em abas ocultas.
       queryClient.invalidateQueries({ 
+          refetchType: 'active',
           predicate: (query) => 
               query.queryKey[0] === 'event_rules' || 
               query.queryKey[0] === 'settings' || 

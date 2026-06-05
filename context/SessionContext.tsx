@@ -402,9 +402,18 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 if (!isMountedRef.current) return;
 
                 if (event === 'SIGNED_IN' && currentSession?.user) {
-                    await processSession(currentSession.user);
-                } else if (event === 'TOKEN_REFRESHED' && currentSession?.user) {
-                    await processSession(currentSession.user);
+                    // Guard: só reprocessa se for um login genuíno (novo usuário ou primeiro carregamento)
+                    // TOKEN_REFRESHED também dispara SIGNED_IN em algumas versões, então verificamos se é o mesmo usuário
+                    const isSameUser = userRef.current?.id === currentSession.user.id;
+                    const isAlreadyReady = isSameUser && userRef.current !== null;
+                    if (!isAlreadyReady) {
+                        await processSession(currentSession.user);
+                    }
+                } else if (event === 'TOKEN_REFRESHED') {
+                    // Token refresh é transparente — o JWT foi renovado mas a sessão não mudou.
+                    // NÃO reprocessar a sessão completa para evitar re-renders/piscar.
+                    // O Supabase já atualizou internamente o token nos headers das próximas requests.
+                    console.log('[SessionProvider] Token refreshed silently, skipping reprocess.');
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null);
                     setStatus('unauthenticated');
