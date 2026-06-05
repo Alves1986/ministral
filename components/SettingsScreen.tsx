@@ -682,61 +682,44 @@ export const SettingsScreen: React.FC<Props> = ({
             </div>
           ) : organization?.whatsapp_enabled ? (
             <div className="space-y-6">
+              {/* Toggle para ativar/desativar WhatsApp no ministério atual */}
               {ministryId && (() => {
                   const currentMinistry = ministries?.find(m => m.id === ministryId);
-                  const isMinistryWhatsappEnabled = currentMinistry?.whatsapp_enabled !== false; // Default to true if undefined to maintain backwards compatibility
+                  const isMinistryWhatsappEnabled = currentMinistry?.whatsapp_enabled !== false;
 
                   return (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white dark:bg-zinc-800 rounded-3xl shadow border border-zinc-200 dark:border-zinc-700 gap-4 mb-6">
-                          <div>
-                              <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                                  <MessageCircle className="text-emerald-500" />
-                                  WhatsApp neste Ministério
-                              </h3>
-                              <p className="text-sm text-zinc-500 mt-1">Ative ou desative o uso do WhatsApp especificamente para o ministério <strong>{currentMinistry?.label || initialTitle}</strong>.</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <span className="text-xs font-bold text-zinc-500">{isMinistryWhatsappEnabled ? 'Ativado' : 'Desativado'}</span>
-                              <button 
-                                onClick={() => {
-                                    if (onToggleMinistryWhatsApp) {
-                                        onToggleMinistryWhatsApp(ministryId, !isMinistryWhatsappEnabled);
-                                    }
-                                }}
-                                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors ${isMinistryWhatsappEnabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
-                              >
-                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow flex-shrink-0 ${isMinistryWhatsappEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                              </button>
-                          </div>
-                      </div>
+                    <MinistryWhatsAppConnect
+                      ministryId={ministryId}
+                      orgId={orgId}
+                      ministryName={currentMinistry?.label || initialTitle}
+                      whatsappEnabled={isMinistryWhatsappEnabled}
+                      onToggle={(enabled) => {
+                        if (onToggleMinistryWhatsApp) {
+                          onToggleMinistryWhatsApp(ministryId, enabled);
+                        }
+                      }}
+                    />
                   );
               })()}
 
+              {/* Configurações de mensagens (horário, dias antes, etc.) */}
               {ministryId && (() => {
                  const currentMinistry = ministries?.find(m => m.id === ministryId);
                  const isMinistryWhatsappEnabled = currentMinistry?.whatsapp_enabled !== false;
                  if (!isMinistryWhatsappEnabled) return null;
-
                  return (
-                     <>
-                        <WhatsAppNotificationSettings
-                          orgId={orgId}
-                          ministryId={ministryId}
-                          ministries={ministries || []}
-                          onShowToast={addToast}
-                        />
-                        <MinistryWhatsAppConnect
-                          ministryId={ministryId}
-                          orgId={orgId}
-                          ministryName={currentMinistry?.label || initialTitle}
-                        />
-                     </>
+                   <WhatsAppNotificationSettings
+                     orgId={orgId}
+                     ministryId={ministryId}
+                     ministries={ministries || []}
+                     onShowToast={addToast}
+                   />
                  );
               })()}
             </div>
           ) : (
             <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/50 rounded-3xl border border-zinc-200 dark:border-zinc-700">
-               <p className="text-zinc-500">Ative o recurso no botão acima para configurar as instâncias e mensagens de WhatsApp.</p>
+               <p className="text-zinc-500">Ative o recurso no botão acima para configurar as mensagens de WhatsApp.</p>
             </div>
           )}
         </div>

@@ -1,371 +1,159 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, X, CheckCircle2, RotateCw, Loader2, MessageCircle } from 'lucide-react';
+import { MessageCircle, Wifi, WifiOff, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { getSupabase } from '../services/supabase/client';
 
 interface Props {
   ministryId: string;
   orgId: string;
   ministryName?: string;
+  /** Exibe toggle de ativar/desativar WhatsApp para o ministério */
+  whatsappEnabled?: boolean;
+  onToggle?: (enabled: boolean) => void;
 }
 
-export const MinistryWhatsAppConnect: React.FC<Props> = ({ ministryId, orgId, ministryName }) => {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'qr' | 'connected'>('idle');
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
-  const [instanceName, setInstanceName] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pollCount, setPollCount] = useState(0);
-  const [showAlreadyConnected, setShowAlreadyConnected] = useState(false);
-  const [resolvedMinistryName, setResolvedMinistryName] = useState<string | null>(null);
-  // CORREÇÃO: ref para evitar setState em componente desmontado
-  const isMounted = useRef(true);
-  // Backoff exponencial: delay cresce a cada tentativa (máx 20s)
-  const pollDelay = useRef(3000);
+type SystemStatus = 'loading' | 'online' | 'offline';
 
+export const MinistryWhatsAppConnect: React.FC<Props> = ({
+  ministryId,
+  orgId,
+  ministryName,
+  whatsappEnabled = true,
+  onToggle,
+}) => {
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>('loading');
+  const isMounted = useRef(true);
   const supabase = getSupabase();
 
   useEffect(() => {
     isMounted.current = true;
-    return () => { isMounted.current = false; };
+    checkSystemStatus();
+    // Atualiza o status a cada 60s
+    const interval = setInterval(checkSystemStatus, 60000);
+    return () => {
+      isMounted.current = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!ministryName && ministryId && supabase) {
-      const fetchMinistry = async () => {
-        try {
-          const { data } = await supabase
-            .from('organization_ministries')
-            .select('*')
-            .eq('id', ministryId)
-            .single();
-          if (isMounted.current && data?.label) {
-            setResolvedMinistryName(data.label);
-          }
-        } catch (err) {
-          console.error("Error fetching ministry name:", err);
-        }
-      };
-      
-      fetchMinistry();
+  const checkSystemStatus = async () => {
+    if (!supabase) {
+      setSystemStatus('offline');
+      return;
     }
-  }, [ministryId, ministryName]);
-
-  useEffect(() => {
-    checkConnection();
-  }, [ministryId]);
-
-  const checkConnection = async () => {
-    if (!supabase) return;
     try {
-      const { data, error } = await supabase
-        .from('ministry_whatsapp')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .single();
-      
-      if (!isMounted.current) return; // CORREÇÃO: ignorar se desmontado
-      if (error && error.code !== 'PGRST116') throw error;
-      
-      if (data) {
-        setInstanceName(data.instance_name);
-        if (data.connected) {
-          setStatus('connected');
-          setPhoneNumber(data.phone_number);
-        } else {
-          if (status !== 'qr') setStatus('idle');
-        }
-      } else {
-        if (status !== 'qr') setStatus('idle');
-      }
-    } catch (err) {
-      console.error("Error checking whatsapp connection:", err);
-    }
-  };
-
-  const pollStatus = async (instName: string) => {
-    if (!supabase) return false;
-    try {
-      const { data: dbData } = await supabase
-        .from('ministry_whatsapp')
-        .select('connected, phone_number')
-        .eq('instance_name', instName)
-        .single();
-
-      if (!isMounted.current) return false; // CORREÇÃO: guard após await
-
-      if (dbData?.connected) {
-        setStatus('connected');
-        if (dbData.phone_number) setPhoneNumber(dbData.phone_number);
-        return true;
-      }
-
+      // Verifica se há alguma instância global conectada consultando a Edge Function de status
       const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        body: { instance_name: instName }
+        body: { instance_name: 'ministral-global' },
       });
-
-      if (!isMounted.current) return false; // CORREÇÃO: guard após segundo await
-
-      if (error) throw error;
-      
-      if (data?.state === 'open') {
-        setStatus('connected');
-        if (data.phone) setPhoneNumber(data.phone);
-        checkConnection();
-        return true;
-      }
-    } catch (err) {
-      console.error("Error polling status:", err);
-    }
-    return false;
-  };
-
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    if (status === 'qr' && instanceName) {
-      setPollCount(0);
-      setShowAlreadyConnected(false);
-      pollDelay.current = 3000; // Reset do backoff ao iniciar nova sessão QR
-
-      // Mostra o botão "Já conectei" após 15s
-      const alreadyConnectedTimeout = setTimeout(() => setShowAlreadyConnected(true), 15000);
-
-      // Função recursiva de polling com backoff exponencial
-      const scheduleNextPoll = () => {
-        timeoutId = setTimeout(async () => {
-          if (!isMounted.current) return;
-
-          setPollCount(prev => {
-            const next = prev + 1;
-            // Para automaticamente após 25 tentativas (~3 minutos no total)
-            if (next > 25) {
-              setShowAlreadyConnected(true);
-              return prev;
-            }
-            return next;
-          });
-
-          // Executa o poll
-          if (instanceName && isMounted.current) {
-            const isConnected = await pollStatus(instanceName);
-            if (!isConnected && isMounted.current) {
-              // Aumenta o delay com backoff exponencial (máx 20s)
-              pollDelay.current = Math.min(pollDelay.current * 1.5, 20000);
-              scheduleNextPoll();
-            }
-          }
-        }, pollDelay.current);
-      };
-
-      scheduleNextPoll();
-
-      return () => {
-        clearTimeout(timeoutId);
-        clearTimeout(alreadyConnectedTimeout);
-      };
-    }
-  }, [status, instanceName]);
-
-  useEffect(() => {
-    if (status === 'loading') {
-      const timeout = setTimeout(() => {
-        setStatus('idle');
-        setError('Tempo esgotado. Verifique sua conexão e tente novamente.');
-      }, 15000);
-      return () => clearTimeout(timeout);
-    }
-  }, [status]);
-
-  const handleConnect = async () => {
-    if (!supabase) return;
-    setStatus('loading');
-    setError(null);
-    try {
-      const finalName = ministryName || resolvedMinistryName;
-      const safeName = finalName
-        ? finalName
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-zA-Z0-9]/g, '')
-            .substring(0, 25)
-        : ministryId.substring(0, 8);
-      const generatedInstanceName = `${safeName}-${orgId.substring(0, 5)}`;
-
-      const { data, error } = await supabase.functions.invoke('whatsapp-connect', {
-        body: { ministry_id: ministryId, org_id: orgId, instance_name: generatedInstanceName }
-      });
-      
-      console.log('whatsapp-connect response:', data, error);
-
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Erro ao chamar Edge Function');
-      }
-      
-      if (data?.qrcode) {
-        setQrCode(data.qrcode);
-        setInstanceName(data.instanceName);
-        setStatus('qr');
-      } else if (data?.connected) {
-        // Already connected
-        setStatus('connected');
-        checkConnection();
-      } else if (data?.error) {
-        throw new Error(data.error);
+      if (!isMounted.current) return;
+      if (!error && (data?.state === 'open' || data?.connected)) {
+        setSystemStatus('online');
       } else {
-        console.error('Resposta inesperada:', data);
-        throw new Error("QR Code não foi gerado. Verifique os logs da Edge Function.");
+        setSystemStatus('offline');
       }
-    } catch (err: any) {
-      console.error('handleConnect error:', err);
-      setError(err.message || "Erro ao conectar. Tente novamente.");
-      setStatus('idle');
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (!supabase || !instanceName) return;
-    setStatus('loading');
-    try {
-      const { error } = await supabase.functions.invoke('whatsapp-disconnect', {
-        body: { instance_name: instanceName, ministry_id: ministryId }
-      });
-      if (error) throw error;
-      setStatus('idle');
-      setQrCode(null);
-      setPhoneNumber(null);
-    } catch (err: any) {
-      setError(err.message || "Erro ao desconectar.");
-      setStatus('connected');
+    } catch {
+      if (isMounted.current) setSystemStatus('offline');
     }
   };
 
   return (
     <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center text-green-500">
           <MessageCircle size={20} />
         </div>
         <div>
           <h2 className="font-bold text-zinc-800 dark:text-zinc-100">WhatsApp do Ministério</h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Configure um número exclusivo para notificações deste ministério</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {ministryName ? `Ministério: ${ministryName}` : 'Configurações de envio de mensagens'}
+          </p>
         </div>
       </div>
-      
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl mb-6 text-sm">
-          {error}
+
+      {/* Status do sistema global */}
+      <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900/50
+                      rounded-xl border border-zinc-100 dark:border-zinc-700/50 mb-5">
+        <div className="flex items-center gap-3">
+          {systemStatus === 'loading' ? (
+            <Loader2 size={18} className="text-zinc-400 animate-spin" />
+          ) : systemStatus === 'online' ? (
+            <Wifi size={18} className="text-emerald-500" />
+          ) : (
+            <WifiOff size={18} className="text-red-400" />
+          )}
+          <div>
+            <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+              Sistema WhatsApp Global
+            </p>
+            <p className="text-xs text-zinc-500">
+              {systemStatus === 'loading'
+                ? 'Verificando conexão...'
+                : systemStatus === 'online'
+                ? 'Conectado e operacional'
+                : 'Offline — contate o administrador'}
+            </p>
+          </div>
+        </div>
+        <span
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border
+            ${systemStatus === 'online'
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/40'
+              : systemStatus === 'offline'
+              ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/40'
+              : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-700 dark:text-zinc-400 dark:border-zinc-600'
+            }`}
+        >
+          {systemStatus === 'loading' ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
+              Verificando
+            </>
+          ) : systemStatus === 'online' ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Online
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              Offline
+            </>
+          )}
+        </span>
+      </div>
+
+      {/* Toggle para ativar/desativar WhatsApp neste ministério */}
+      {onToggle && (
+        <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900/50
+                        rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+          <div>
+            <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+              WhatsApp neste Ministério
+            </p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {whatsappEnabled
+                ? 'Mensagens automáticas ativas para este ministério.'
+                : 'Mensagens desativadas para este ministério.'}
+            </p>
+          </div>
+          <button
+            onClick={() => onToggle(!whatsappEnabled)}
+            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors
+              ${whatsappEnabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow
+                ${whatsappEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+            />
+          </button>
         </div>
       )}
 
-      {status === 'idle' && (
-        <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl p-6 flex flex-col items-center justify-center border border-zinc-100 dark:border-zinc-700/50">
-           <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-center text-sm">
-             Atenção: Ao conectar um WhatsApp aqui, o ministério utilizará esta conexão exclusiva.<br/>
-             Ele será usado para enviar os lembretes e notificações.
-           </p>
-
-           {!supabase ? (
-              <div className="mb-4 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1.5 border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/10 px-2.5 py-1 rounded-md">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  Conexão com servidor indisponível
-              </div>
-           ) : (
-              <div className="mb-5 text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                  Servidor online
-              </div>
-           )}
-
-           <button
-            onClick={handleConnect}
-            disabled={!supabase}
-            className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm"
-           >
-            <QrCode className="w-5 h-5" />
-            <span>Conectar WhatsApp</span>
-           </button>
-        </div>
-      )}
-
-      {status === 'loading' && (
-        <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl p-8 flex flex-col items-center justify-center border border-zinc-100 dark:border-zinc-700/50">
-           <Loader2 className="w-8 h-8 text-green-500 animate-spin mb-4" />
-           <p className="text-zinc-500 dark:text-zinc-400 font-medium font-sm">Aguarde, configurando conexão...</p>
-        </div>
-      )}
-
-      {status === 'qr' && qrCode && (
-        <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl p-6 flex flex-col items-center justify-center border border-zinc-100 dark:border-zinc-700/50">
-          <h4 className="text-zinc-900 dark:text-white font-bold mb-2">Escaneie o QR Code</h4>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6">
-            Abra o WhatsApp do ministério, vá em Dispositivos Conectados e escaneie o código abaixo.
-          </p>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-700 mb-6">
-            <img src={qrCode} alt="WhatsApp QR Code" className="w-64 h-64" />
-          </div>
-          <div className="flex flex-col items-center space-y-2 mb-6 text-center">
-            <div className="flex items-center space-x-2 text-green-500 dark:text-green-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm font-medium">Aguardando aparelho conectar...</span>
-            </div>
-            {pollCount >= 20 && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 max-w-[250px]">
-                Se já escaneou o QR Code, clique em "Já conectei" para verificar.
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col items-center gap-3">
-             {showAlreadyConnected && (
-                <button
-                  onClick={async () => {
-                    if (!instanceName) return;
-                    const isConnected = await pollStatus(instanceName);
-                    if (!isConnected) {
-                       await checkConnection();
-                    }
-                  }}
-                  className="bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
-                >
-                  Já conectei
-                </button>
-             )}
-            <button
-              onClick={() => setStatus('idle')}
-              className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors text-sm font-medium"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {status === 'connected' && (
-        <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-6 border border-green-200 dark:border-green-500/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-500/20 rounded-full flex items-center justify-center text-green-600 dark:text-green-500 shadow-sm">
-                <CheckCircle2 className="w-7 h-7" />
-              </div>
-              <div>
-                <p className="font-bold text-green-900 dark:text-green-100 text-lg">Conectado</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{ministryName || resolvedMinistryName || phoneNumber || instanceName}</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleDisconnect}
-                className="text-red-500 hover:text-red-700 dark:hover:text-red-400 bg-white dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-900/20 border border-zinc-200 dark:border-zinc-700 transition-all font-bold px-4 py-2 rounded-xl text-sm flex items-center space-x-2 shadow-sm"
-              >
-                <X className="w-4 h-4" />
-                <span>Desconectar Instância</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Aviso se sistema offline */}
+      {systemStatus === 'offline' && (
+        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400 text-center">
+          A conexão global do WhatsApp está offline. Nenhuma mensagem será enviada até que o super administrador reconecte o sistema.
+        </p>
       )}
     </div>
   );

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Building2, Users, Layers, Activity, Plus, Edit2, 
     ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock, Link as LinkIcon,
-    MessageSquare, BarChart3, Clock, Crown, ShieldAlert
+    MessageSquare, BarChart3, Clock, Crown, ShieldAlert, Wifi
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabase/client';
@@ -11,9 +11,10 @@ import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus
 import { checkMinistryLimit } from '../services/supabase/admin';
 import { useToast } from './Toast';
 import { getSystemLogo } from '../utils/branding';
+import { GlobalWhatsAppConnect } from './GlobalWhatsAppConnect';
 
 export const SuperAdminDashboard: React.FC = () => {
-    const [activeMainTab, setActiveMainTab] = useState<'orgs' | 'telemetry'>('orgs');
+    const [activeMainTab, setActiveMainTab] = useState<'orgs' | 'telemetry' | 'whatsapp'>('orgs');
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -250,9 +251,17 @@ export const SuperAdminDashboard: React.FC = () => {
                 >
                     <MessageSquare size={16} /> Telemetria WhatsApp
                 </button>
+                <button
+                    onClick={() => setActiveMainTab('whatsapp')}
+                    className={`py-2.5 px-6 rounded-xl text-xs md:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'whatsapp' ? 'bg-white dark:bg-zinc-700 text-emerald-500 shadow-md border-b-2 border-b-emerald-500' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                >
+                    <Wifi size={16} /> WhatsApp Global
+                </button>
             </div>
 
-            {activeMainTab === 'orgs' ? (
+            {activeMainTab === 'whatsapp' ? (
+                <GlobalWhatsAppConnect />
+            ) : activeMainTab === 'orgs' ? (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
