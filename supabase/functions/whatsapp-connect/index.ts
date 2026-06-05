@@ -19,12 +19,15 @@ serve(async (req: Request) => {
       throw new Error("Variáveis de ambiente do Supabase não configuradas.");
     }
 
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
+    let evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionApiUrl || !evolutionApiKey) {
       throw new Error("Credenciais da Evolution API não configuradas.");
     }
+    
+    // Remove barra final para evitar URLs com barra dupla como //instance/create
+    evolutionApiUrl = evolutionApiUrl.replace(/\/+$/, "");
 
     // ── Validação de autorização — apenas super_admin pode conectar instância global ──
     const authHeader = req.headers.get("Authorization");

@@ -19,12 +19,15 @@ serve(async (req: Request) => {
       throw new Error("Variáveis do Supabase não configuradas.");
     }
 
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
+    let evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionApiUrl || !evolutionApiKey) {
       throw new Error("Credenciais da Evolution API não configuradas.");
     }
+    
+    // Remove barra final para evitar URLs com barra dupla
+    evolutionApiUrl = evolutionApiUrl.replace(/\/+$/, "");
 
     const { instance_name, ministry_id } = await req.json();
 
