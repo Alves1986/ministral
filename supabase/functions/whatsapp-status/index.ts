@@ -35,23 +35,29 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const isGlobal = instance_name === "ministral-global";
+    let targetOrgId: string | undefined;
+    let currentInstanceName = instance_name;
+
     // ── SEGURANÇA: Validar se a instância pertence à organização e verificar JWT (SEC-02) ──
-    let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id");
-    
-    if (instance_name) {
-      query = query.eq("instance_name", instance_name);
-    } else {
-      query = query.eq("ministry_id", ministry_id);
+    if (!isGlobal) {
+      let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id");
+      
+      if (instance_name) {
+        query = query.eq("instance_name", instance_name);
+      } else {
+        query = query.eq("ministry_id", ministry_id);
+      }
+
+      const { data: mwa, error: mwaErr } = await query.maybeSingle();
+
+      if (mwaErr || !mwa) {
+        throw new Error("Instância WhatsApp não vinculada a nenhum ministério cadastrado.");
+      }
+
+      currentInstanceName = instance_name || mwa.instance_name;
+      targetOrgId = mwa.organization_id;
     }
-
-    const { data: mwa, error: mwaErr } = await query.maybeSingle();
-
-    if (mwaErr || !mwa) {
-      throw new Error("Instância WhatsApp não vinculada a nenhum ministério cadastrado.");
-    }
-
-    const currentInstanceName = instance_name || mwa.instance_name;
-    const targetOrgId = mwa.organization_id;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -64,25 +70,27 @@ serve(async (req: Request) => {
       throw new Error("Usuário não autenticado: " + (userErr?.message || "Não encontrado"));
     }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("is_admin, is_super_admin, organization_id")
-      .eq("id", user.id)
-      .maybeSingle();
+    if (!isGlobal) {
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("is_admin, is_super_admin, organization_id")
+        .eq("id", user.id)
+        .maybeSingle();
 
-    if (profileErr || !profile) {
-      throw new Error("Perfil do usuário não encontrado.");
-    }
+      if (profileErr || !profile) {
+        throw new Error("Perfil do usuário não encontrado.");
+      }
 
-    const isAuthorized =
-      profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === targetOrgId);
+      const isAuthorized =
+        profile.is_super_admin ||
+        (profile.is_admin && profile.organization_id === targetOrgId);
 
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: "Acesso negado. Administrador requerido para consultar status." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (!isAuthorized) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Administrador requerido para consultar status." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ── Executa a consulta de status física na Evolution API ──
@@ -110,11 +118,13 @@ serve(async (req: Request) => {
     if (state === "open") {
       const phone = result.instance?.owner || result.owner || "";
 
-      await supabase.from("ministry_whatsapp").update({
-        connected:    true,
-        phone_number: phone,
-        updated_at:   new Date().toISOString(),
-      }).eq("instance_name", currentInstanceName);
+      if (!isGlobal) {
+        await supabase.from("ministry_whatsapp").update({
+          connected:    true,
+          phone_number: phone,
+          updated_at:   new Date().toISOString(),
+        }).eq("instance_name", currentInstanceName);
+      }
 
       return new Response(
         JSON.stringify({ state: "open", phone }),
