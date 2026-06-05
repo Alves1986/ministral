@@ -289,46 +289,72 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
 
         <div className={`flex-1 overflow-y-auto py-2 custom-scrollbar space-y-8 ${isEffectivelyCollapsed ? 'px-2' : 'px-4'}`}>
-          <div>
-            <p className={`px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
-                {isEffectivelyCollapsed ? '...' : 'Essenciais'}
-            </p>
-            <div className="space-y-1">
-                {mainNavItems.map(item => renderNavButton(item))}
-            </div>
-          </div>
-
-          {managementNavItems.length > 0 && (
+          
+          {/* Super Admin puro: mostra APENAS a seção Global */}
+          {currentUser?.isSuperAdmin && !currentUser?.organizationId ? (
             <div>
+              <p className={`px-3 text-[10px] font-black text-violet-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
+                  {isEffectivelyCollapsed ? '...' : 'Global'}
+              </p>
+              <button
+                onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
+                className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
+                  currentTab === 'super-admin'
+                    ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
+                } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
+                title={isEffectivelyCollapsed ? "Super Admin" : undefined}
+              >
+                <Shield size={18} className="flex-shrink-0" />
+                {!isEffectivelyCollapsed && <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">Super Admin</span>}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div>
                 <p className={`px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
-                    {isEffectivelyCollapsed ? '...' : 'Administração'}
+                    {isEffectivelyCollapsed ? '...' : 'Essenciais'}
                 </p>
                 <div className="space-y-1">
-                    {managementNavItems.map(item => renderNavButton(item))}
+                    {mainNavItems.map(item => renderNavButton(item))}
                 </div>
-            </div>
-          )}
-
-          {currentUser?.isSuperAdmin && (
-              <div>
-                  <p className={`px-3 text-[10px] font-black text-violet-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
-                      {isEffectivelyCollapsed ? '...' : 'Global'}
-                  </p>
-                  <button
-                    onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
-                    className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
-                      currentTab === 'super-admin'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
-                    } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
-                    title={isEffectivelyCollapsed ? "Super Admin" : undefined}
-                  >
-                    <Shield size={18} className="flex-shrink-0" />
-                    {!isEffectivelyCollapsed && <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">Super Admin</span>}
-                  </button>
               </div>
+
+              {managementNavItems.length > 0 && (
+                <div>
+                    <p className={`px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
+                        {isEffectivelyCollapsed ? '...' : 'Administração'}
+                    </p>
+                    <div className="space-y-1">
+                        {managementNavItems.map(item => renderNavButton(item))}
+                    </div>
+                </div>
+              )}
+
+              {/* Super Admin com org: botão adicional */}
+              {currentUser?.isSuperAdmin && currentUser?.organizationId && (
+                  <div>
+                      <p className={`px-3 text-[10px] font-black text-violet-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
+                          {isEffectivelyCollapsed ? '...' : 'Global'}
+                      </p>
+                      <button
+                        onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
+                        className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
+                          currentTab === 'super-admin'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
+                        } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
+                        title={isEffectivelyCollapsed ? "Super Admin" : undefined}
+                      >
+                        <Shield size={18} className="flex-shrink-0" />
+                        {!isEffectivelyCollapsed && <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">Super Admin</span>}
+                      </button>
+                  </div>
+              )}
+            </>
           )}
         </div>
+
 
         <div className={`border-t border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md ${isEffectivelyCollapsed ? 'm-2 p-2 rounded-2xl' : 'm-4 p-4 rounded-[2rem]'}`}>
             <button 

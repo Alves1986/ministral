@@ -206,8 +206,15 @@ const InnerApp = () => {
       if (status === 'ready' && sessionUser) {
           // 1. Sincroniza usuário
           setCurrentUser(sessionUser);
+
+          // 2. Super Admin puro (sem org): redireciona SEMPRE para a aba super-admin
+          if (sessionUser.isSuperAdmin && !sessionUser.organizationId) {
+              setCurrentTab('super-admin');
+              setAppReady(true);
+              return;
+          }
           
-          // 2. Sincronia de ID (apenas no carregamento inicial ou se o store estiver vazio)
+          // 3. Sincronia de ID (apenas no carregamento inicial ou se o store estiver vazio)
           if (!hasInitialSync.current || !storeMinistryId) {
               if (sessionUser.ministryId && sessionUser.ministryId !== storeMinistryId) {
                   setMinistryId(sessionUser.ministryId);
@@ -236,6 +243,7 @@ const InnerApp = () => {
           }
       }
   }, [status, sessionUser]);
+
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -800,7 +808,7 @@ const InnerApp = () => {
       
       <DashboardLayout
           onLogout={handleLogout}
-          title={ministryTitle || 'Carregando...'}
+          title={activeUser?.isSuperAdmin && !activeUser?.organizationId ? 'Ministral' : (ministryTitle || 'Carregando...')}
           currentTab={isTabValid ? currentTab : 'dashboard'}
           onTabChange={async (tab) => {
               setCurrentTab(tab);
