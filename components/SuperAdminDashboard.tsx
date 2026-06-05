@@ -378,7 +378,9 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                         )}
                     </div>
                 </>
-            ) : (
+            )}
+
+            {activeTab === 'sa-telemetry' && (
                 <div className="space-y-6 animate-slide-up">
                     {/* Telemetry Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
