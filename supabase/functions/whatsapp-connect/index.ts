@@ -128,8 +128,22 @@ serve(async (req: Request) => {
             qrResult.base64 ||
             qrResult.qr ||
             null;
+            
+          if (!qrcodeBase64) {
+             return new Response(
+               JSON.stringify({ error: `QR Code não encontrado na resposta de /connect: ${JSON.stringify(qrResult)}`, payload: qrResult }),
+               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+             );
+          }
+          
           return new Response(
             JSON.stringify({ success: true, instanceName, qrcode: qrcodeBase64, state }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          const errTxt = await qrResponse.text();
+          return new Response(
+            JSON.stringify({ error: `Falha na chamada /connect da Evolution API (Status ${qrResponse.status}): ${errTxt}`, payload: errTxt }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -153,6 +167,13 @@ serve(async (req: Request) => {
 
     const result = await createResponse.json();
 
+    if (!createResponse.ok) {
+      return new Response(
+        JSON.stringify({ error: `Falha ao criar instância na Evolution API (Status ${createResponse.status}): ${JSON.stringify(result)}`, payload: result }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Já conectado
     if (result.instance?.state === "open" || result.state === "open") {
       return new Response(
@@ -169,6 +190,13 @@ serve(async (req: Request) => {
       qrcodeBase64 = result.hash.qrcode;
     } else if (result.base64) {
       qrcodeBase64 = result.base64;
+    }
+
+    if (!qrcodeBase64) {
+      return new Response(
+        JSON.stringify({ error: `QR Code não encontrado após criar instância: ${JSON.stringify(result)}`, payload: result }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
