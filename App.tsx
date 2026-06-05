@@ -457,7 +457,7 @@ const InnerApp = () => {
     [RAW_QUICK_ACTIONS, safeEnabledTabs, integrations.quickAccessItems]
   );
 
-  const isTabValid = safeEnabledTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai'].includes(currentTab);
+  const isTabValid = safeEnabledTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai', 'sa-organizations', 'sa-whatsapp', 'sa-telemetry'].includes(currentTab);
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">

@@ -140,7 +140,10 @@ export const ALL_TABS = [
   'send-announcements',
   'members',
   'super-admin',
-  'advanced-ai'
+  'advanced-ai',
+  'sa-organizations',
+  'sa-whatsapp',
+  'sa-telemetry'
 ];
 
 export const DEFAULT_TABS = [...ALL_TABS];
