@@ -79,6 +79,7 @@ export interface MinistrySettings {
     qrCodeUrl?:      string;
     socialLinkUrl?:  string;
     quickAccessItems?: string[];
+    whatsappCustomMessage?: string; // Mensagem customizada para lembretes WhatsApp
 }
 
 export interface AppNotification {

@@ -103,7 +103,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         .maybeSingle();
 
     const { data: settings } = await sb.from('ministry_settings')
-        .select('*, spotify_client_id, spotify_client_secret, youtube_api_key, qr_code_url, social_link_url')
+        .select('*, spotify_client_id, spotify_client_secret, youtube_api_key, qr_code_url, social_link_url, whatsapp_custom_message')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -127,6 +127,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         qrCodeUrl:     settings?.qr_code_url,
         socialLinkUrl: settings?.social_link_url,
         quickAccessItems: quickAccessFromTabs.length > 0 ? quickAccessFromTabs : (settings as any)?.quick_access_items,
+        whatsappCustomMessage: settings?.whatsapp_custom_message || undefined,
     };
 
     return result;
@@ -274,7 +275,8 @@ export const saveMinistrySettings = async (
     youtubeApiKey?: string,
     qrCodeUrl?: string,
     socialLinkUrl?: string,
-    quickAccessItems?: string[]
+    quickAccessItems?: string[],
+    whatsappCustomMessage?: string | null
 ) => {
     const sb = getSupabase();
     if (!sb) return;
@@ -287,6 +289,8 @@ export const saveMinistrySettings = async (
     if (youtubeApiKey !== undefined) updates.youtube_api_key = youtubeApiKey;
     if (qrCodeUrl     !== undefined) updates.qr_code_url     = qrCodeUrl;
     if (socialLinkUrl !== undefined) updates.social_link_url = socialLinkUrl;
+    // null limpa a mensagem; string salva; undefined não altera
+    if (whatsappCustomMessage !== undefined) updates.whatsapp_custom_message = whatsappCustomMessage;
     if (Object.keys(updates).length > 0) {
         const { error } = await sb.from('ministry_settings').upsert({
             organization_id: orgId,

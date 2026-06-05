@@ -74,12 +74,98 @@ function getEmojiForRole(role: string): string {
   return "🔹";
 }
 
-const DEFAULT_ORIENTATIONS = `⚠️ *Orientações:*
-1. Cheguem com 30 minutos de antecedência para check-list dos equipamentos.
-2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
-3. Não esqueça de Confirmar a escala realizando o check-in no aplicativo.
+// ── Templates por Tipo de Ministério ─────────────────────────────────────────
+// Cada código de ministério tem: header (emoji + título), greeting e orientações.
 
-Vamos juntos servir com excelência! 🚀`;
+interface MinistryTemplate {
+  header: string;     // Emoji + label da mensagem
+  greeting: string;   // Abertura da mensagem
+  orientations: string; // Orientações contextuais
+  closing: string;    // Fechamento inspirador
+}
+
+const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
+  louvor: {
+    header: "🎵",
+    greeting: "Você está confirmado(a) na escala de louvor! Que honra servir ao Senhor com você. 🙌",
+    orientations: `⚠️ *Orientações do Louvor:*
+1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.
+2. Revise as músicas com antecedência — a excelência começa em casa.
+3. Verifique os cifras e letras no app antes do culto.
+4. Em caso de imprevisto, avise a *liderança imediatamente*.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    closing: "🎶 Vamos adorar com tudo que somos. Ele é digno!"
+  },
+
+  infantil: {
+    header: "🌈",
+    greeting: "Você está confirmado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
+    orientations: `⚠️ *Orientações do Infantil:*
+1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.
+2. Confira os materiais pedagógicos e a lição do dia com antecedência.
+3. A *segurança das crianças* é prioridade — siga todos os protocolos.
+4. Nunca deixe uma criança sozinha sem supervisão.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    closing: "🌟 \"Deixai os pequeninos virem a mim\" — Que privilégio servir a eles!"
+  },
+
+  midia: {
+    header: "💻",
+    greeting: "Você está confirmado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
+    orientations: `⚠️ *Orientações de Mídia:*
+1. Chegue *40 minutos antes* para checklist completo dos equipamentos.
+2. Verifique câmeras, cabos, streaming e projetores antes do início.
+3. Teste o link de transmissão ao vivo com antecedência.
+4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    closing: "📡 Cada click seu leva o evangelho mais longe. Valeu!"
+  },
+
+  recepcao: {
+    header: "🤝",
+    greeting: "Você está confirmado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
+    orientations: `⚠️ *Orientações da Recepção:*
+1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.
+2. Esteja com o visual adequado (uniforme/crachá se aplicável).
+3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.
+4. Fique atento a visitantes e pessoas com necessidades especiais.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    closing: "🏠 Você não recebe pessoas — você recebe famílias. Obrigado!"
+  },
+
+  default: {
+    header: "⛪",
+    greeting: "Você está confirmado(a) na escala do ministério! Obrigado pelo seu serviço.",
+    orientations: `⚠️ *Orientações:*
+1. Cheguem com *30 minutos de antecedência* para check-list dos equipamentos.
+2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
+3. Não esqueça de confirmar a escala realizando o *check-in no aplicativo*.`,
+    closing: "🚀 Vamos juntos servir com excelência!"
+  }
+};
+
+// Detecta o template correto pelo code ou label do ministério
+function getMinistryTemplate(code: string, label: string): MinistryTemplate {
+  const c = (code || "").toLowerCase();
+  const l = (label || "").toLowerCase();
+
+  if (c.includes("louvor") || l.includes("louvor") || c.includes("musica") || l.includes("música") || l.includes("musica") || c.includes("worship")) {
+    return MINISTRY_TEMPLATES.louvor;
+  }
+  if (c.includes("infantil") || l.includes("infantil") || l.includes("criança") || l.includes("kids") || c.includes("kids")) {
+    return MINISTRY_TEMPLATES.infantil;
+  }
+  if (c.includes("midia") || l.includes("mídia") || l.includes("midia") || l.includes("media") || c.includes("media") || l.includes("tecnologia") || l.includes("transmiss")) {
+    return MINISTRY_TEMPLATES.midia;
+  }
+  if (c.includes("recep") || l.includes("recep") || l.includes("hospit") || l.includes("portaria") || l.includes("boas-vindas")) {
+    return MINISTRY_TEMPLATES.recepcao;
+  }
+
+  return MINISTRY_TEMPLATES.default;
+}
+
+
 
 // ── Função de processamento por notificação ───────────────────────────────────
 
@@ -130,13 +216,13 @@ async function processNotification(
     return { notif_id: notif.id, skipped: true, reason: "plan_or_flag" };
   }
 
-  // ── Busca assignments do evento ──────────────────────────────────────────
+  // ── Busca assignments do evento + code do ministério ────────────────────
   let query = supabase
     .from("schedule_assignments")
     .select(`
       id, member_id, role, event_date, event_rule_id, ministry_id,
       profiles:member_id ( whatsapp, name ),
-      organization_ministries!ministry_id ( label ),
+      organization_ministries!ministry_id ( label, code ),
       event_rules!event_rule_id ( title, time )
     `)
     .eq("organization_id", orgId)
@@ -168,6 +254,22 @@ async function processNotification(
     eventsMap.get(key)!.push(a);
   }
 
+  // ── Cache de mensagens customizadas por ministry_id ─────────────────────
+  // (busca uma vez por ministério para evitar queries repetidas no loop de membros)
+  const customMsgCache = new Map<string, string | null>();
+  async function getCustomMsg(ministryId: string): Promise<string | null> {
+    if (customMsgCache.has(ministryId)) return customMsgCache.get(ministryId) ?? null;
+    const { data } = await supabase
+      .from("ministry_settings")
+      .select("whatsapp_custom_message")
+      .eq("ministry_id", ministryId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    const msg = data?.whatsapp_custom_message || null;
+    customMsgCache.set(ministryId, msg);
+    return msg;
+  }
+
   // ── Processa cada grupo ──────────────────────────────────────────────────
   for (const evAssignments of eventsMap.values()) {
     const first = evAssignments[0];
@@ -176,8 +278,17 @@ async function processNotification(
     const eventTitle    = first.event_rules?.title || notif.event_title || "Culto";
     const eventTimeStr  = first.event_rules?.time?.substring(0, 5) ?? "00:00";
     const ministryLabel = first.organization_ministries?.label || "Ministério";
+    const ministryCode  = first.organization_ministries?.code || "";
     const [tY, tM, tD]  = targetDate.split("-");
     const dateStr = `${tD}/${tM}/${tY}`;
+
+    // ── Seleciona template correto ────────────────────────────────────────
+    const template = getMinistryTemplate(ministryCode, ministryLabel);
+
+    // Mensagem customizada pelo admin sobrescreve as orientações do template
+    const customMsg = await getCustomMsg(first.ministry_id);
+    const orientationsBlock = customMsg || template.orientations;
+    const closingBlock      = customMsg ? "" : `\n${template.closing}`;
 
     // Monta lista de membros por função
     const roleMembers = new Map<string, string[]>();
@@ -193,9 +304,11 @@ async function processNotification(
     }
 
     const msg =
-      `*Escala para o ${eventTitle}*\n\n` +
+      `${template.header} *Escala — ${eventTitle}*\n\n` +
+      `${template.greeting}\n\n` +
       `🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n` +
-      `*Equipe Escalada:*\n\n${teamList}\n${DEFAULT_ORIENTATIONS}`;
+      `*Equipe Escalada:*\n${teamList}\n` +
+      `${orientationsBlock}${closingBlock}`;
 
     const sentToPhones    = new Set<string>();
     const processedMembers = new Set<string>();

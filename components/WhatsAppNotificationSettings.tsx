@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Loader2, MessageCircle, Calendar, Clock, Trash2, Check, Send, CalendarClock, AlertTriangle, RefreshCw, CalendarDays } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Loader2, MessageCircle, Calendar, Clock, Trash2, Check, Send, CalendarClock, AlertTriangle, RefreshCw, CalendarDays, Sparkles, Edit3, RotateCcw, Save } from 'lucide-react';
 import { scheduleWhatsAppNotification, cancelWhatsAppNotification, fetchScheduledNotifications } from '../services/supabase/misc';
 import { fetchRulesV2, generateOccurrencesV2, EventRuleV2, OccurrenceV2 } from '../services/scheduleServiceV2';
+import { fetchMinistrySettings, saveMinistrySettings } from '../services/supabase/ministries';
 import { MinistryDef } from '../types';
 
 interface Props {
@@ -23,6 +24,25 @@ interface ScheduledNotif {
 
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+// Templates inteligentes (espelho do backend para preview no UI)
+const MINISTRY_TEMPLATE_PREVIEWS: Record<string, { icon: string; label: string; orientations: string; closing: string }> = {
+  louvor:   { icon: '🎵', label: 'Louvor', orientations: '1. Chegue 30 min antes para soundcheck.\n2. Revise as músicas antes do culto.\n3. Avise a liderança em caso de imprevisto.\n4. Faça check-in no aplicativo.', closing: '🎶 Vamos adorar com tudo que somos. Ele é digno!' },
+  infantil: { icon: '🌈', label: 'Infantil', orientations: '1. Chegue 20 min antes para preparar o ambiente.\n2. Confira a lição do dia com antecedência.\n3. Siga todos os protocolos de segurança das crianças.\n4. Faça check-in no aplicativo.', closing: '🌟 "Deixai os pequeninos virem a mim" — Que privilégio!' },
+  midia:    { icon: '💻', label: 'Mídia', orientations: '1. Chegue 40 min antes para checklist de equipamentos.\n2. Teste câmeras, cabos e transmissão ao vivo.\n3. Tenha um plano B para falhas técnicas.\n4. Faça check-in no aplicativo.', closing: '📡 Cada clique seu leva o evangelho mais longe!' },
+  recepcao: { icon: '🤝', label: 'Recepção', orientations: '1. Chegue 30 min antes — pontualidade é hospitalidade.\n2. Vista-se adequadamente (uniforme/crachá).\n3. Acolha cada pessoa como se fosse a primeira vez.\n4. Faça check-in no aplicativo.', closing: '🏠 Você não recebe pessoas — você recebe famílias!' },
+  default:  { icon: '⛪', label: 'Geral', orientations: '1. Chegue 30 min antes para check-list dos equipamentos.\n2. Avise a liderança em caso de imprevisto.\n3. Faça check-in no aplicativo.', closing: '🚀 Vamos juntos servir com excelência!' },
+};
+
+function detectMinistryTemplate(code: string, label: string) {
+  const c = (code || '').toLowerCase();
+  const l = (label || '').toLowerCase();
+  if (c.includes('louvor') || l.includes('louvor') || l.includes('música') || l.includes('musica')) return MINISTRY_TEMPLATE_PREVIEWS.louvor;
+  if (c.includes('infantil') || l.includes('infantil') || l.includes('criança') || l.includes('kids')) return MINISTRY_TEMPLATE_PREVIEWS.infantil;
+  if (c.includes('midia') || l.includes('mídia') || l.includes('midia') || l.includes('media') || l.includes('transmiss')) return MINISTRY_TEMPLATE_PREVIEWS.midia;
+  if (c.includes('recep') || l.includes('recep') || l.includes('hospit') || l.includes('portaria')) return MINISTRY_TEMPLATE_PREVIEWS.recepcao;
+  return MINISTRY_TEMPLATE_PREVIEWS.default;
+}
+
 export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryId, ministries, currentUserId, onShowToast }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -30,12 +50,20 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
   const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledNotif[]>([]);
 
+  // Mensagem customizada
+  const [customMessage, setCustomMessage] = useState('');
+  const [savedCustomMessage, setSavedCustomMessage] = useState<string | undefined>(undefined);
+  const [savingMsg, setSavingMsg] = useState(false);
+  const [editingMsg, setEditingMsg] = useState(false);
+
   // Weekly rule inputs: { ruleId: { daysBefore, time } }
   const [weeklyInputs, setWeeklyInputs] = useState<Record<string, { daysBefore: number; time: string }>>({});
   // Single event inputs: { ruleId_date: datetimeLocal }
   const [singleInputs, setSingleInputs] = useState<Record<string, string>>({});
 
   const activeMinistryId = ministryId || ministries[0]?.id;
+  const activeMinistry = useMemo(() => ministries.find(m => m.id === activeMinistryId), [ministries, activeMinistryId]);
+  const template = useMemo(() => detectMinistryTemplate(activeMinistry?.code || '', activeMinistry?.label || ''), [activeMinistry]);
 
   useEffect(() => {
     if (!activeMinistryId || !orgId) return;
@@ -114,10 +142,39 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
 
       setWeeklyInputs(wInputs);
       setSingleInputs(sInputs);
+
+      // Carrega mensagem customizada salva
+      const settings = await fetchMinistrySettings(activeMinistryId, orgId);
+      const savedMsg = settings?.whatsappCustomMessage || '';
+      setSavedCustomMessage(savedMsg || undefined);
+      setCustomMessage(savedMsg);
+      setEditingMsg(false);
     } catch (e) {
       console.error("Error loading WhatsApp schedule data:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveCustomMessage = async () => {
+    if (!activeMinistryId) return;
+    setSavingMsg(true);
+    try {
+      await saveMinistrySettings(
+        activeMinistryId, orgId,
+        undefined, undefined, undefined, undefined, // displayName, roles, start, end
+        undefined, undefined, undefined, undefined, undefined, // spotify, youtube, qr, social
+        undefined, // quickAccessItems
+        customMessage.trim() || null // null limpa a mensagem customizada
+      );
+      setSavedCustomMessage(customMessage.trim() || undefined);
+      setEditingMsg(false);
+      onShowToast?.('Mensagem salva com sucesso!', 'success');
+    } catch (e) {
+      console.error(e);
+      onShowToast?.('Erro ao salvar mensagem.', 'error');
+    } finally {
+      setSavingMsg(false);
     }
   };
 
@@ -248,6 +305,100 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
       </div>
 
       <div className="p-5 space-y-6">
+
+        {/* ── MENSAGEM PERSONALIZADA ── */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+          {/* Header da seção */}
+          <div className="p-4 bg-gradient-to-r from-[#0f1f3d]/5 to-[#c9a84c]/10 dark:from-[#0f1f3d]/40 dark:to-[#c9a84c]/10 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/20 flex items-center justify-center text-lg">
+                {template.icon}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                  Mensagem do Lembrete
+                  {savedCustomMessage
+                    ? <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 tracking-wider">Personalizada</span>
+                    : <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#c9a84c]/20 text-[#c9a84c] tracking-wider flex items-center gap-1"><Sparkles size={8}/> Inteligente</span>
+                  }
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Template detectado: {template.label}</p>
+              </div>
+            </div>
+            {!editingMsg ? (
+              <button
+                onClick={() => setEditingMsg(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-lg hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors"
+              >
+                <Edit3 size={12} /> Personalizar
+              </button>
+            ) : (
+              <button
+                onClick={() => { setEditingMsg(false); setCustomMessage(savedCustomMessage || ''); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-700 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors"
+              >
+                <RotateCcw size={12} /> Cancelar
+              </button>
+            )}
+          </div>
+
+          {/* Preview do template padrão */}
+          {!editingMsg && !savedCustomMessage && (
+            <div className="p-4 bg-zinc-50/50 dark:bg-zinc-900/30">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Sparkles size={10}/> Preview do template automático</p>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-3 border border-zinc-100 dark:border-zinc-700 font-mono text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                <span className="not-italic font-sans text-zinc-400 text-[10px] block mb-1">⚠️ Orientações:</span>
+                {template.orientations}
+                {'\n'}<span className="text-[#c9a84c] font-sans font-bold">{template.closing}</span>
+              </div>
+              <p className="text-[10px] text-zinc-400 mt-2 italic">Esta mensagem é enviada automaticamente para este tipo de ministério. Clique em "Personalizar" para sobrescrever.</p>
+            </div>
+          )}
+
+          {/* Mensagem customizada salva (preview) */}
+          {!editingMsg && savedCustomMessage && (
+            <div className="p-4">
+              <div className="bg-purple-50 dark:bg-purple-900/10 rounded-xl p-3 border border-purple-100 dark:border-purple-900/30 text-xs text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed font-mono">
+                {savedCustomMessage}
+              </div>
+              <button
+                onClick={() => { setCustomMessage(''); setSavedCustomMessage(undefined); handleSaveCustomMessage(); }}
+                className="mt-2 text-[10px] text-zinc-400 hover:text-red-500 flex items-center gap-1 transition-colors"
+              >
+                <RotateCcw size={10}/> Voltar ao template automático
+              </button>
+            </div>
+          )}
+
+          {/* Editor de mensagem customizada */}
+          {editingMsg && (
+            <div className="p-4 space-y-3">
+              <div>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Suas orientações personalizadas</p>
+                <p className="text-[10px] text-zinc-400 mb-2">Esta mensagem substituirá as orientações padrão. A saudação e a equipe escalada são sempre incluídas automaticamente.</p>
+                <textarea
+                  value={customMessage}
+                  onChange={e => setCustomMessage(e.target.value)}
+                  rows={6}
+                  placeholder={`Ex:\n⚠️ Orientações do ${activeMinistry?.label || 'Ministério'}:\n1. Chegue com antecedência.\n2. Lembre-se de trazer seu material.\n3. Faça check-in no aplicativo.`}
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-[#c9a84c] font-mono resize-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-all"
+                />
+                <p className="text-[10px] text-zinc-400 mt-1">Deixe em branco para usar o template inteligente automático.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveCustomMessage}
+                  disabled={savingMsg}
+                  className="flex-1 bg-[#0f1f3d] hover:bg-[#1a2d52] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm"
+                >
+                  {savingMsg ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Salvar Mensagem
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {weeklyRules.length === 0 && singleOccurrences.length === 0 && (
           <div className="text-center py-8 text-zinc-400">
             <CalendarClock size={32} className="mx-auto mb-3 opacity-30" />
