@@ -104,22 +104,28 @@ serve(async (req: Request) => {
     }
 
     // ── Executa a deleção física na Evolution API após aprovação de segurança ──
-    const endpoint = `${evolutionApiUrl}/instance/logout/${instance_name}`; // Usamos logout para garantir que a sessão será revogada
-    const deleteResponse = await fetch(endpoint, {
-      method: "DELETE",
-      headers: {
-        "apikey": evolutionApiKey,
-      },
-    });
-
-    if (!deleteResponse.ok && deleteResponse.status !== 404) {
-      const body = await deleteResponse.text().catch(() => "");
-      throw new Error(`Evolution API retornou erro ao fazer logout (${deleteResponse.status}): ${body}`);
+    const endpoint = `${evolutionApiUrl}/instance/logout/${instance_name}`; // Usamos logout para tentar revogar a sessão do WhatsApp Web
+    try {
+      const logoutResponse = await fetch(endpoint, {
+        method: "DELETE",
+        headers: { "apikey": evolutionApiKey },
+      });
+      if (!logoutResponse.ok && logoutResponse.status !== 404) {
+        const body = await logoutResponse.text().catch(() => "");
+        console.warn(`[whatsapp-disconnect] Falha silenciosa no logout (${logoutResponse.status}): ${body}. Continuando para exclusão da instância.`);
+      }
+    } catch (e) {
+      console.warn(`[whatsapp-disconnect] Exceção no logout ignorada:`, e);
     }
     
-    // Também deletamos a instância para garantir que ela volte a pedir QR
+    // Deletamos a instância para garantir que ela limpe dados zumbis
     const deleteEndpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
-    await fetch(deleteEndpoint, { method: "DELETE", headers: { "apikey": evolutionApiKey } });
+    const delRes = await fetch(deleteEndpoint, { method: "DELETE", headers: { "apikey": evolutionApiKey } });
+    if (!delRes.ok && delRes.status !== 404) {
+        const body = await delRes.text().catch(() => "");
+        // Se delete também falhar, aí sim lançamos erro
+        throw new Error(`Evolution API retornou erro ao deletar instância (${delRes.status}): ${body}`);
+    }
 
     // Atualiza estado no banco apenas se for de um ministério específico
     if (ministry_id !== "global") {
