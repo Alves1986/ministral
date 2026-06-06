@@ -54,6 +54,60 @@ async function sendWhatsAppMessage(
   }
   return { success: false, error: lastError };
 }
+// ── Verifica e reconecta instância se necessário ───────────────────────────
+
+async function checkInstanceStatus(
+  apiUrl: string, apiKey: string, instanceName: string
+): Promise<'open' | 'close' | 'connecting' | 'unknown'> {
+  try {
+    const resp = await fetchWithTimeout(
+      `${apiUrl}/instance/connectionState/${instanceName}`,
+      { headers: { apikey: apiKey }, timeout: 6000 }
+    );
+    if (!resp.ok) return 'unknown';
+    const data = await resp.json().catch(() => ({}));
+    // Evolution API v2: { instance: { state: 'open' | 'close' | 'connecting' } }
+    const state = data?.instance?.state || data?.state || 'unknown';
+    return state as 'open' | 'close' | 'connecting' | 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function ensureInstanceConnected(
+  apiUrl: string, apiKey: string, instanceName: string
+): Promise<boolean> {
+  const status = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+  console.log(`[whatsapp-reminders] Instância "${instanceName}" status: ${status}`);
+
+  if (status === 'open') return true;
+
+  if (status === 'close' || status === 'unknown') {
+    console.warn(`[whatsapp-reminders] Instância desconectada. Tentando reconectar "${instanceName}"...`);
+    try {
+      // Tenta reconectar via Evolution API (reusa as credenciais salvas)
+      const reconnResp = await fetchWithTimeout(
+        `${apiUrl}/instance/connect/${instanceName}`,
+        { headers: { apikey: apiKey }, timeout: 10000 }
+      );
+      const reconnData = await reconnResp.json().catch(() => ({}));
+      console.log(`[whatsapp-reminders] Resposta reconexão:`, JSON.stringify(reconnData).slice(0, 200));
+    } catch (e) {
+      console.error(`[whatsapp-reminders] Erro ao reconectar:`, e);
+    }
+    // Aguarda 8s para o socket restabelecer
+    await sleep(8000);
+    const newStatus = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+    console.log(`[whatsapp-reminders] Status pós-reconexão: ${newStatus}`);
+    return newStatus === 'open';
+  }
+
+  // 'connecting' — aguarda e verifica de novo
+  await sleep(5000);
+  const finalStatus = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+  return finalStatus === 'open';
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -340,7 +394,7 @@ async function processNotification(
 
       const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
         evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, msg,
-        { timeout: 5000, retries: 2 }
+        { timeout: 12000, retries: 1 }
       );
 
       if (msgOk) {
@@ -420,6 +474,23 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, message: "Nenhum agendamento pendente." }), {
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // ── 4.5. Verifica/reconecta TODAS as instâncias únicas antes de enviar ──
+    // Coleta as instâncias únicas que serão usadas neste ciclo
+    const notifMinistryIds = [...new Set(pendingNotifs.map((n: any) => n.ministry_id).filter(Boolean))];
+    const usedInstances = new Set<string>();
+    usedInstances.add(instanceName); // instância global sempre verificada
+    notifMinistryIds.forEach((mid: string) => {
+      const instForMin = ministryMap.get(mid);
+      if (instForMin) usedInstances.add(instForMin);
+    });
+
+    for (const inst of usedInstances) {
+      const isReady = await ensureInstanceConnected(evolutionApiUrl, evolutionApiKey, inst);
+      if (!isReady) {
+        console.error(`[whatsapp-reminders] ⚠️ Instância "${inst}" não está pronta. Mensagens desta instância serão puladas.`);
+      }
     }
 
     console.log(`[whatsapp-reminders] Processando ${pendingNotifs.length} agendamento(s) em paralelo (batch=3)...`);
