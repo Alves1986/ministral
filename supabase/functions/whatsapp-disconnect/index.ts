@@ -37,30 +37,6 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── SEGURANÇA: Verificar se o ministério pertence à organização e validar o JWT (SEC-02) ──
-    // Tenta organization_ministries primeiro (padrão atual)
-    let { data: ministry, error: minErr } = await supabase
-      .from("organization_ministries")
-      .select("organization_id")
-      .eq("id", ministry_id)
-      .maybeSingle();
-
-    // Fallback para tabela ministries se necessário
-    if (!ministry) {
-      const { data: fallbackMin } = await supabase
-        .from("ministries")
-        .select("organization_id")
-        .eq("id", ministry_id)
-        .maybeSingle();
-      ministry = fallbackMin;
-    }
-
-    if (!ministry) {
-      throw new Error("Ministério não encontrado.");
-    }
-
-    const targetOrgId = ministry.organization_id;
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       throw new Error("Authorization header ausente.");
@@ -82,19 +58,53 @@ serve(async (req: Request) => {
       throw new Error("Perfil do usuário não encontrado.");
     }
 
-    const isAuthorized =
-      profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === targetOrgId);
+    // Validação de segurança específica baseada no escopo
+    if (ministry_id === "global") {
+      if (!profile.is_super_admin) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Apenas super administradores podem desconectar a instância global." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // ── SEGURANÇA: Verificar se o ministério pertence à organização e validar o JWT (SEC-02) ──
+      // Tenta organization_ministries primeiro (padrão atual)
+      let { data: ministry, error: minErr } = await supabase
+        .from("organization_ministries")
+        .select("organization_id")
+        .eq("id", ministry_id)
+        .maybeSingle();
 
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: "Acesso negado. Apenas administradores podem desconectar WhatsApp." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Fallback para tabela ministries se necessário
+      if (!ministry) {
+        const { data: fallbackMin } = await supabase
+          .from("ministries")
+          .select("organization_id")
+          .eq("id", ministry_id)
+          .maybeSingle();
+        ministry = fallbackMin;
+      }
+
+      if (!ministry) {
+        throw new Error(`Ministério não encontrado: ${ministry_id}`);
+      }
+
+      const targetOrgId = ministry.organization_id;
+
+      const isAuthorized =
+        profile.is_super_admin ||
+        (profile.is_admin && profile.organization_id === targetOrgId);
+
+      if (!isAuthorized) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Apenas administradores podem desconectar WhatsApp." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ── Executa a deleção física na Evolution API após aprovação de segurança ──
-    const endpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
+    const endpoint = `${evolutionApiUrl}/instance/logout/${instance_name}`; // Usamos logout para garantir que a sessão será revogada
     const deleteResponse = await fetch(endpoint, {
       method: "DELETE",
       headers: {
@@ -102,18 +112,23 @@ serve(async (req: Request) => {
       },
     });
 
-    // Considera 404 como aceitável (instância já não existe na Evolution API)
     if (!deleteResponse.ok && deleteResponse.status !== 404) {
       const body = await deleteResponse.text().catch(() => "");
-      throw new Error(`Evolution API retornou erro ao deletar (${deleteResponse.status}): ${body}`);
+      throw new Error(`Evolution API retornou erro ao fazer logout (${deleteResponse.status}): ${body}`);
     }
+    
+    // Também deletamos a instância para garantir que ela volte a pedir QR
+    const deleteEndpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
+    await fetch(deleteEndpoint, { method: "DELETE", headers: { "apikey": evolutionApiKey } });
 
-    // Atualiza estado no banco
-    await supabase.from("ministry_whatsapp").update({
-      connected:    false,
-      phone_number: null,
-      updated_at:   new Date().toISOString(),
-    }).eq("ministry_id", ministry_id);
+    // Atualiza estado no banco apenas se for de um ministério específico
+    if (ministry_id !== "global") {
+      await supabase.from("ministry_whatsapp").update({
+        connected:    false,
+        phone_number: null,
+        updated_at:   new Date().toISOString(),
+      }).eq("ministry_id", ministry_id);
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
