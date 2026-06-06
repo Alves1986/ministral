@@ -120,7 +120,7 @@ export const GlobalWhatsAppConnect: React.FC = () => {
     setQrCode(null);
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-connect', {
-        body: { instance_name: 'ministral-global' },
+        body: { instance_name: 'ministral-global-v2' },
       });
 
       if (error) throw new Error(error.message || 'Erro ao chamar Edge Function');
@@ -130,7 +130,7 @@ export const GlobalWhatsAppConnect: React.FC = () => {
         fetchInstances();
       } else if (data?.qrcode) {
         setQrCode(data.qrcode);
-        setInstanceName(data.instanceName || 'ministral-global');
+        setInstanceName(data.instanceName || 'ministral-global-v2');
         setStatus('qr');
       } else if (data?.error) {
         throw new Error(data.error);

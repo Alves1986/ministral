@@ -188,7 +188,7 @@ serve(async (req: Request) => {
     }
 
     // ── 2. Instância WhatsApp: usa sempre a global como fallback ───────────────────
-    const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global";
+    const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global-v2";
     const { data: ministryWa } = await supabase
       .from("ministry_whatsapp")
       .select("instance_name")

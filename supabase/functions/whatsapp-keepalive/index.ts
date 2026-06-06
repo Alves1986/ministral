@@ -96,7 +96,7 @@ serve(async (req: Request) => {
 
   const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
   const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
-  const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global";
+  const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global-v2";
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 

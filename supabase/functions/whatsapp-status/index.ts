@@ -35,7 +35,7 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const isGlobal = instance_name === "ministral-global";
+    const isGlobal = instance_name === "ministral-global-v2";
     let targetOrgId: string | undefined;
     let currentInstanceName = instance_name;
 

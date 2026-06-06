@@ -116,7 +116,7 @@ serve(async (req: Request) => {
     }
 
     // Nome da instância global do sistema
-    const instanceName = instance_name || "ministral-global";
+    const instanceName = instance_name || "ministral-global-v2";
 
     // ── Verifica se a instância já existe na Evolution API ──
     const fetchEndpoint = `${evolutionApiUrl}/instance/fetchInstances`;
