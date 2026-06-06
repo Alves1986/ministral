@@ -52,12 +52,16 @@ export async function sendWhatsAppMessage(
         
         // Se a instância pareceu 'open' na verificação mas o socket caiu na hora de enviar
         if (response.status === 428 || body.includes('Connection Closed') || body.includes('Not Connected')) {
-          console.warn(`[whatsapp-swap-notify] Conexão fechada detectada no envio (${instanceName}). Forçando reconexão (tentativa ${attempt + 1})...`);
+          console.warn(`[whatsapp-swap-notify] Conexão fechada detectada no envio (${instanceName}). Forçando RESTART (tentativa ${attempt + 1})...`);
           try {
-            await fetchWithTimeout(`${apiUrl}/instance/connect/${instanceName}`, { headers: { apikey: apiKey }, timeout: 10000 });
-            await sleep(8000); // Aguarda o socket do Baileys subir
+            await fetchWithTimeout(`${apiUrl}/instance/restart/${instanceName}`, { 
+                method: "PUT",
+                headers: { apikey: apiKey }, 
+                timeout: 15000 
+            });
+            await sleep(10000); // Aguarda o socket do Baileys subir
           } catch (e) {
-            console.error(`[whatsapp-swap-notify] Falha ao tentar forçar reconexão:`, e);
+            console.error(`[whatsapp-swap-notify] Falha ao tentar forçar restart:`, e);
           }
         }
         
