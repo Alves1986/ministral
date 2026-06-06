@@ -37,8 +37,9 @@ export const useAppStore = create<AppState>((set) => ({
           return { currentUser: null, organizationId: null, isAppReady: false };
       }
 
-      // FIX: ERRO 2 - Store Global não aceita usuário sem organizationId válido
-      if (!user.organizationId) {
+      // Super Admin global não tem organizationId — é um caso especial válido.
+      // Apenas usuários normais (sem isSuperAdmin) precisam ter organizationId.
+      if (!user.isSuperAdmin && !user.organizationId) {
           console.error("[STORE] Attempted to set user without organizationId. Action blocked.");
           return state; // Retorna estado anterior, rejeita atualização inválida
       }
