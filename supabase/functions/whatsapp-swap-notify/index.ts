@@ -105,10 +105,8 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const apiUrl      = Deno.env.get("EVOLUTION_API_URL")!;
-    const apiKey      = Deno.env.get("EVOLUTION_API_KEY")!;
-    // CORREÇÃO: não usar instância global como fallback — cada ministério tem seu próprio WhatsApp
-    // Se não encontrar instância específica, retornar erro sem enviar pelo WhatsApp errado
+    const apiUrl = Deno.env.get("EVOLUTION_API_URL")!;
+    const apiKey = Deno.env.get("EVOLUTION_API_KEY")!
 
     const { swapRequestId, ministryId, orgId } = await req.json();
 
@@ -116,22 +114,22 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Missing parameters" }, 400);
     }
 
-    // --- SEGURANÇA: Validação de Token JWT e Permissão de Admin (SEC-02) ---
+    // --- JWT: verifica identidade do usuário autenticado ---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return jsonResponse({ error: "Authorization header ausente" }, 401);
     }
-
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !user) {
       return jsonResponse({ error: "Não autenticado: " + (userErr?.message || "") }, 401);
     }
 
-    // Busca perfil do usuário
+    // Qualquer membro autenticado pode disparar notificação de troca
+    // (não exigimos is_admin — verificamos apenas que pertence à mesma organização)
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_admin, is_super_admin, organization_id")
+      .select("organization_id")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -139,15 +137,10 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Perfil do usuário não encontrado" }, 403);
     }
 
-    const isAuthorized =
-      profile.is_super_admin ||
-      (profile.is_admin && profile.organization_id === orgId);
-
-    if (!isAuthorized) {
-      return jsonResponse({ error: "Acesso negado. Administrador requerido para enviar notificações." }, 403);
+    if (profile.organization_id !== orgId) {
+      return jsonResponse({ error: "Acesso negado. Usuário não pertence a esta organização." }, 403);
     }
 
-    // --- VERIFICAÇÃO DO PLANO E DA FLAG GLOBAL ---
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
       .select("plan_type, whatsapp_enabled")
@@ -158,9 +151,10 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Organização não encontrada" }, 404);
     }
 
-    if (org.plan_type !== "enterprise" || !org.whatsapp_enabled) {
+    const planOk = org.plan_type === "enterprise" || org.plan_type === "pro";
+    if (!planOk || !org.whatsapp_enabled) {
       return jsonResponse({ 
-        error: "WhatsApp indisponível. Plano Enterprise e ativação global são requeridos.",
+        error: "WhatsApp indisponível. Plano Pro/Enterprise e ativação global são requeridos.",
         code: "WHATSAPP_DISABLED"
       }, 403);
     }
@@ -177,7 +171,8 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Swap request not found" }, 404);
     }
 
-    // ── 2. Instância WhatsApp do ministério ───────────────────────────────
+    // ── 2. Instância WhatsApp: usa sempre a global como fallback ───────────────────
+    const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global";
     const { data: ministryWa } = await supabase
       .from("ministry_whatsapp")
       .select("instance_name")
@@ -185,20 +180,14 @@ serve(async (req: Request) => {
       .eq("connected", true)
       .maybeSingle();
 
-    const instance = ministryWa?.instance_name;
+    // Preferência: instância própria do ministério → instância global
+    const instance = ministryWa?.instance_name || defaultInstance;
+    console.log(`[whatsapp-swap-notify] Usando instância: ${instance} (ministério: ${ministryId})`);
 
-    if (!instance) {
-      console.warn(`[whatsapp-swap-notify] Ministério ${ministryId} não tem WhatsApp configurado e conectado. Notificação cancelada para evitar envio pelo canal errado.`);
-      return new Response(
-        JSON.stringify({ success: false, sent: 0, reason: "ministry_has_no_whatsapp" }),
-        { headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // ── 3. Membros elegíveis: têm a função E não são o solicitante ────────
+    // ── 3. Membros elegiíveis: têm a função OU são admin, e não são o solicitante ──
     const { data: memberships } = await supabase
       .from("ministry_members")
-      .select("profile_id, functions")
+      .select("profile_id, functions, role")
       .eq("ministry_id", ministryId);
 
     if (!memberships || memberships.length === 0) {
@@ -206,12 +195,12 @@ serve(async (req: Request) => {
     }
 
     const eligibleIds = memberships
-      .filter(
-        (m: any) =>
-          m.profile_id !== swapReq.requester_id &&
-          Array.isArray(m.functions) &&
-          m.functions.includes(swapReq.role)
-      )
+      .filter((m: any) => {
+        if (m.profile_id === swapReq.requester_id) return false; // não notifica o próprio solicitante
+        const isAdmin = m.role === 'admin';
+        const hasSameFunction = Array.isArray(m.functions) && m.functions.includes(swapReq.role);
+        return isAdmin || hasSameFunction; // admins + membros com a mesma função
+      })
       .map((m: any) => m.profile_id as string);
 
     if (eligibleIds.length === 0) {
