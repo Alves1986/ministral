@@ -53,6 +53,21 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
     const sb = getSupabase();
     if (!sb) return;
 
+    // Previne duplicação de pedidos para a mesma vaga
+    const { data: existing } = await sb.from('swap_requests')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('requester_id', request.requesterId)
+        .eq('role', request.role)
+        .eq('event_datetime', request.eventIso)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+    if (existing) {
+        throw new Error("Você já possui uma solicitação pendente para esta vaga.");
+    }
+
     // Retorna o ID para passar à Edge Function de notificação
     const { data: inserted, error } = await sb.from('swap_requests').insert({
         organization_id: orgId,
@@ -138,12 +153,20 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
             throw new Error('Falha de permissão ou erro ao atualizar escala original.');
         }
 
+        // Atualiza TODAS as requisições duplicadas (caso existam) para esta mesma vaga
         const { error: errorSwap } = await sb.from('swap_requests').update({
             status: 'completed',
             taken_by_id: takenById,
             taken_by_name: takenByName
-        }).eq('id', reqId).eq('organization_id', orgId);
+        })
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('requester_id', req.requester_id)
+        .eq('role', req.role)
+        .eq('event_datetime', req.event_datetime)
+        .eq('status', 'pending');
         
+
         if (errorSwap) {
             console.error('[performSwapSQL] Erro atualizando swap_requests:', errorSwap);
             throw new Error('Falha ao concluir o pedido de troca.');
