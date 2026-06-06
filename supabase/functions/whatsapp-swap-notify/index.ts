@@ -49,6 +49,18 @@ export async function sendWhatsAppMessage(
       if (!response.ok) {
         const body = await response.text().catch(() => "");
         lastError = `Evolution API ${response.status}: ${body}`;
+        
+        // Se a instância pareceu 'open' na verificação mas o socket caiu na hora de enviar
+        if (response.status === 428 || body.includes('Connection Closed') || body.includes('Not Connected')) {
+          console.warn(`[whatsapp-swap-notify] Conexão fechada detectada no envio (${instanceName}). Forçando reconexão (tentativa ${attempt + 1})...`);
+          try {
+            await fetchWithTimeout(`${apiUrl}/instance/connect/${instanceName}`, { headers: { apikey: apiKey }, timeout: 10000 });
+            await sleep(8000); // Aguarda o socket do Baileys subir
+          } catch (e) {
+            console.error(`[whatsapp-swap-notify] Falha ao tentar forçar reconexão:`, e);
+          }
+        }
+        
         if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
         return { success: false, error: lastError };
       }
