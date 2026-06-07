@@ -311,8 +311,8 @@ serve(async (req: Request) => {
     const eventTimeMs = eventDate.getTime();
     const nowMs = Date.now();
 
-    const windowStartMs = eventTimeMs - 30 * 60 * 1000; // 30 minutos antes
-    const windowEndMs = eventTimeMs + 90 * 60 * 1000;   // 1h 30min depois
+    const windowStartMs = eventTimeMs - 120 * 60 * 1000; // 2 horas antes
+    const windowEndMs = eventTimeMs + 60 * 60 * 1000;   // 1 hora depois
 
     // Formatar horário local do evento para exibição
     const [year, month, day] = date.split("-");
@@ -325,7 +325,7 @@ serve(async (req: Request) => {
       const mins = minutesRemaining % 60;
       const waitStr = hours > 0 ? `${hours}h e ${mins}min` : `${mins}min`;
       
-      const errMsg = `O check-in para este evento ainda não está aberto. A abertura ocorre 30 minutos antes do início (restam ${waitStr}).`;
+      const errMsg = `O check-in para este evento ainda não está aberto. A abertura ocorre 2 horas antes do início (restam ${waitStr}).`;
       
       if (isHtmlExpected) {
         return new Response(getHtmlResponse(false, "Check-in Fechado", errMsg, timeDetails), {
@@ -340,7 +340,7 @@ serve(async (req: Request) => {
     }
 
     if (nowMs > windowEndMs) {
-      const errMsg = "O período de check-in para este evento já foi encerrado. A janela fecha 1h 30min após o início.";
+      const errMsg = "O período de check-in para este evento já foi encerrado. A janela fecha 1 hora após o início.";
       
       if (isHtmlExpected) {
         return new Response(getHtmlResponse(false, "Janela Expirada", errMsg, timeDetails), {
