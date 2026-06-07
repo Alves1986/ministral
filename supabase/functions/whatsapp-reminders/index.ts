@@ -106,10 +106,10 @@ serve(async (req: Request) => {
             continue;
           }
 
-          const { data: assignments } = await supabase
+          const { data: assignments, error: assignmentsError } = await supabase
             .from("schedule_assignments")
             .select(`
-              id, member_id, role, event_date, event_rule_id, ministry_id, organization_id, status, confirmed,
+              id, member_id, role, event_date, event_rule_id, ministry_id, organization_id, confirmed,
               profiles:member_id ( whatsapp, name ),
               organization_ministries!ministry_id ( label, code ),
               event_rules!event_rule_id ( title, time )
@@ -118,7 +118,13 @@ serve(async (req: Request) => {
             .eq("event_rule_id", notif.event_rule_id)
             .eq("event_date", notif.event_date);
             
-          console.log(`[notif] processing rule ${notif.event_rule_id} for date ${notif.event_date}: Found ${assignments?.length || 0} assignments.`);
+          const { data: Anyassignments } = await supabase
+            .from("schedule_assignments")
+            .select(`id, event_rule_id, event_date`)
+            .eq("ministry_id", notif.ministry_id)
+            .limit(10);
+            
+          console.log(`[notif] processing rule ${notif.event_rule_id} for date ${notif.event_date}: Found ${assignments?.length || 0} assignments. Error: ${assignmentsError?.message || 'none'}`);
 
           if (!assignments || assignments.length === 0) {
             console.log(`[notif] Skipped because there are 0 assignments.`);
@@ -148,7 +154,6 @@ serve(async (req: Request) => {
           }
 
           for (const a of assignments) {
-             if (a.status === 'swap_requested') continue;
              if (!a.profiles?.whatsapp) continue;
              const phone = formatBrazilPhone(a.profiles.whatsapp);
              if (!phone) continue;
