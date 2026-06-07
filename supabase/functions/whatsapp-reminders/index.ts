@@ -10,71 +10,34 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
 }
 
 // --- INLINE UTILS ---
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
-  const { timeout = 8000, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(resource, { ...fetchOptions, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(id);
-  }
-}
+
 export async function sendWhatsAppMessage(
   apiUrl: string,
   apiKey: string,
   instanceName: string,
   phone: string,
-  text: string,
-  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused" } = {}
+  text: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
-  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
-  let lastError = "";
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetchWithTimeout(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: apiKey },
-        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
-        timeout,
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        lastError = `Evolution API ${response.status}: ${body}`;
-        
-        if (response.status === 428 || body.includes('Connection Closed') || body.includes('Not Connected')) {
-          console.warn(`[whatsapp-reminders] Conexão fechada detectada (${instanceName}). Forçando RESTART (tentativa ${attempt + 1})...`);
-          try {
-            await fetchWithTimeout(`${apiUrl}/instance/restart/${instanceName}`, { 
-                method: "PUT",
-                headers: { apikey: apiKey }, 
-                timeout: 15000 
-            });
-            await sleep(5000); 
-          } catch(e) { /* ignore restart error */ }
-        }
-        await sleep(1000 * (attempt + 1));
-        continue;
-      }
-      
-      await response.json().catch(() => {});
-      return { success: true };
-    } catch (error: any) {
-      lastError = error.message;
-      if (lastError.includes("aborted")) {
-        lastError = "Timeout exceeding " + timeout + "ms";
-      }
-      if (attempt < retries) {
-        await sleep(1000 * (attempt + 1));
-      }
+  try {
+    const apiFormatUrl = apiUrl.replace(/\/+$/, "");
+    const endpoint = `${apiFormatUrl}/message/sendText/${instanceName}`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify({ number: phone, options: { delay: 1000, presence: "composing" }, text })
+    });
+    
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      return { success: false, error: `Evolution API it responded ${response.status}: ${bodyText}` };
     }
+    
+    // Sucesso
+    await response.json().catch(() => ({}));
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
-  return { success: false, error: lastError };
 }
 
 const ROLE_EMOJIS: Record<string, string> = {
@@ -142,8 +105,13 @@ serve(async (req: Request) => {
       const notifIds = uniqueNotifs.map(n => n.id);
       await supabase.from("whatsapp_scheduled_notifications").update({ status: "processing" }).in("id", notifIds);
 
-      const notifMinistryIds = [...new Set(uniqueNotifs.map(n => n.ministry_id).filter(Boolean))];
-      const { data: ministryWa } = await supabase.from("ministry_whatsapp").select("ministry_id, instance_name").eq("connected", true).in("ministry_id", notifMinistryIds);
+      const ministryIdsArray = uniqueNotifs.map(n => n.ministry_id).filter(Boolean);
+      const uniqueMinistryIds: string[] = [];
+      for (const mId of ministryIdsArray) {
+        if (!uniqueMinistryIds.includes(mId)) uniqueMinistryIds.push(mId);
+      }
+      
+      const { data: ministryWa } = await supabase.from("ministry_whatsapp").select("ministry_id, instance_name").eq("connected", true).in("ministry_id", uniqueMinistryIds);
       const minInstanceMap = new Map((ministryWa || []).map((w: any) => [w.ministry_id, w.instance_name]));
 
       for (const notif of uniqueNotifs) {
@@ -193,12 +161,14 @@ serve(async (req: Request) => {
           customMessage = minSettings?.whatsapp_custom_message || "";
 
           let teamList = "";
-          const rolesMap = new Map<string, string[]>();
+          const rolesMap: Record<string, string[]> = {};
           assignments.forEach((t: any) => {
-            if (!rolesMap.has(t.role)) rolesMap.set(t.role, []);
-            rolesMap.get(t.role)!.push(t.profiles?.name || "Membro");
+            const r = t.role || "Membro";
+            if (!rolesMap[r]) rolesMap[r] = [];
+            rolesMap[r].push(t.profiles?.name || "Membro");
           });
-          for (const [r, names] of rolesMap.entries()) {
+          for (const r of Object.keys(rolesMap)) {
+            const names = rolesMap[r];
             teamList += `${getEmojiForRole(r)} *${r}:* ${names.join(", ")}\n`;
           }
 
