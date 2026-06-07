@@ -70,6 +70,57 @@ async function sendWhatsAppMessage(
   }
   return { success: false, error: lastError };
 }
+
+export async function sendWhatsAppButtons(
+  apiUrl: string, apiKey: string, instanceName: string, phone: string,
+  content: { title: string, description: string, footer: string },
+  buttons: Array<{ id: string, text: string }>
+): Promise<{ success: boolean; error?: string }> {
+  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
+  
+  const payload = {
+    number: phone,
+    options: { delay: 1200, presence: "composing" },
+    buttonMessage: {
+      title: content.title,
+      description: content.description,
+      footer: content.footer,
+      buttons: buttons.map((b) => ({
+        buttonId: b.id,
+        buttonText: { displayText: b.text },
+        type: 1
+      }))
+    }
+  };
+
+  try {
+    const response = await fetchWithTimeout(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Status ${response.status} - Falha ao enviar botões`);
+    }
+    return { success: true };
+
+  } catch (error) {
+    console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
+    
+    // --- FALLBACK PARA TEXTO ---
+    let fallbackText = `*${content.title}*\n\n${content.description}\n\n`;
+    fallbackText += `*Responda com o NÚMERO da opção desejada:*\n`;
+    
+    buttons.forEach((b, index) => {
+      fallbackText += `*[ ${index + 1} ]* - ${b.text}\n`;
+    });
+    
+    fallbackText += `\n_${content.footer}_`;
+
+    return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
+  }
+}
+
 // ── Verifica e reconecta instância se necessário ───────────────────────────
 
 async function checkInstanceStatus(
@@ -398,9 +449,6 @@ async function processNotification(
       if (sentToPhones.has(formattedPhone)) { skipped++; continue; }
       sentToPhones.add(formattedPhone);
 
-      // CORREÇÃO CRÍTICA: usar SEMPRE a instância específica do ministério.
-      // Se o ministério não tiver instância própria E não houver instância global (ou não for para usar a global),
-      // pular este membro (não enviar pelo WhatsApp errado de outra org).
       const currentInstance = ministryMap.get(a.ministry_id) || defaultInstance;
       if (!currentInstance) {
         console.warn(`[whatsapp-reminders] Ministério ${a.ministry_id} sem instância WhatsApp configurada. Pulando membro ${profile.name}.`);
@@ -408,9 +456,35 @@ async function processNotification(
         continue;
       }
 
-      const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
-        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, msg,
-        { timeout: 12000, retries: 1 }
+      // --- Insere ação pendente para o membro ---
+      await supabase.from("whatsapp_pending_actions").insert({
+        organization_id: orgId,
+        ministry_id: a.ministry_id,
+        member_id: a.member_id,
+        phone: formattedPhone,
+        type: "confirmation",
+        event_rule_id: a.event_rule_id,
+        event_date: targetDate,
+        role: a.role,
+        status: "pending",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Expira em 24h
+      });
+
+      // --- Envia com botões e fallback ---
+      const content = {
+        title: `Escala — ${eventTitle}`,
+        description: `${template.greeting}\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}\n${orientationsBlock}${closingBlock}`,
+        footer: "Ministral • Gestão de Escalas"
+      };
+
+      const buttons = [
+        { id: "CONFIRMAR", text: "✅ Confirmar presença" },
+        { id: "RECUSAR", text: "❌ Não poderei comparecer" },
+        { id: "TROCA", text: "🔄 Solicitar troca" }
+      ];
+
+      const { success: msgOk, error: msgErr } = await sendWhatsAppButtons(
+        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, content, buttons
       );
 
       if (msgOk) {

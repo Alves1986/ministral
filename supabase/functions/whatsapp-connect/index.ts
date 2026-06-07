@@ -139,38 +139,55 @@ serve(async (req: Request) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        // Instância existe mas não está conectada — tenta buscar QR Code
+        // Instância existe mas não está conectada — busca QR Code via /connect com retry
         const qrEndpoint = `${evolutionApiUrl}/instance/connect/${instanceName}`;
-        const qrResponse = await fetch(qrEndpoint, {
-          method: "GET",
-          headers: { "apikey": evolutionApiKey },
-        });
-        if (qrResponse.ok) {
-          const qrResult = await qrResponse.json();
-          const qrcodeBase64 =
-            qrResult.qrcode?.base64 ||
-            qrResult.base64 ||
-            qrResult.qr ||
-            null;
-            
-          if (!qrcodeBase64) {
-             return new Response(
-               JSON.stringify({ error: `QR Code não encontrado na resposta de /connect: ${JSON.stringify(qrResult)}`, payload: qrResult }),
-               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-             );
+        const maxRetries = 4;
+        const delays = [1000, 2000, 3000, 5000]; // ms
+
+        let qrcodeBase64: string | null = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          if (attempt > 0) {
+            await new Promise(r => setTimeout(r, delays[attempt]));
           }
-          
+
+          try {
+            const qrResponse = await fetch(qrEndpoint, {
+              method: "GET",
+              headers: { "apikey": evolutionApiKey },
+            });
+
+            if (qrResponse.ok) {
+              const qrResult = await qrResponse.json();
+              // Evolution API v2.3.7: { base64: "data:image/png;...", code: "2@...", pairingCode: null }
+              const extracted =
+                qrResult.base64 ||
+                qrResult.qrcode?.base64 ||
+                qrResult.code ||
+                qrResult.qr ||
+                null;
+
+              if (extracted && typeof extracted === "string" && extracted.length > 50) {
+                qrcodeBase64 = extracted;
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn(`[whatsapp-connect] Reconnect tentativa ${attempt + 1}/${maxRetries}:`, e);
+          }
+        }
+
+        if (qrcodeBase64) {
           return new Response(
             JSON.stringify({ success: true, instanceName, qrcode: qrcodeBase64, state }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
-        } else {
-          const errTxt = await qrResponse.text();
-          return new Response(
-            JSON.stringify({ error: `Falha na chamada /connect da Evolution API (Status ${qrResponse.status}): ${errTxt}`, payload: errTxt }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
         }
+
+        return new Response(
+          JSON.stringify({ error: "QR Code não gerado. A instância existe mas não respondeu com QR. Tente novamente." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
@@ -207,19 +224,60 @@ serve(async (req: Request) => {
       );
     }
 
-    // Extrai o QR Code conforme versão da Evolution API
+    // ── Evolution API v2.3.7: QR code não vem no create ──
+    // O create retorna qrcode:{count:0}. Precisamos buscar via GET /instance/connect
+    // com retry pois o Baileys precisa de alguns segundos para inicializar.
     let qrcodeBase64: string | null = null;
+
+    // Tenta extrair do resultado do create primeiro (compatibilidade com versões anteriores)
     if (result.qrcode?.base64) {
       qrcodeBase64 = result.qrcode.base64;
     } else if (result.hash?.qrcode) {
       qrcodeBase64 = result.hash.qrcode;
-    } else if (result.base64) {
+    } else if (typeof result.base64 === "string" && result.base64.startsWith("data:")) {
       qrcodeBase64 = result.base64;
+    }
+
+    // Se não veio no create, busca via /instance/connect com retry
+    if (!qrcodeBase64) {
+      const connectEndpoint = `${evolutionApiUrl}/instance/connect/${instanceName}`;
+      const maxRetries = 4;
+      const delays = [2000, 3000, 5000, 5000]; // ms
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        // Aguarda antes de tentar (o Baileys precisa inicializar)
+        await new Promise(r => setTimeout(r, delays[attempt]));
+
+        try {
+          const qrRes = await fetch(connectEndpoint, {
+            method: "GET",
+            headers: { "apikey": evolutionApiKey },
+          });
+
+          if (qrRes.ok) {
+            const qrJson = await qrRes.json();
+            // Evolution API v2.3.7 retorna { base64: "data:image/png;base64,...", code: "2@...", pairingCode: null }
+            const extracted =
+              qrJson.base64 ||
+              qrJson.qrcode?.base64 ||
+              qrJson.code ||
+              qrJson.qr ||
+              null;
+
+            if (extracted && typeof extracted === "string" && extracted.length > 50) {
+              qrcodeBase64 = extracted;
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`[whatsapp-connect] Tentativa ${attempt + 1}/${maxRetries} falhou:`, e);
+        }
+      }
     }
 
     if (!qrcodeBase64) {
       return new Response(
-        JSON.stringify({ error: `QR Code não encontrado após criar instância: ${JSON.stringify(result)}`, payload: result }),
+        JSON.stringify({ error: `QR Code não gerado após criar instância. Tente novamente em alguns segundos.`, payload: result }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

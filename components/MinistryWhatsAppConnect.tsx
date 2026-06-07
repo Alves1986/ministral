@@ -43,7 +43,7 @@ export const MinistryWhatsAppConnect: React.FC<Props> = ({
     try {
       // Verifica se há alguma instância global conectada consultando a Edge Function de status
       const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        body: { instance_name: 'ministral-global' },
+        body: { instance_name: 'ministral-global-v2' },
       });
       if (!isMounted.current) return;
       if (!error && (data?.state === 'open' || data?.connected)) {

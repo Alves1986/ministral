@@ -52,6 +52,35 @@ export async function sendWhatsAppMessage(
   }
   return { success: false, error: lastError };
 }
+export async function sendWhatsAppButtons(
+  apiUrl: string, apiKey: string, instanceName: string, phone: string,
+  content: { title: string, description: string, footer: string },
+  buttons: Array<{ id: string, text: string }>
+): Promise<{ success: boolean; error?: string }> {
+  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
+  const payload = {
+    number: phone,
+    options: { delay: 1200, presence: "composing" },
+    buttonMessage: {
+      title: content.title, description: content.description, footer: content.footer,
+      buttons: buttons.map((b) => ({ buttonId: b.id, buttonText: { displayText: b.text }, type: 1 }))
+    }
+  };
+  try {
+    const response = await fetchWithTimeout(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`Status ${response.status}`);
+    return { success: true };
+  } catch (error) {
+    console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
+    let fallbackText = `*${content.title}*\n\n${content.description}\n\n*Responda com o NÚMERO da opção desejada:*\n`;
+    buttons.forEach((b, index) => { fallbackText += `*[ ${index + 1} ]* - ${b.text}\n`; });
+    fallbackText += `\n_${content.footer}_`;
+    return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
+  }
+}
 export function formatBrazilPhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let digits = raw.replace(/\D/g, "");
@@ -110,6 +139,7 @@ serve(async (req: Request) => {
     }
 
     const msgObj = data.message ?? {};
+    const buttonId = msgObj.buttonsResponseMessage?.selectedButtonId;
     const rawText = (
       msgObj.conversation ??
       msgObj.extendedTextMessage?.text ??
@@ -117,7 +147,15 @@ serve(async (req: Request) => {
       ""
     ).trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    if (!rawText) return ok({ ignored: "empty_message" });
+    let actionId = buttonId;
+    if (!actionId && rawText) {
+      if (rawText === "1" || rawText === "CONFIRMAR") actionId = "CONFIRMAR";
+      if (rawText === "2" || rawText === "RECUSAR" || rawText === "NAO") actionId = "RECUSAR";
+      if (rawText === "3" || rawText === "TROCA" || rawText === "TROCAR") actionId = "TROCA";
+      if (rawText === "SIM" || rawText === "ACEITAR") actionId = "SWAP_ACCEPT";
+    }
+
+    if (!actionId && !rawText) return ok({ ignored: "empty_message" });
 
     const phone = phoneFromJid(remoteJid);
     if (!phone) return ok({ ignored: "invalid_phone" });
@@ -151,7 +189,7 @@ serve(async (req: Request) => {
       return ok({ ignored: "no_pending_actions" });
     }
 
-    if (rawText === "1" || rawText === "CONFIRMAR") {
+    if (actionId === "CONFIRMAR") {
       const action = pendingActions.find((a: any) => a.type === "confirmation");
       if (action) {
         await supabase
@@ -173,7 +211,7 @@ serve(async (req: Request) => {
       }
     }
 
-    if (rawText === "2" || rawText === "NAO" || rawText === "RECUSAR") {
+    if (actionId === "RECUSAR") {
       const action = pendingActions.find((a: any) => a.type === "confirmation");
       if (action) {
         await supabase
@@ -186,7 +224,75 @@ serve(async (req: Request) => {
       }
     }
 
-    if (rawText === "SIM") {
+    if (actionId === "TROCA") {
+      const action = pendingActions.find((a: any) => a.type === "confirmation");
+      if (action) {
+        // Resolve a action original
+        await supabase.from("whatsapp_pending_actions").update({ status: "resolved" }).eq("id", action.id);
+
+        const { data: profileReq } = await supabase.from("profiles").select("name").eq("id", action.member_id).maybeSingle();
+        const reqName = profileReq?.name || "Membro";
+        const { data: ruleData } = await supabase.from("event_rules").select("title, time").eq("id", action.event_rule_id).maybeSingle();
+
+        const { data: swapReq } = await supabase.from("swap_requests").insert({
+          organization_id: action.organization_id,
+          ministry_id: action.ministry_id,
+          requester_id: action.member_id,
+          requester_name: reqName,
+          event_rule_id: action.event_rule_id,
+          event_title: ruleData?.title || "Evento",
+          event_date: action.event_date,
+          event_datetime: `${action.event_date}T${ruleData?.time || "00:00"}`,
+          role: action.role,
+          status: "pending"
+        }).select().single();
+
+        if (swapReq) {
+          const { data: ministryMembers } = await supabase
+            .from("ministry_members")
+            .select("member_id, profiles:member_id ( whatsapp, name )")
+            .eq("ministry_id", action.ministry_id)
+            .neq("member_id", action.member_id);
+
+          const membersToNotify = (ministryMembers || []).filter(m => m.profiles?.whatsapp);
+
+          for (const m of membersToNotify) {
+            const mPhone = formatBrazilPhone(m.profiles.whatsapp);
+            if (mPhone) {
+              await supabase.from("whatsapp_pending_actions").insert({
+                organization_id: action.organization_id,
+                ministry_id: action.ministry_id,
+                member_id: m.member_id,
+                phone: mPhone,
+                type: "swap_accept",
+                swap_request_id: swapReq.id,
+                event_rule_id: action.event_rule_id,
+                event_date: action.event_date,
+                role: action.role,
+                status: "pending",
+                expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+              });
+
+              const [y, mm, d] = action.event_date.split("-");
+              const dFormat = `${d}/${mm}/${y}`;
+              const swapContent = {
+                title: "⚠️ Solicitação de Troca",
+                description: `*${reqName}* precisa de uma troca para a escala de *${action.role}*.\n\n🗓️ Data: ${dFormat}\n⏰ Hora: ${ruleData?.time?.substring(0,5) || ""}\n\nVocê pode assumir essa escala?`,
+                footer: "Ministral • Troca de Escala"
+              };
+              await sendWhatsAppButtons(apiUrl, apiKey, instance, mPhone, swapContent, [
+                { id: "SWAP_ACCEPT", text: "✅ Aceitar Escala" }
+              ]);
+            }
+          }
+
+          await sendWhatsAppMessage(apiUrl, apiKey, instance, phone, `🔄 *Solicitação enviada!*\n\nEnviamos o pedido para os outros membros da equipe. Você será avisado se alguém aceitar.`);
+          return ok({ action: "swap_requested" });
+        }
+      }
+    }
+
+    if (actionId === "SWAP_ACCEPT") {
       const swapAction = pendingActions.find((a: any) => a.type === "swap_accept");
       if (!swapAction) return ok({ ignored: "no_swap_pending" });
 

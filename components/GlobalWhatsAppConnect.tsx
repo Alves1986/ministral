@@ -282,7 +282,7 @@ export const GlobalWhatsAppConnect: React.FC = () => {
         {status === 'idle' && (
           <div className="flex flex-col items-center py-6">
             <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6 max-w-sm">
-              Conecte a instância global <strong>ministral-global</strong> à Evolution API.
+              Conecte a instância global <strong>ministral-global-v2</strong> à Evolution API.
               Todos os ministérios Enterprise usarão esta conexão para envios automáticos.
             </p>
             <button
