@@ -75,9 +75,7 @@ export async function sendWhatsAppButtons(
     return { success: true };
   } catch (error) {
     console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
-    let fallbackText = `*${content.title}*\n\n${content.description}\n\n*Responda com o NÚMERO da opção desejada:*\n`;
-    buttons.forEach((b, index) => { fallbackText += `*[ ${index + 1} ]* - ${b.text}\n`; });
-    fallbackText += `\n_${content.footer}_`;
+    let fallbackText = `*${content.title}*\n\n${content.description}\n\n_${content.footer}_`;
     return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
   }
 }

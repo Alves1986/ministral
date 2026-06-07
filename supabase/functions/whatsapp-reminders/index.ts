@@ -109,13 +109,8 @@ export async function sendWhatsAppButtons(
     
     // --- FALLBACK PARA TEXTO ---
     let fallbackText = `*${content.title}*\n\n${content.description}\n\n`;
-    fallbackText += `*Responda com o NÚMERO da opção desejada:*\n`;
     
-    buttons.forEach((b, index) => {
-      fallbackText += `*[ ${index + 1} ]* - ${b.text}\n`;
-    });
-    
-    fallbackText += `\n_${content.footer}_`;
+    fallbackText += `_${content.footer}_`;
 
     return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
   }
