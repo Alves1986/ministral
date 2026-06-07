@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ── Funções Inlined (Para suportar deploy via Dashboard em arquivo único) ──
 function formatBrazilPhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let digits = raw.replace(/\D/g, '');
@@ -30,8 +31,7 @@ async function sendWhatsAppMessage(
   options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused"; } = {}
 ): Promise<{ success: boolean; error?: string }> {
   const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
-  const apiFormatUrl = apiUrl.replace(/\/+$/, "");
-  const endpoint = `${apiFormatUrl}/message/sendText/${instanceName}`;
+  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   let lastError = "";
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -45,15 +45,16 @@ async function sendWhatsAppMessage(
         const body = await response.text().catch(() => "");
         lastError = `Evolution API ${response.status}: ${body}`;
         
+        // Se a instância pareceu 'open' na verificação mas o socket caiu na hora de enviar
         if (response.status === 428 || body.includes('Connection Closed') || body.includes('Not Connected')) {
           console.warn(`[whatsapp-reminders] Conexão fechada detectada no envio (${instanceName}). Forçando RESTART (tentativa ${attempt + 1})...`);
           try {
-            await fetchWithTimeout(`${apiFormatUrl}/instance/restart/${instanceName}`, { 
+            await fetchWithTimeout(`${apiUrl}/instance/restart/${instanceName}`, { 
                 method: "PUT",
                 headers: { apikey: apiKey }, 
                 timeout: 15000 
             });
-            await sleep(10000);
+            await sleep(10000); // Aguarda o socket do Baileys subir após restart
           } catch (e) {
             console.error(`[whatsapp-reminders] Falha ao tentar forçar restart:`, e);
           }
@@ -76,8 +77,7 @@ export async function sendWhatsAppButtons(
   content: { title: string, description: string, footer: string },
   buttons: Array<{ id: string, text: string }>
 ): Promise<{ success: boolean; error?: string }> {
-  const apiFormatUrl = apiUrl.replace(/\/+$/, "");
-  const endpoint = `${apiFormatUrl}/message/sendButtons/${instanceName}`;
+  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
   
   const payload = {
     number: phone,
@@ -122,6 +122,64 @@ export async function sendWhatsAppButtons(
   }
 }
 
+// ── Verifica e reconecta instância se necessário ───────────────────────────
+
+async function checkInstanceStatus(
+  apiUrl: string, apiKey: string, instanceName: string
+): Promise<'open' | 'close' | 'connecting' | 'unknown'> {
+  try {
+    const resp = await fetchWithTimeout(
+      `${apiUrl}/instance/connectionState/${instanceName}`,
+      { headers: { apikey: apiKey }, timeout: 6000 }
+    );
+    if (!resp.ok) return 'unknown';
+    const data = await resp.json().catch(() => ({}));
+    // Evolution API v2: { instance: { state: 'open' | 'close' | 'connecting' } }
+    const state = data?.instance?.state || data?.state || 'unknown';
+    return state as 'open' | 'close' | 'connecting' | 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function ensureInstanceConnected(
+  apiUrl: string, apiKey: string, instanceName: string
+): Promise<boolean> {
+  const status = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+  console.log(`[whatsapp-reminders] Instância "${instanceName}" status: ${status}`);
+
+  if (status === 'open') return true;
+
+  if (status === 'close' || status === 'unknown') {
+    console.warn(`[whatsapp-reminders] Instância desconectada. Tentando reconectar "${instanceName}"...`);
+    try {
+      // Tenta reconectar via Evolution API (reusa as credenciais salvas)
+      const reconnResp = await fetchWithTimeout(
+        `${apiUrl}/instance/connect/${instanceName}`,
+        { headers: { apikey: apiKey }, timeout: 10000 }
+      );
+      const reconnData = await reconnResp.json().catch(() => ({}));
+      console.log(`[whatsapp-reminders] Resposta reconexão:`, JSON.stringify(reconnData).slice(0, 200));
+    } catch (e) {
+      console.error(`[whatsapp-reminders] Erro ao reconectar:`, e);
+    }
+    // Aguarda 8s para o socket restabelecer
+    await sleep(8000);
+    const newStatus = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+    console.log(`[whatsapp-reminders] Status pós-reconexão: ${newStatus}`);
+    return newStatus === 'open';
+  }
+
+  // 'connecting' — aguarda e verifica de novo
+  await sleep(5000);
+  const finalStatus = await checkInstanceStatus(apiUrl, apiKey, instanceName);
+  return finalStatus === 'open';
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
 const ROLE_EMOJIS: Record<string, string> = {
   proje: "💻", ilumina: "💡", luz: "💡", transmiss: "🖥️",
   camera: "🎥", câmera: "🎥", foto: "📸", stori: "📱",
@@ -138,11 +196,14 @@ function getEmojiForRole(role: string): string {
   return "🔹";
 }
 
+// ── Templates por Tipo de Ministério ─────────────────────────────────────────
+// Cada código de ministério tem: header (emoji + título), greeting e orientações.
+
 interface MinistryTemplate {
-  header: string;
-  greeting: string;
-  orientations: string;
-  closing: string;
+  header: string;     // Emoji + label da mensagem
+  greeting: string;   // Abertura da mensagem
+  orientations: string; // Orientações contextuais
+  closing: string;    // Fechamento inspirador
 }
 
 const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
@@ -152,24 +213,28 @@ const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
     orientations: `⚠️ *Orientações do Louvor:*\n1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.\n2. Revise as músicas com antecedência — a excelência começa em casa.\n3. Verifique os cifras e letras no app antes do culto.\n4. Em caso de imprevisto, avise a *liderança imediatamente*.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🎶 Vamos adorar com tudo que somos. Ele é digno!"
   },
+
   infantil: {
     header: "🌈",
     greeting: "Você está confirmado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
     orientations: `⚠️ *Orientações do Infantil:*\n1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.\n2. Confira os materiais pedagógicos e a lição do dia com antecedência.\n3. A *segurança das crianças* é prioridade — siga todos os protocolos.\n4. Nunca deixe uma criança sozinha sem supervisão.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🌟 \"Deixai os pequeninos virem a mim\" — Que privilégio servir a eles!"
   },
+
   midia: {
     header: "💻",
     greeting: "Você está confirmado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
     orientations: `⚠️ *Orientações de Mídia:*\n1. Chegue *40 minutos antes* para checklist completo dos equipamentos.\n2. Verifique câmeras, cabos, streaming e projetores antes do início.\n3. Teste o link de transmissão ao vivo com antecedência.\n4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "📡 Cada click seu leva o evangelho mais longe. Valeu!"
   },
+
   recepcao: {
     header: "🤝",
     greeting: "Você está confirmado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
     orientations: `⚠️ *Orientações da Recepção:*\n1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.\n2. Esteja com o visual adequado (uniforme/crachá se aplicável).\n3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.\n4. Fique atento a visitantes e pessoas com necessidades especiais.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🏠 Você não recebe pessoas — você recebe famílias. Obrigado!"
   },
+
   default: {
     header: "⛪",
     greeting: "Você está confirmado(a) na escala do ministério! Obrigado pelo seu serviço.",
@@ -178,6 +243,7 @@ const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
   }
 };
 
+// Detecta o template correto pelo code ou label do ministério
 function getMinistryTemplate(code: string, label: string): MinistryTemplate {
   const c = (code || "").toLowerCase();
   const l = (label || "").toLowerCase();
@@ -194,190 +260,333 @@ function getMinistryTemplate(code: string, label: string): MinistryTemplate {
   if (c.includes("recep") || l.includes("recep") || l.includes("hospit") || l.includes("portaria") || l.includes("boas-vindas")) {
     return MINISTRY_TEMPLATES.recepcao;
   }
+
   return MINISTRY_TEMPLATES.default;
 }
 
+// ── Função de processamento por notificação ───────────────────────────────────
+
+async function processNotification(
+  notif: any,
+  supabase: ReturnType<typeof createClient>,
+  evolutionApiUrl: string,
+  evolutionApiKey: string,
+  defaultInstance: string,
+  ministryMap: Map<string, string>
+): Promise<object> {
+  const targetDate = notif.event_date;
+  // Suporte a ambas as colunas durante período de migração
+  const orgId = notif.organization_id || notif.org_id;
+
+  // ── Verificação do plano e flag global/ministério ───────────────────────────
+  // Busca dados da organização e do ministério específico simultaneamente
+  const [orgRes, minRes] = await Promise.all([
+    supabase.from("organizations").select("plan_type, whatsapp_enabled").eq("id", orgId).single(),
+    notif.ministry_id 
+      ? supabase.from("organization_ministries").select("whatsapp_enabled").eq("id", notif.ministry_id).single()
+      : Promise.resolve({ data: { whatsapp_enabled: true }, error: null })
+  ]);
+
+  const org = orgRes.data;
+  const ministry = minRes.data;
+
+  if (orgRes.error || !org) {
+    await supabase.from("whatsapp_scheduled_notifications")
+      .update({ status: "failed", error_message: "Organização não encontrada" })
+      .eq("id", notif.id);
+    return { notif_id: notif.id, error: "Organização não encontrada" };
+  }
+
+  // Permite 'pro' ou 'enterprise' (flexibilidade de plano)
+  const isPlanValid = org.plan_type === "enterprise" || org.plan_type === "pro";
+  const isOrgEnabled = org.whatsapp_enabled !== false; // Default true se null
+  const isMinEnabled = ministry ? ministry.whatsapp_enabled !== false : true;
+
+  if (!isPlanValid || !isOrgEnabled || !isMinEnabled) {
+    const reason = !isPlanValid ? `Plano ${org.plan_type} insuficiente` : (!isOrgEnabled ? "Org desativada" : "Ministério desativado");
+    await supabase.from("whatsapp_scheduled_notifications")
+      .update({
+        status: "failed",
+        error_message: `WhatsApp bloqueado: ${reason}`
+      })
+      .eq("id", notif.id);
+    return { notif_id: notif.id, skipped: true, reason: "plan_or_flag" };
+  }
+
+  // ── Busca assignments do evento + code do ministério ────────────────────
+  let query = supabase
+    .from("schedule_assignments")
+    .select(`
+      id, member_id, role, event_date, event_rule_id, ministry_id,
+      profiles:member_id ( whatsapp, name ),
+      organization_ministries!ministry_id ( label, code ),
+      event_rules!event_rule_id ( title, time )
+    `)
+    .eq("organization_id", orgId)
+    .eq("event_date", targetDate);
+
+  if (notif.event_rule_id) query = query.eq("event_rule_id", notif.event_rule_id);
+  if (notif.ministry_id)   query = query.eq("ministry_id", notif.ministry_id);
+
+  const { data: assignments, error: assigErr } = await query;
+
+  if (assigErr) {
+    await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
+    return { notif_id: notif.id, error: assigErr.message };
+  }
+
+  if (!assignments || assignments.length === 0) {
+    await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
+    return { notif_id: notif.id, date: targetDate, sent: 0, reason: "Sem assignments." };
+  }
+
+  let sent = 0, skipped = 0, errors = 0;
+
+  // ── Agrupa assignments por evento e ministério ───────────────────────────
+  const eventsMap = new Map<string, any[]>();
+  for (const a of assignments) {
+    const key = `${a.ministry_id}_${a.event_rule_id || `fallback_${a.event_date}`}`;
+    if (!eventsMap.has(key)) eventsMap.set(key, []);
+    eventsMap.get(key)!.push(a);
+  }
+
+  // ── Cache de mensagens customizadas por ministry_id ─────────────────────
+  const customMsgCache = new Map<string, string | null>();
+  async function getCustomMsg(ministryId: string): Promise<string | null> {
+    if (customMsgCache.has(ministryId)) return customMsgCache.get(ministryId) ?? null;
+    const { data } = await supabase
+      .from("ministry_settings")
+      .select("whatsapp_custom_message")
+      .eq("ministry_id", ministryId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    const msg = data?.whatsapp_custom_message || null;
+    customMsgCache.set(ministryId, msg);
+    return msg;
+  }
+
+  // ── Processa cada grupo ──────────────────────────────────────────────────
+  for (const evAssignments of eventsMap.values()) {
+    const first = evAssignments[0];
+    if (!first) continue;
+
+    const eventTitle    = first.event_rules?.title || notif.event_title || "Culto";
+    const eventTimeStr  = first.event_rules?.time?.substring(0, 5) ?? "00:00";
+    const ministryLabel = first.organization_ministries?.label || "Ministério";
+    const ministryCode  = first.organization_ministries?.code || "";
+    const [tY, tM, tD]  = targetDate.split("-");
+    const dateStr = `${tD}/${tM}/${tY}`;
+
+    // ── Seleciona template correto e mensagem customizada ──────────────────
+    const template = getMinistryTemplate(ministryCode, ministryLabel);
+    const customMsg = await getCustomMsg(first.ministry_id);
+
+    // Monta lista de membros por função
+    const roleMembers = new Map<string, string[]>();
+    for (const a of evAssignments) {
+      const name = a.profiles?.name || "Desconhecido";
+      if (!roleMembers.has(a.role)) roleMembers.set(a.role, []);
+      roleMembers.get(a.role)!.push(name);
+    }
+
+    let teamList = "";
+    for (const [role, members] of roleMembers.entries()) {
+      teamList += `${getEmojiForRole(role)} *${role}:* ${members.join(", ")}\n`;
+    }
+
+    const sentToPhones    = new Set<string>();
+    const processedMembers = new Set<string>();
+
+    for (const a of evAssignments) {
+      const profile = a.profiles;
+      if (!profile?.whatsapp) { skipped++; continue; }
+      if (processedMembers.has(a.member_id)) { skipped++; continue; }
+      processedMembers.add(a.member_id);
+
+      const formattedPhone = formatBrazilPhone(profile.whatsapp);
+      if (!formattedPhone) {
+        skipped++;
+        console.warn(`[whatsapp-reminders] Número inválido: "${profile.whatsapp}"`);
+        continue;
+      }
+      if (sentToPhones.has(formattedPhone)) { skipped++; continue; }
+      sentToPhones.add(formattedPhone);
+
+      const currentInstance = ministryMap.get(a.ministry_id) || defaultInstance;
+      if (!currentInstance) {
+        console.warn(`[whatsapp-reminders] Ministério ${a.ministry_id} sem instância WhatsApp configurada. Pulando membro ${profile.name}.`);
+        skipped++;
+        continue;
+      }
+
+      // --- Insere ação pendente para o membro ---
+      await supabase.from("whatsapp_pending_actions").insert({
+        organization_id: orgId,
+        ministry_id: a.ministry_id,
+        member_id: a.member_id,
+        phone: formattedPhone,
+        type: "confirmation",
+        event_rule_id: a.event_rule_id,
+        event_date: targetDate,
+        role: a.role,
+        status: "pending",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Expira em 24h
+      });
+
+      // --- Monta a descrição do conteúdo para exibir o Olá {Nome} corretamente ---
+      const memberFirstName = profile.name.split(" ")[0] || "Membro";
+      
+      let description = `Olá, ${memberFirstName}!\n`;
+      if (!customMsg) {
+          description += `${template.greeting}\n\n`;
+      } else {
+          description += `\n`;
+      }
+
+      description += `🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}`;
+      
+      if (customMsg) {
+          description += `\n${customMsg}`;
+      } else {
+          description += `\n${template.orientations}\n${template.closing}`;
+      }
+
+      const content = {
+        title: `Escala — ${eventTitle}`,
+        description: description,
+        footer: "Ministral • Gestão de Escalas"
+      };
+
+      const buttons = [
+        { id: "CONFIRMAR", text: "✅ Confirmar presença" },
+        { id: "RECUSAR", text: "❌ Não poderei comparecer" },
+        { id: "TROCA", text: "🔄 Solicitar troca" }
+      ];
+
+      const { success: msgOk, error: msgErr } = await sendWhatsAppButtons(
+        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, content, buttons
+      );
+
+      if (msgOk) {
+        console.log(`[whatsapp-reminders] ✅ ${profile.name} (${formattedPhone})`);
+        sent++;
+        // Registra log de forma não-bloqueante
+        supabase.from("whatsapp_usage_logs").insert({
+          organization_id: orgId,
+          ministry_id: a.ministry_id,
+          instance_name: currentInstance,
+          phone: formattedPhone // Ajustado para ser compatível e evitar o erro "recipient_phone missing"
+        }).then(({ error: logErr }) => {
+          if (logErr) console.warn("[whatsapp-reminders] Log error:", logErr.message);
+        });
+      } else {
+        console.error(`[whatsapp-reminders] ❌ ${formattedPhone}:`, msgErr);
+        errors++;
+      }
+    }
+  }
+
+  // ── Marca status final ───────────────────────────────────────────────────
+  await supabase.from("whatsapp_scheduled_notifications")
+    .update({ status: errors > 0 && sent === 0 ? "failed" : "sent" })
+    .eq("id", notif.id);
+
+  return { notif_id: notif.id, date: targetDate, title: notif.event_title, sent, skipped, errors };
+}
+
+// ── Handler principal (chamado pelo cron) ─────────────────────────────────────
+
 serve(async (req: Request) => {
   try {
+    // ── 1. Autenticação via secret header ────────────────────────────────
     const cronSecret = Deno.env.get("WHATSAPP_CRON_SECRET");
-    const reqSecret = req.headers.get("x-cron-secret");
-    if (cronSecret && reqSecret && reqSecret !== cronSecret) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    if (!cronSecret) {
+      return new Response(JSON.stringify({ error: "Missing cron secret configuration" }), {
+        status: 500, headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (req.headers.get("x-cron-secret") !== cronSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json" },
+      });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
-    const defaultInstance = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global-v2";
+    // ── 2. Inicialização ─────────────────────────────────────────────────
+    const supabaseUrl        = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const evolutionApiUrl    = Deno.env.get("EVOLUTION_API_URL");
+    const evolutionApiKey    = Deno.env.get("EVOLUTION_API_KEY");
+    const defaultInstance    = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "ministral-global-v2";
+
+    if (!supabaseUrl || !supabaseServiceKey) throw new Error("Variáveis Supabase não configuradas.");
+    if (!evolutionApiUrl || !evolutionApiKey) throw new Error("Credenciais Evolution API não configuradas.");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const nowIso = new Date().toISOString();
 
-    const { data: pendingNotifs, error: notifErr } = await supabase
+    // ── 3. Mapa de instâncias por ministério ─────────────────────────────
+    const { data: mnWhatsapps, error: mnErr } = await supabase
+      .from("ministry_whatsapp").select("ministry_id, instance_name").eq("connected", true);
+    if (mnErr) console.error("[whatsapp-reminders] Erro ao buscar ministry_whatsapp:", mnErr);
+
+    const ministryMap = new Map<string, string>(
+      (mnWhatsapps || []).map((mw: any) => [mw.ministry_id, mw.instance_name])
+    );
+
+    // ── 4. Busca agendamentos pendentes cujo horário já chegou ───────────
+    const nowISO = new Date().toISOString();
+    const { data: pendingNotifs, error: pendErr } = await supabase
       .from("whatsapp_scheduled_notifications")
-      .select("*")
-      .eq("status", "pending")
-      .lte("scheduled_at", nowIso);
+      .select("*").eq("status", "pending").lte("scheduled_at", nowISO);
 
-    if (notifErr) throw notifErr;
-    console.log(`[cron] Found ${pendingNotifs?.length || 0} pending notifications to process.`);
+    if (pendErr) { console.error("[whatsapp-reminders] Erro:", pendErr); throw pendErr; }
+    if (!pendingNotifs || pendingNotifs.length === 0) {
+      return new Response(JSON.stringify({ success: true, message: "Nenhum agendamento pendente." }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-    let sentCount = 0;
-    
-    if (pendingNotifs && pendingNotifs.length > 0) {
-      const duplicateIds = [];
-      const uniqueNotifs = [];
-      const seenPayloads = new Set<string>();
-      
-      for (const n of pendingNotifs) {
-         const key = `${n.organization_id}_${n.ministry_id}_${n.event_rule_id}_${n.event_date}`;
-         if (seenPayloads.has(key)) duplicateIds.push(n.id);
-         else {
-             seenPayloads.add(key);
-             uniqueNotifs.push(n);
-         }
-      }
+    // ── 4.5. Verifica/reconecta TODAS as instâncias únicas antes de enviar ──
+    const notifMinistryIds = [...new Set(pendingNotifs.map((n: any) => n.ministry_id).filter(Boolean))];
+    const usedInstances = new Set<string>();
+    usedInstances.add(defaultInstance); // instância global sempre verificada
+    notifMinistryIds.forEach((mid: string) => {
+      const instForMin = ministryMap.get(mid);
+      if (instForMin) usedInstances.add(instForMin);
+    });
 
-      if (duplicateIds.length > 0) {
-         await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).in("id", duplicateIds);
-      }
-
-      const notifIds = uniqueNotifs.map(n => n.id);
-      await supabase.from("whatsapp_scheduled_notifications").update({ status: "processing" }).in("id", notifIds);
-
-      const ministryIdsArray = uniqueNotifs.map(n => n.ministry_id).filter(Boolean);
-      const uniqueMinistryIds: string[] = [];
-      for (const mId of ministryIdsArray) {
-        if (!uniqueMinistryIds.includes(mId)) uniqueMinistryIds.push(mId);
-      }
-      
-      const { data: ministryWa } = await supabase.from("ministry_whatsapp").select("ministry_id, instance_name").eq("connected", true).in("ministry_id", uniqueMinistryIds);
-      const minInstanceMap = new Map((ministryWa || []).map((w: any) => [w.ministry_id, w.instance_name]));
-
-      for (const notif of uniqueNotifs) {
-        try {
-          const { data: planCheck } = await supabase.from("organizations").select("plan_type, whatsapp_enabled").eq("id", notif.organization_id).single();
-          if (planCheck?.whatsapp_enabled === false || (planCheck?.plan_type !== "pro" && planCheck?.plan_type !== "enterprise")) {
-            console.log(`[notif] Skipped because organization does not have pro/enterprise plan or whatsapp is disabled.`);
-            await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
-            continue;
-          }
-
-          const { data: assignments, error: assignmentsError } = await supabase
-            .from("schedule_assignments")
-            .select(`
-              id, member_id, role, event_date, event_rule_id, ministry_id, organization_id, confirmed,
-              profiles:member_id ( whatsapp, name ),
-              organization_ministries!ministry_id ( label, code ),
-              event_rules!event_rule_id ( title, time )
-            `)
-            .eq("ministry_id", notif.ministry_id)
-            .eq("event_rule_id", notif.event_rule_id)
-            .eq("event_date", notif.event_date);
-            
-          if (!assignments || assignments.length === 0) {
-            await supabase.from("whatsapp_scheduled_notifications").update({ status: "completed" }).eq("id", notif.id);
-            continue;
-          }
-
-          const instanceName = minInstanceMap.get(notif.ministry_id) || defaultInstance;
-          
-          let customMessage = "";
-          const { data: minSettings } = await supabase
-            .from("ministry_settings")
-            .select("whatsapp_custom_message")
-            .eq("ministry_id", notif.ministry_id)
-            .maybeSingle();
-
-          customMessage = minSettings?.whatsapp_custom_message || "";
-
-          const first = assignments[0];
-          const eventTitle    = first.event_rules?.title || notif.event_title || "Culto";
-          const eventTimeStr  = first.event_rules?.time?.substring(0, 5) ?? "00:00";
-          const ministryLabel = first.organization_ministries?.label || "Ministério";
-          const ministryCode  = first.organization_ministries?.code || "";
-          const [tY, tM, tD]  = notif.event_date.split("-");
-          const dateStr = `${tD}/${tM}/${tY}`;
-
-          const template = getMinistryTemplate(ministryCode, ministryLabel);
-          const orientationsBlock = customMessage || template.orientations;
-          const closingBlock      = customMessage ? "" : `\n${template.closing}`;
-
-          const rolesMap: Record<string, string[]> = {};
-          assignments.forEach((t: any) => {
-            const r = t.role || "Membro";
-            if (!rolesMap[r]) rolesMap[r] = [];
-            rolesMap[r].push(t.profiles?.name || "Membro");
-          });
-          let teamList = "";
-          for (const r of Object.keys(rolesMap)) {
-            const names = rolesMap[r];
-            teamList += `${getEmojiForRole(r)} *${r}:* ${names.join(", ")}\n`;
-          }
-
-          for (const a of assignments) {
-             if (!a.profiles?.whatsapp) continue;
-             const phone = formatBrazilPhone(a.profiles.whatsapp);
-             if (!phone) continue;
-
-             const typeId = `scheduled_${notif.id}`;
-             const { data: sentAlready } = await supabase.from("whatsapp_notifications").select("id").eq("schedule_member_id", a.id).eq("type", typeId).maybeSingle();
-             if (sentAlready) continue;
-
-             const memberFirstName = a.profiles?.name.split(" ")[0] || "Membro";
-             
-             await supabase.from("whatsapp_pending_actions").insert({
-               organization_id: a.organization_id,
-               ministry_id: a.ministry_id,
-               member_id: a.member_id,
-               phone: phone,
-               type: "confirmation",
-               event_rule_id: a.event_rule_id,
-               event_date: a.event_date,
-               role: a.role,
-               status: "pending",
-               expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-             });
-
-             const content = {
-               title: `Escala — ${eventTitle}`,
-               description: `Olá, ${memberFirstName}!\n${template.greeting}\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}\n${orientationsBlock}${closingBlock}`,
-               footer: "Ministral • Gestão de Escalas"
-             };
-
-             const buttons = [
-               { id: "CONFIRMAR", text: "✅ Confirmar presença" },
-               { id: "RECUSAR", text: "❌ Não poderei comparecer" },
-               { id: "TROCA", text: "🔄 Solicitar troca" }
-             ];
-
-             try {
-                console.log(`[notif] Sending WA to ${phone} (name: ${memberFirstName})`);
-                const sendRes = await sendWhatsAppButtons(evolutionApiUrl, evolutionApiKey, instanceName, phone, content, buttons);
-                if (!sendRes.success) throw new Error(sendRes.error || "Unknown Error");
-                
-                await supabase.from("whatsapp_notifications").insert({
-                  schedule_member_id: a.id, type: typeId, sent_at: new Date().toISOString(), phone, organization_id: a.organization_id
-                });
-                sentCount++;
-             } catch (err) {
-                 console.error("Failed sending to " + phone, err);
-             }
-          }
-
-          await supabase.from("whatsapp_scheduled_notifications").update({ status: "completed" }).eq("id", notif.id);
-        } catch (subErr) {
-          console.error("Batch error", subErr);
-          await supabase.from("whatsapp_scheduled_notifications").update({ status: "failed" }).eq("id", notif.id);
-        }
+    for (const inst of usedInstances) {
+      const isReady = await ensureInstanceConnected(evolutionApiUrl, evolutionApiKey, inst);
+      if (!isReady) {
+        console.error(`[whatsapp-reminders] ⚠️ Instância "${inst}" não está pronta. Mensagens desta instância serão puladas.`);
       }
     }
 
-    return new Response(JSON.stringify({ success: true, processed: pendingNotifs?.length || 0, sentCount }), { status: 200, headers: { "Content-Type": "application/json" } });
+    console.log(`[whatsapp-reminders] Processando ${pendingNotifs.length} agendamento(s) em paralelo (batch=3)...`);
 
+    // ── 5. Processamento paralelo com concorrência limitada (max 3) ──────
+    const CONCURRENCY = 3;
+    const results: any[] = [];
+
+    for (let i = 0; i < pendingNotifs.length; i += CONCURRENCY) {
+      const batch = pendingNotifs.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.allSettled(
+        batch.map(notif =>
+          processNotification(notif, supabase, evolutionApiUrl, evolutionApiKey, defaultInstance, ministryMap)
+        )
+      );
+      batchResults.forEach(r => {
+        if (r.status === "fulfilled") results.push(r.value);
+        else results.push({ error: r.reason?.message || "Erro desconhecido" });
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, results }), {
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error: any) {
-    console.error("[whatsapp-reminders] error:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    console.error("[whatsapp-reminders] Erro crítico:", error);
+    return new Response(JSON.stringify({ error: "Ocorreu um erro interno no processamento do cron." }), {
+      status: 500, headers: { "Content-Type": "application/json" },
+    });
   }
 });
