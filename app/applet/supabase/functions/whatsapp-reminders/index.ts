@@ -27,9 +27,9 @@ async function fetchWithTimeout(resource: string, options: RequestInit & { timeo
 
 async function sendWhatsAppMessage(
   apiUrl: string, apiKey: string, instanceName: string, phone: string, text: string,
-  options: { timeout?: number; retries?: number } = {}
+  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused"; } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2 } = options;
+  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   let lastError = "";
 
@@ -37,7 +37,7 @@ async function sendWhatsAppMessage(
     try {
       const response = await fetchWithTimeout(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-        body: JSON.stringify({ number: phone, text }),
+        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
         timeout,
       });
       if (!response.ok) {
@@ -71,6 +71,55 @@ async function sendWhatsAppMessage(
   return { success: false, error: lastError };
 }
 
+export async function sendWhatsAppButtons(
+  apiUrl: string, apiKey: string, instanceName: string, phone: string,
+  content: { title: string, description: string, footer: string },
+  buttons: Array<{ id: string, text: string }>
+): Promise<{ success: boolean; error?: string }> {
+  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
+  
+  const payload = {
+    number: phone,
+    options: { delay: 1200, presence: "composing" },
+    buttonMessage: {
+      title: content.title,
+      description: content.description,
+      footer: content.footer,
+      buttons: buttons.map((b) => ({
+        buttonId: b.id,
+        buttonText: { displayText: b.text },
+        type: 1
+      }))
+    }
+  };
+
+  try {
+    const response = await fetchWithTimeout(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Status ${response.status} - Falha ao enviar botões`);
+    }
+    return { success: true };
+
+  } catch (error) {
+    console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
+    
+    // --- FALLBACK PARA TEXTO ---
+    let fallbackText = `*${content.title}*\\n\\n${content.description}\\n\\n`;
+    fallbackText += `*Responda com o NÚMERO da opção desejada:*\\n`;
+    
+    buttons.forEach((b, index) => {
+      fallbackText += `*[ ${index + 1} ]* - ${b.text}\\n`;
+    });
+    
+    fallbackText += `\\n_${content.footer}_`;
+
+    return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
+  }
+}
 
 // ── Verifica e reconecta instância se necessário ───────────────────────────
 
@@ -159,54 +208,59 @@ interface MinistryTemplate {
 const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
   louvor: {
     header: "🎵",
-    greeting: "Você está escalado(a) no louvor! Que honra servir ao Senhor com você. 🙌",
+    greeting: "Você está confirmado(a) na escala de louvor! Que honra servir ao Senhor com você. 🙌",
     orientations: `⚠️ *Orientações do Louvor:*
 1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.
 2. Revise as músicas com antecedência — a excelência começa em casa.
-3. Verifique as cifras e letras no app antes do culto.
-4. Em caso de imprevisto, avise a *liderança imediatamente*.`,
+3. Verifique os cifras e letras no app antes do culto.
+4. Em caso de imprevisto, avise a *liderança imediatamente*.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🎶 Vamos adorar com tudo que somos. Ele é digno!"
   },
 
   infantil: {
     header: "🌈",
-    greeting: "Você está escalado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
+    greeting: "Você está confirmado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
     orientations: `⚠️ *Orientações do Infantil:*
 1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.
 2. Confira os materiais pedagógicos e a lição do dia com antecedência.
 3. A *segurança das crianças* é prioridade — siga todos os protocolos.
-4. Nunca deixe uma criança sozinha sem supervisão.`,
+4. Nunca deixe uma criança sozinha sem supervisão.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🌟 \"Deixai os pequeninos virem a mim\" — Que privilégio servir a eles!"
   },
 
   midia: {
     header: "💻",
-    greeting: "Você está escalado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
+    greeting: "Você está confirmado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
     orientations: `⚠️ *Orientações de Mídia:*
 1. Chegue *40 minutos antes* para checklist completo dos equipamentos.
 2. Verifique câmeras, cabos, streaming e projetores antes do início.
 3. Teste o link de transmissão ao vivo com antecedência.
-4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).`,
+4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "📡 Cada click seu leva o evangelho mais longe. Valeu!"
   },
 
   recepcao: {
     header: "🤝",
-    greeting: "Você está escalado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
+    greeting: "Você está confirmado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
     orientations: `⚠️ *Orientações da Recepção:*
 1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.
-2. Esteja com o visual adequado.
+2. Esteja com o visual adequado (uniforme/crachá se aplicável).
 3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.
-4. Fique atento a visitantes e pessoas com necessidades especiais.`,
+4. Fique atento a visitantes e pessoas com necessidades especiais.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🏠 Você não recebe pessoas — você recebe famílias. Obrigado!"
   },
 
   default: {
     header: "⛪",
-    greeting: "Você está escalado(a) no ministério! Obrigado pelo seu serviço.",
+    greeting: "Você está confirmado(a) na escala do ministério! Obrigado pelo seu serviço.",
     orientations: `⚠️ *Orientações:*
-1. Cheguem com antecedência para check-list das atividades.
-2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.`,
+1. Cheguem com *30 minutos de antecedência* para check-list dos equipamentos.
+2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
+3. Não esqueça de confirmar a escala realizando o *check-in no aplicativo*.`,
     closing: "🚀 Vamos juntos servir com excelência!"
   }
 };
@@ -355,7 +409,7 @@ async function processNotification(
     // Mensagem customizada pelo admin sobrescreve as orientações do template
     const customMsg = await getCustomMsg(first.ministry_id);
     const orientationsBlock = customMsg || template.orientations;
-    const closingBlock      = customMsg ? "" : `\n${template.closing}`;
+    const closingBlock      = customMsg ? "" : `\\n${template.closing}`;
 
     // Monta lista de membros por função
     const roleMembers = new Map<string, string[]>();
@@ -367,7 +421,7 @@ async function processNotification(
 
     let teamList = "";
     for (const [role, members] of roleMembers.entries()) {
-      teamList += `${getEmojiForRole(role)} *${role}:* ${members.join(", ")}\n`;
+      teamList += `${getEmojiForRole(role)} *${role}:* ${members.join(", ")}\\n`;
     }
 
     const sentToPhones    = new Set<string>();
@@ -395,12 +449,36 @@ async function processNotification(
         continue;
       }
 
-      // --- Envia notificação simples ---
-      const memberFirstName = profile.name.split(" ")[0] || "Membro";
-      const messageText = `*Escala — ${eventTitle}*\n\nOlá, ${memberFirstName}!\n${template.greeting}\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}\n${orientationsBlock}${closingBlock}\n\n_Ministral • Gestão de Escalas_`;
+      // --- Insere ação pendente para o membro ---
+      await supabase.from("whatsapp_pending_actions").insert({
+        organization_id: orgId,
+        ministry_id: a.ministry_id,
+        member_id: a.member_id,
+        phone: formattedPhone,
+        type: "confirmation",
+        event_rule_id: a.event_rule_id,
+        event_date: targetDate,
+        role: a.role,
+        status: "pending",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Expira em 24h
+      });
 
-      const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
-        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, messageText
+      // --- Envia com botões e fallback ---
+      const memberFirstName = profile.name.split(" ")[0] || "Membro";
+      const content = {
+        title: `Escala — ${eventTitle}`,
+        description: `Olá, ${memberFirstName}!\\n${template.greeting}\\n\\n🗓️ *Data:* ${dateStr}\\n⏰ *Horário:* ${eventTimeStr}\\n⛪ *Ministério:* ${ministryLabel}\\n\\n*Equipe Escalada:*\\n${teamList}\\n${orientationsBlock}${closingBlock}`,
+        footer: "Ministral • Gestão de Escalas"
+      };
+
+      const buttons = [
+        { id: "CONFIRMAR", text: "✅ Confirmar presença" },
+        { id: "RECUSAR", text: "❌ Não poderei comparecer" },
+        { id: "TROCA", text: "🔄 Solicitar troca" }
+      ];
+
+      const { success: msgOk, error: msgErr } = await sendWhatsAppButtons(
+        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, content, buttons
       );
 
       if (msgOk) {
