@@ -9,23 +9,72 @@ function formatBrazilPhone(raw: string | null | undefined): string | null {
   return '55' + digits;
 }
 
-async function sendWhatsAppMessage(
-  apiUrl: string, apiKey: string, instanceName: string, phone: string, text: string
-) {
-  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
+// --- INLINE UTILS ---
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
+  const { timeout = 8000, ...fetchOptions } = options;
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 8000);
+  const id = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(endpoint, {
-      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify({ number: phone, options: { delay: 1200, presence: "composing" }, text }),
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error("Status " + response.status);
-    return { success: true };
+    const response = await fetch(resource, { ...fetchOptions, signal: controller.signal });
+    return response;
   } finally {
     clearTimeout(id);
   }
+}
+export async function sendWhatsAppMessage(
+  apiUrl: string,
+  apiKey: string,
+  instanceName: string,
+  phone: string,
+  text: string,
+  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused" } = {}
+): Promise<{ success: boolean; error?: string }> {
+  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
+  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
+  let lastError = "";
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: apiKey },
+        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
+        timeout,
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        lastError = `Evolution API ${response.status}: ${body}`;
+        
+        if (response.status === 428 || body.includes('Connection Closed') || body.includes('Not Connected')) {
+          console.warn(`[whatsapp-reminders] Conexão fechada detectada (${instanceName}). Forçando RESTART (tentativa ${attempt + 1})...`);
+          try {
+            await fetchWithTimeout(`${apiUrl}/instance/restart/${instanceName}`, { 
+                method: "PUT",
+                headers: { apikey: apiKey }, 
+                timeout: 15000 
+            });
+            await sleep(5000); 
+          } catch(e) { /* ignore restart error */ }
+        }
+        await sleep(1000 * (attempt + 1));
+        continue;
+      }
+      
+      await response.json().catch(() => {});
+      return { success: true };
+    } catch (error: any) {
+      lastError = error.message;
+      if (lastError.includes("aborted")) {
+        lastError = "Timeout exceeding " + timeout + "ms";
+      }
+      if (attempt < retries) {
+        await sleep(1000 * (attempt + 1));
+      }
+    }
+  }
+  return { success: false, error: lastError };
 }
 
 const ROLE_EMOJIS: Record<string, string> = {
@@ -185,7 +234,9 @@ serve(async (req: Request) => {
 
              try {
                 console.log(`[notif] Sending WA to ${phone} (name: ${memberFirstName})`);
-                await sendWhatsAppMessage(evolutionApiUrl, evolutionApiKey, instanceName, phone, messageText);
+                const sendRes = await sendWhatsAppMessage(evolutionApiUrl, evolutionApiKey, instanceName, phone, messageText);
+                if (!sendRes.success) throw new Error(sendRes.error || "Unknown Error");
+                
                 await supabase.from("whatsapp_notifications").insert({
                   schedule_member_id: a.id, type: typeId, sent_at: new Date().toISOString(), phone, organization_id: a.organization_id
                 });
