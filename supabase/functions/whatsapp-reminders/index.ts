@@ -14,7 +14,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
-  const { timeout = 8000, ...fetchOptions } = options;
+  const { timeout = 20000, ...fetchOptions } = options;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -29,7 +29,7 @@ async function sendWhatsAppMessage(
   apiUrl: string, apiKey: string, instanceName: string, phone: string, text: string,
   options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused"; } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
+  const { timeout = 20000, retries = 0, delayMs = 1200, presence = "composing" } = options;
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   let lastError = "";
 
@@ -51,9 +51,9 @@ async function sendWhatsAppMessage(
             await fetchWithTimeout(`${apiUrl}/instance/restart/${instanceName}`, { 
                 method: "PUT",
                 headers: { apikey: apiKey }, 
-                timeout: 15000 
+                timeout: 10000 
             });
-            await sleep(10000); // Aguarda o socket do Baileys subir após restart
+            await sleep(5000); // Aguarda o socket do Baileys subir após restart
           } catch (e) {
             console.error(`[whatsapp-reminders] Falha ao tentar forçar restart:`, e);
           }
@@ -104,7 +104,12 @@ export async function sendWhatsAppButtons(
     }
     return { success: true };
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`[whatsapp] Timeout ao enviar botões para ${phone}. Assumindo entregue para evitar duplicidade.`);
+      return { success: true, error: "timeout_assumed_delivered" };
+    }
+
     console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
     
     // --- FALLBACK PARA TEXTO ---

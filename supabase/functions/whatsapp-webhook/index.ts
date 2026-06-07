@@ -9,7 +9,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 async function fetchWithTimeout(resource: string, options: RequestInit & { timeout?: number }): Promise<Response> {
-  const { timeout = 8000, ...fetchOptions } = options;
+  const { timeout = 20000, ...fetchOptions } = options;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -27,7 +27,7 @@ export async function sendWhatsAppMessage(
   text: string,
   options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused" } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
+  const { timeout = 20000, retries = 0, delayMs = 1200, presence = "composing" } = options;
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   let lastError = "";
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -46,6 +46,9 @@ export async function sendWhatsAppMessage(
       }
       return { success: true };
     } catch (err: any) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: true, error: "timeout_assumed_delivered" };
+      }
       lastError = err?.message || String(err);
       if (attempt < retries) { await sleep(1000 * (attempt + 1)); continue; }
     }
@@ -73,7 +76,10 @@ export async function sendWhatsAppButtons(
     });
     if (!response.ok) throw new Error(`Status ${response.status}`);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: true, error: "timeout_assumed_delivered" };
+    }
     console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
     let fallbackText = `*${content.title}*\n\n${content.description}\n\n_${content.footer}_`;
     return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
