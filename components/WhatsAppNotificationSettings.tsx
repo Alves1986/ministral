@@ -616,20 +616,31 @@ export const WhatsAppNotificationSettings: React.FC<Props> = ({ orgId, ministryI
 
                     <div className="px-3.5 pb-3.5">
                       {existing ? (
-                        <div className="flex items-center justify-between gap-2 p-2.5 bg-white dark:bg-zinc-800 rounded-lg border border-green-100 dark:border-green-500/20">
+                        <div className={`flex items-center justify-between gap-2 p-2.5 bg-white dark:bg-zinc-800 rounded-lg border ${existing.status === 'completed' ? 'border-blue-100 dark:border-blue-500/20' : existing.status === 'failed' || existing.status === 'skipped' ? 'border-orange-100 dark:border-orange-500/20' : 'border-green-100 dark:border-green-500/20'}`}>
                           <div className="flex items-center gap-1.5 text-xs min-w-0">
-                            <Send size={10} className="text-green-500 shrink-0" />
+                            {existing.status === 'completed' ? (
+                                <Check size={10} className="text-blue-500 shrink-0" />
+                            ) : existing.status === 'skipped' || existing.status === 'failed' ? (
+                                <AlertTriangle size={10} className="text-orange-500 shrink-0" />
+                            ) : (
+                                <Send size={10} className="text-green-500 shrink-0" />
+                            )}
                             <span className="text-zinc-600 dark:text-zinc-300 font-medium truncate">
                               {new Date(existing.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              {existing.status === 'completed' && ' (Concluído)'}
+                              {existing.status === 'skipped' && ' (Ignorado)'}
+                              {existing.status === 'failed' && ' (Falhou)'}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleCancelSingle(existing.id)}
-                            disabled={isSaving}
-                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                          >
-                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                          </button>
+                          {(existing.status === 'pending' || existing.status === 'processing') && (
+                            <button
+                               onClick={() => handleCancelSingle(existing.id)}
+                               disabled={isSaving}
+                               className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                            >
+                               {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-stretch gap-2">

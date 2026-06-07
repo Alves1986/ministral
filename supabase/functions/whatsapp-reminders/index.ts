@@ -68,7 +68,8 @@ serve(async (req: Request) => {
       .lte("scheduled_at", nowIso);
 
     if (notifErr) throw notifErr;
-    
+    console.log(`[cron] Found ${pendingNotifs?.length || 0} pending notifications to process.`);
+
     let sentCount = 0;
     
     if (pendingNotifs && pendingNotifs.length > 0) {
@@ -100,6 +101,7 @@ serve(async (req: Request) => {
         try {
           const { data: planCheck } = await supabase.from("organizations").select("plan_type, whatsapp_enabled").eq("id", notif.organization_id).single();
           if (planCheck?.whatsapp_enabled === false || (planCheck?.plan_type !== "pro" && planCheck?.plan_type !== "enterprise")) {
+            console.log(`[notif] Skipped because organization does not have pro/enterprise plan or whatsapp is disabled. (Type: ${planCheck?.plan_type}, Enabled: ${planCheck?.whatsapp_enabled})`);
             await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
             continue;
           }
@@ -116,14 +118,16 @@ serve(async (req: Request) => {
             .eq("event_rule_id", notif.event_rule_id)
             .eq("event_date", notif.event_date);
             
+          console.log(`[notif] processing rule ${notif.event_rule_id} for date ${notif.event_date}: Found ${assignments?.length || 0} assignments.`);
+
           if (!assignments || assignments.length === 0) {
+            console.log(`[notif] Skipped because there are 0 assignments.`);
             await supabase.from("whatsapp_scheduled_notifications").update({ status: "completed" }).eq("id", notif.id);
             continue;
           }
 
           const instanceName = minInstanceMap.get(notif.ministry_id) || defaultInstance;
           
-          let instructions = "";
           let customMessage = "";
           const { data: minSettings } = await supabase
             .from("ministry_settings")
@@ -131,7 +135,6 @@ serve(async (req: Request) => {
             .eq("ministry_id", notif.ministry_id)
             .maybeSingle();
 
-          instructions = minSettings?.whatsapp_custom_instructions || "";
           customMessage = minSettings?.whatsapp_custom_message || "";
 
           let teamList = "";
@@ -172,13 +175,11 @@ serve(async (req: Request) => {
              } else {
                 messageText = `*Escala — ${eventTitle}*\n\nOlá, ${memberFirstName}! Você está escalado(a).\n\n🗓️ *Data:* ${dateDisplay}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}`;
                 
-                if (instructions) {
-                   messageText += `\n*Orientações:*\n${instructions}`;
-                }
                 messageText += `\n\n_Se você não puder comparecer, por favor acesse o aplicativo e solicite substituição._\n\nMinistral • Gestão de Escalas`;
              }
 
              try {
+                console.log(`[notif] Sending WA to ${phone} (name: ${memberFirstName})`);
                 await sendWhatsAppMessage(evolutionApiUrl, evolutionApiKey, instanceName, phone, messageText);
                 await supabase.from("whatsapp_notifications").insert({
                   schedule_member_id: a.id, type: typeId, sent_at: new Date().toISOString(), phone, organization_id: a.organization_id
