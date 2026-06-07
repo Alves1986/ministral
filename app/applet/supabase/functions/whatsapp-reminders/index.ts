@@ -27,9 +27,9 @@ async function fetchWithTimeout(resource: string, options: RequestInit & { timeo
 
 async function sendWhatsAppMessage(
   apiUrl: string, apiKey: string, instanceName: string, phone: string, text: string,
-  options: { timeout?: number; retries?: number; delayMs?: number; presence?: "composing" | "recording" | "paused"; } = {}
+  options: { timeout?: number; retries?: number } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  const { timeout = 8000, retries = 2, delayMs = 1200, presence = "composing" } = options;
+  const { timeout = 8000, retries = 2 } = options;
   const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   let lastError = "";
 
@@ -37,7 +37,7 @@ async function sendWhatsAppMessage(
     try {
       const response = await fetchWithTimeout(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-        body: JSON.stringify({ number: phone, options: { delay: delayMs, presence }, text }),
+        body: JSON.stringify({ number: phone, text }),
         timeout,
       });
       if (!response.ok) {
@@ -159,59 +159,54 @@ interface MinistryTemplate {
 const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
   louvor: {
     header: "🎵",
-    greeting: "Você está confirmado(a) na escala de louvor! Que honra servir ao Senhor com você. 🙌",
+    greeting: "Você está escalado(a) no louvor! Que honra servir ao Senhor com você. 🙌",
     orientations: `⚠️ *Orientações do Louvor:*
 1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.
 2. Revise as músicas com antecedência — a excelência começa em casa.
-3. Verifique os cifras e letras no app antes do culto.
-4. Em caso de imprevisto, avise a *liderança imediatamente*.
-5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+3. Verifique as cifras e letras no app antes do culto.
+4. Em caso de imprevisto, avise a *liderança imediatamente*.`,
     closing: "🎶 Vamos adorar com tudo que somos. Ele é digno!"
   },
 
   infantil: {
     header: "🌈",
-    greeting: "Você está confirmado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
+    greeting: "Você está escalado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
     orientations: `⚠️ *Orientações do Infantil:*
 1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.
 2. Confira os materiais pedagógicos e a lição do dia com antecedência.
 3. A *segurança das crianças* é prioridade — siga todos os protocolos.
-4. Nunca deixe uma criança sozinha sem supervisão.
-5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+4. Nunca deixe uma criança sozinha sem supervisão.`,
     closing: "🌟 \"Deixai os pequeninos virem a mim\" — Que privilégio servir a eles!"
   },
 
   midia: {
     header: "💻",
-    greeting: "Você está confirmado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
+    greeting: "Você está escalado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
     orientations: `⚠️ *Orientações de Mídia:*
 1. Chegue *40 minutos antes* para checklist completo dos equipamentos.
 2. Verifique câmeras, cabos, streaming e projetores antes do início.
 3. Teste o link de transmissão ao vivo com antecedência.
-4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).
-5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).`,
     closing: "📡 Cada click seu leva o evangelho mais longe. Valeu!"
   },
 
   recepcao: {
     header: "🤝",
-    greeting: "Você está confirmado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
+    greeting: "Você está escalado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
     orientations: `⚠️ *Orientações da Recepção:*
 1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.
-2. Esteja com o visual adequado (uniforme/crachá se aplicável).
+2. Esteja com o visual adequado.
 3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.
-4. Fique atento a visitantes e pessoas com necessidades especiais.
-5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+4. Fique atento a visitantes e pessoas com necessidades especiais.`,
     closing: "🏠 Você não recebe pessoas — você recebe famílias. Obrigado!"
   },
 
   default: {
     header: "⛪",
-    greeting: "Você está confirmado(a) na escala do ministério! Obrigado pelo seu serviço.",
+    greeting: "Você está escalado(a) no ministério! Obrigado pelo seu serviço.",
     orientations: `⚠️ *Orientações:*
-1. Cheguem com *30 minutos de antecedência* para check-list dos equipamentos.
-2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
-3. Não esqueça de confirmar a escala realizando o *check-in no aplicativo*.`,
+1. Cheguem com antecedência para check-list das atividades.
+2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.`,
     closing: "🚀 Vamos juntos servir com excelência!"
   }
 };
