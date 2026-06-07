@@ -67,7 +67,10 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !user) {
-      throw new Error("Usuário não autenticado: " + (userErr?.message || "Não encontrado"));
+      console.warn("[whatsapp-status] Unauthorized call or invalid token.");
+      return new Response(JSON.stringify({ error: "Usuário não autenticado." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
     if (!isGlobal) {

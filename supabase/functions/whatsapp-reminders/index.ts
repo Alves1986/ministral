@@ -569,7 +569,7 @@ serve(async (req: Request) => {
     // Coleta as instâncias únicas que serão usadas neste ciclo
     const notifMinistryIds = [...new Set(pendingNotifs.map((n: any) => n.ministry_id).filter(Boolean))];
     const usedInstances = new Set<string>();
-    usedInstances.add(instanceName); // instância global sempre verificada
+    usedInstances.add(defaultInstance); // instância global sempre verificada
     notifMinistryIds.forEach((mid: string) => {
       const instForMin = ministryMap.get(mid);
       if (instForMin) usedInstances.add(instForMin);
@@ -592,7 +592,7 @@ serve(async (req: Request) => {
       const batch = pendingNotifs.slice(i, i + CONCURRENCY);
       const batchResults = await Promise.allSettled(
         batch.map(notif =>
-          processNotification(notif, supabase, evolutionApiUrl, evolutionApiKey, instanceName, ministryMap)
+          processNotification(notif, supabase, evolutionApiUrl, evolutionApiKey, defaultInstance, ministryMap)
         )
       );
       batchResults.forEach(r => {
