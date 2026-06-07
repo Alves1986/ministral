@@ -560,6 +560,12 @@ serve(async (req: Request) => {
       });
     }
 
+    // ── 4.1. Marca como "processing" para evitar duplicidade em execuções longas ──
+    const notifIds = pendingNotifs.map((n: any) => n.id);
+    await supabase.from("whatsapp_scheduled_notifications")
+      .update({ status: "processing" })
+      .in("id", notifIds);
+
     // ── 4.5. Verifica/reconecta TODAS as instâncias únicas antes de enviar ──
     // Coleta as instâncias únicas que serão usadas neste ciclo
     const notifMinistryIds = [...new Set(pendingNotifs.map((n: any) => n.ministry_id).filter(Boolean))];
