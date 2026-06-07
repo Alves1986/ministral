@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 // ── Funções Inlined (Para suportar deploy via Dashboard em arquivo único) ──
 function formatBrazilPhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -72,55 +71,6 @@ async function sendWhatsAppMessage(
   return { success: false, error: lastError };
 }
 
-export async function sendWhatsAppButtons(
-  apiUrl: string, apiKey: string, instanceName: string, phone: string,
-  content: { title: string, description: string, footer: string },
-  buttons: Array<{ id: string, text: string }>
-): Promise<{ success: boolean; error?: string }> {
-  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
-  
-  const payload = {
-    number: phone,
-    options: { delay: 1200, presence: "composing" },
-    buttonMessage: {
-      title: content.title,
-      description: content.description,
-      footer: content.footer,
-      buttons: buttons.map((b) => ({
-        buttonId: b.id,
-        buttonText: { displayText: b.text },
-        type: 1
-      }))
-    }
-  };
-
-  try {
-    const response = await fetchWithTimeout(endpoint, {
-      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Status ${response.status} - Falha ao enviar botões`);
-    }
-    return { success: true };
-
-  } catch (error) {
-    console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
-    
-    // --- FALLBACK PARA TEXTO ---
-    let fallbackText = `*${content.title}*\n\n${content.description}\n\n`;
-    fallbackText += `*Responda com o NÚMERO da opção desejada:*\n`;
-    
-    buttons.forEach((b, index) => {
-      fallbackText += `*[ ${index + 1} ]* - ${b.text}\n`;
-    });
-    
-    fallbackText += `\n_${content.footer}_`;
-
-    return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
-  }
-}
 
 // ── Verifica e reconecta instância se necessário ───────────────────────────
 
@@ -210,35 +160,58 @@ const MINISTRY_TEMPLATES: Record<string, MinistryTemplate> = {
   louvor: {
     header: "🎵",
     greeting: "Você está confirmado(a) na escala de louvor! Que honra servir ao Senhor com você. 🙌",
-    orientations: `⚠️ *Orientações do Louvor:*\n1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.\n2. Revise as músicas com antecedência — a excelência começa em casa.\n3. Verifique os cifras e letras no app antes do culto.\n4. Em caso de imprevisto, avise a *liderança imediatamente*.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    orientations: `⚠️ *Orientações do Louvor:*
+1. Chegue *30 minutos antes* para aquecimento vocal e soundcheck.
+2. Revise as músicas com antecedência — a excelência começa em casa.
+3. Verifique os cifras e letras no app antes do culto.
+4. Em caso de imprevisto, avise a *liderança imediatamente*.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🎶 Vamos adorar com tudo que somos. Ele é digno!"
   },
 
   infantil: {
     header: "🌈",
     greeting: "Você está confirmado(a) na equipe do Ministério Infantil! As crianças vão te esperar. 🥰",
-    orientations: `⚠️ *Orientações do Infantil:*\n1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.\n2. Confira os materiais pedagógicos e a lição do dia com antecedência.\n3. A *segurança das crianças* é prioridade — siga todos os protocolos.\n4. Nunca deixe uma criança sozinha sem supervisão.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    orientations: `⚠️ *Orientações do Infantil:*
+1. Chegue *20 minutos antes* para preparar o ambiente e as atividades.
+2. Confira os materiais pedagógicos e a lição do dia com antecedência.
+3. A *segurança das crianças* é prioridade — siga todos os protocolos.
+4. Nunca deixe uma criança sozinha sem supervisão.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🌟 \"Deixai os pequeninos virem a mim\" — Que privilégio servir a eles!"
   },
 
   midia: {
     header: "💻",
     greeting: "Você está confirmado(a) na equipe de Mídia! Sua habilidade faz o culto chegar mais longe. 🎬",
-    orientations: `⚠️ *Orientações de Mídia:*\n1. Chegue *40 minutos antes* para checklist completo dos equipamentos.\n2. Verifique câmeras, cabos, streaming e projetores antes do início.\n3. Teste o link de transmissão ao vivo com antecedência.\n4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    orientations: `⚠️ *Orientações de Mídia:*
+1. Chegue *40 minutos antes* para checklist completo dos equipamentos.
+2. Verifique câmeras, cabos, streaming e projetores antes do início.
+3. Teste o link de transmissão ao vivo com antecedência.
+4. Tenha um plano B para falhas técnicas — esteja sempre preparado(a).
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "📡 Cada click seu leva o evangelho mais longe. Valeu!"
   },
 
   recepcao: {
     header: "🤝",
     greeting: "Você está confirmado(a) na equipe de Recepção! Você é o primeiro sorriso que alguém vê. 💛",
-    orientations: `⚠️ *Orientações da Recepção:*\n1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.\n2. Esteja com o visual adequado (uniforme/crachá se aplicável).\n3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.\n4. Fique atento a visitantes e pessoas com necessidades especiais.\n5. Confirme sua presença fazendo *check-in no aplicativo*.`,
+    orientations: `⚠️ *Orientações da Recepção:*
+1. Chegue *30 minutos antes* — sua pontualidade é a nossa hospitalidade.
+2. Esteja com o visual adequado (uniforme/crachá se aplicável).
+3. Acolha *cada pessoa* como se fosse a primeira vez que ela entra numa igreja.
+4. Fique atento a visitantes e pessoas com necessidades especiais.
+5. Confirme sua presença fazendo *check-in no aplicativo*.`,
     closing: "🏠 Você não recebe pessoas — você recebe famílias. Obrigado!"
   },
 
   default: {
     header: "⛪",
     greeting: "Você está confirmado(a) na escala do ministério! Obrigado pelo seu serviço.",
-    orientations: `⚠️ *Orientações:*\n1. Cheguem com *30 minutos de antecedência* para check-list dos equipamentos.\n2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.\n3. Não esqueça de confirmar a escala realizando o *check-in no aplicativo*.`,
+    orientations: `⚠️ *Orientações:*
+1. Cheguem com *30 minutos de antecedência* para check-list dos equipamentos.
+2. Caso haja algum imprevisto, comuniquem a liderança imediatamente.
+3. Não esqueça de confirmar a escala realizando o *check-in no aplicativo*.`,
     closing: "🚀 Vamos juntos servir com excelência!"
   }
 };
@@ -263,6 +236,8 @@ function getMinistryTemplate(code: string, label: string): MinistryTemplate {
 
   return MINISTRY_TEMPLATES.default;
 }
+
+
 
 // ── Função de processamento por notificação ───────────────────────────────────
 
@@ -336,6 +311,7 @@ async function processNotification(
   }
 
   if (!assignments || assignments.length === 0) {
+    // CORREÇÃO: usar 'skipped' em vez de 'sent' — permite reprocessamento se assignments forem adicionados
     await supabase.from("whatsapp_scheduled_notifications").update({ status: "skipped" }).eq("id", notif.id);
     return { notif_id: notif.id, date: targetDate, sent: 0, reason: "Sem assignments." };
   }
@@ -345,12 +321,13 @@ async function processNotification(
   // ── Agrupa assignments por evento e ministério ───────────────────────────
   const eventsMap = new Map<string, any[]>();
   for (const a of assignments) {
-    const key = `${a.ministry_id}_${a.event_rule_id || `fallback_${a.event_date}`}`;
+    const key = `${a.ministry_id}_${a.event_rule_id || \`fallback_${a.event_date}\`}`;
     if (!eventsMap.has(key)) eventsMap.set(key, []);
     eventsMap.get(key)!.push(a);
   }
 
   // ── Cache de mensagens customizadas por ministry_id ─────────────────────
+  // (busca uma vez por ministério para evitar queries repetidas no loop de membros)
   const customMsgCache = new Map<string, string | null>();
   async function getCustomMsg(ministryId: string): Promise<string | null> {
     if (customMsgCache.has(ministryId)) return customMsgCache.get(ministryId) ?? null;
@@ -377,9 +354,13 @@ async function processNotification(
     const [tY, tM, tD]  = targetDate.split("-");
     const dateStr = `${tD}/${tM}/${tY}`;
 
-    // ── Seleciona template correto e mensagem customizada ──────────────────
+    // ── Seleciona template correto ────────────────────────────────────────
     const template = getMinistryTemplate(ministryCode, ministryLabel);
+
+    // Mensagem customizada pelo admin sobrescreve as orientações do template
     const customMsg = await getCustomMsg(first.ministry_id);
+    const orientationsBlock = customMsg || template.orientations;
+    const closingBlock      = customMsg ? "" : `\n${template.closing}`;
 
     // Monta lista de membros por função
     const roleMembers = new Map<string, string[]>();
@@ -419,52 +400,12 @@ async function processNotification(
         continue;
       }
 
-      // --- Insere ação pendente para o membro ---
-      await supabase.from("whatsapp_pending_actions").insert({
-        organization_id: orgId,
-        ministry_id: a.ministry_id,
-        member_id: a.member_id,
-        phone: formattedPhone,
-        type: "confirmation",
-        event_rule_id: a.event_rule_id,
-        event_date: targetDate,
-        role: a.role,
-        status: "pending",
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Expira em 24h
-      });
-
-      // --- Monta a descrição do conteúdo para exibir o Olá {Nome} corretamente ---
+      // --- Envia notificação simples ---
       const memberFirstName = profile.name.split(" ")[0] || "Membro";
-      
-      let description = `Olá, ${memberFirstName}!\n`;
-      if (!customMsg) {
-          description += `${template.greeting}\n\n`;
-      } else {
-          description += `\n`;
-      }
+      const messageText = `*Escala — ${eventTitle}*\n\nOlá, ${memberFirstName}!\n${template.greeting}\n\n🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}\n${orientationsBlock}${closingBlock}\n\n_Ministral • Gestão de Escalas_`;
 
-      description += `🗓️ *Data:* ${dateStr}\n⏰ *Horário:* ${eventTimeStr}\n⛪ *Ministério:* ${ministryLabel}\n\n*Equipe Escalada:*\n${teamList}`;
-      
-      if (customMsg) {
-          description += `\n${customMsg}`;
-      } else {
-          description += `\n${template.orientations}\n${template.closing}`;
-      }
-
-      const content = {
-        title: `Escala — ${eventTitle}`,
-        description: description,
-        footer: "Ministral • Gestão de Escalas"
-      };
-
-      const buttons = [
-        { id: "CONFIRMAR", text: "✅ Confirmar presença" },
-        { id: "RECUSAR", text: "❌ Não poderei comparecer" },
-        { id: "TROCA", text: "🔄 Solicitar troca" }
-      ];
-
-      const { success: msgOk, error: msgErr } = await sendWhatsAppButtons(
-        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, content, buttons
+      const { success: msgOk, error: msgErr } = await sendWhatsAppMessage(
+        evolutionApiUrl, evolutionApiKey, currentInstance, formattedPhone, messageText
       );
 
       if (msgOk) {
@@ -475,7 +416,7 @@ async function processNotification(
           organization_id: orgId,
           ministry_id: a.ministry_id,
           instance_name: currentInstance,
-          phone: formattedPhone // Ajustado para ser compatível e evitar o erro "recipient_phone missing"
+          recipient_phone: formattedPhone
         }).then(({ error: logErr }) => {
           if (logErr) console.warn("[whatsapp-reminders] Log error:", logErr.message);
         });
