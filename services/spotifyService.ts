@@ -48,7 +48,13 @@ export const getClientCredentialsToken = async (customClientId?: string, customC
             })
         });
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error(`Falha no servidor ao obter token do Spotify (Status: ${response.status}).`);
+        }
+
         if (data.access_token) {
             appToken = data.access_token;
             tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; 
@@ -288,9 +294,15 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
 
 export const searchSpotifyTracks = async (query: string, customClientId?: string, customClientSecret?: string): Promise<SpotifyTrack[]> => {
     let token = getUserToken();
-    if (!token) token = await getClientCredentialsToken(customClientId, customClientSecret);
+    if (!token) {
+        try {
+            token = await getClientCredentialsToken(customClientId, customClientSecret);
+        } catch (e) {
+            console.warn("Fallback de API do Spotify falhou:", e);
+        }
+    }
 
-    if (!token) throw new Error("Para buscar músicas no Spotify, faça o login (botão Conectar) com a sua conta.");
+    if (!token) throw new Error("Para buscar músicas no Spotify, é necessário fazer Login com sua conta (botão Conectar) ou ter a API configurada nas variáveis ambientais.");
 
     try {
         const data = await fetchSpotify(`/search?q=${encodeURIComponent(query)}&type=track&limit=10`, token);

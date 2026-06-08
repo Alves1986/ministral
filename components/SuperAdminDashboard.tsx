@@ -29,7 +29,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                 .select(`
                     id,
                     created_at,
-                    org_id,
+                    organization_id,
                     ministry_id,
                     instance_name,
                     organizations ( name ),
@@ -46,18 +46,19 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
             const orgData = Array.isArray(log.organizations) ? log.organizations[0] : log.organizations;
             const minData = Array.isArray(log.organization_ministries) ? log.organization_ministries[0] : log.organization_ministries;
             
-            const orgName = orgData?.name || `Org #${log.org_id}`;
+            const orgId = log.organization_id || 'unknown';
+            const orgName = orgData?.name || `Org #${orgId}`;
             const minLabel = minData?.label || `Min #${log.ministry_id}`;
             
-            if (!map[log.org_id]) {
-                map[log.org_id] = { name: orgName, count: 0, ministries: {} };
+            if (!map[orgId]) {
+                map[orgId] = { name: orgName, count: 0, ministries: {} };
             }
-            map[log.org_id].count++;
+            map[orgId].count++;
             
-            if (!map[log.org_id].ministries[log.ministry_id]) {
-                map[log.org_id].ministries[log.ministry_id] = { label: minLabel, count: 0 };
+            if (!map[orgId].ministries[log.ministry_id]) {
+                map[orgId].ministries[log.ministry_id] = { label: minLabel, count: 0 };
             }
-            map[log.org_id].ministries[log.ministry_id].count++;
+            map[orgId].ministries[log.ministry_id].count++;
         });
         return Object.entries(map).map(([id, val]) => ({ id, ...val }));
     }, [usageLogs]);
@@ -510,7 +511,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                     })}
                                                 </td>
                                                 <td className="px-6 py-3.5 font-bold text-zinc-800 dark:text-zinc-200">
-                                                    {(Array.isArray(log.organizations) ? log.organizations[0]?.name : log.organizations?.name) || `Org #${log.org_id}`}
+                                                    {(Array.isArray(log.organizations) ? log.organizations[0]?.name : log.organizations?.name) || `Org #${log.organization_id}`}
                                                 </td>
                                                 <td className="px-6 py-3.5 text-zinc-600 dark:text-zinc-400 font-bold">
                                                     {(Array.isArray(log.organization_ministries) ? log.organization_ministries[0]?.label : log.organization_ministries?.label) || `Min #${log.ministry_id}`}
@@ -710,68 +711,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                 </div>
             )}
 
-            {activeTab === 'sa-telemetry' && (
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 md:p-8 shadow-sm border border-zinc-200 dark:border-zinc-800">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                        <div>
-                            <h3 className="text-xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                                <Activity className="text-[#c9a84c]"/> Monitoramento em Tempo Real
-                            </h3>
-                            <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Logs de mensagens enviadas por todas as instâncias (Últimas 500)</p>
-                        </div>
-                        <button 
-                            onClick={() => refetchLogs()}
-                            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl transition-all font-bold text-sm"
-                        >
-                            <RefreshCw size={16} className={loadingLogs ? "animate-spin" : ""}/> Atualizar
-                        </button>
-                    </div>
 
-                    {loadingLogs ? (
-                        <div className="flex justify-center py-12">
-                            <Loader2 className="animate-spin text-[#c9a84c]" size={32}/>
-                        </div>
-                    ) : usageLogs.length === 0 ? (
-                        <div className="text-center py-12 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700">
-                            <MessageSquare className="mx-auto text-zinc-300 dark:text-zinc-600 mb-4" size={48}/>
-                            <p className="text-zinc-500 dark:text-zinc-400 font-medium">Nenhum log de mensagem registrado ainda.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                                        <th className="py-3 px-4 text-xs font-black text-zinc-400 uppercase tracking-wider">Data/Hora</th>
-                                        <th className="py-3 px-4 text-xs font-black text-zinc-400 uppercase tracking-wider">Instância</th>
-                                        <th className="py-3 px-4 text-xs font-black text-zinc-400 uppercase tracking-wider">Organização</th>
-                                        <th className="py-3 px-4 text-xs font-black text-zinc-400 uppercase tracking-wider">Ministério</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {usageLogs.slice(0, 500).map((log: any) => (
-                                        <tr key={log.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                                            <td className="py-3 px-4 text-sm text-zinc-600 dark:text-zinc-300">
-                                                {new Date(log.created_at).toLocaleString('pt-BR')}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-[#c9a84c]/10 text-[#c9a84c]">
-                                                    <Wifi size={12}/> {log.instance_name || 'Desconhecida'}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                                                {(Array.isArray(log.organizations) ? log.organizations[0]?.name : log.organizations?.name) || '---'}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-zinc-500 dark:text-zinc-400">
-                                                {(Array.isArray(log.organization_ministries) ? log.organization_ministries[0]?.label : log.organization_ministries?.label) || '---'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     );
 };

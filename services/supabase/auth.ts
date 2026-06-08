@@ -93,8 +93,8 @@ export const checkMemberLimit = async (ministryId: string, orgId: string, plan_t
       .eq('ministry_id', ministryId)
       .eq('organization_id', orgId);
     
-    if (plan_type === 'trial' && (count || 0) >= 10) {
-      return { allowed: false, reason: 'O plano Trial permite no máximo 10 membros por ministério. Faça upgrade para Pro.' };
+    if (plan_type === 'trial' && (count || 0) >= 30) {
+      return { allowed: false, reason: 'O plano Trial permite no máximo 30 membros por ministério. Faça upgrade para Pro.' };
     }
     if (plan_type === 'pro' && (count || 0) >= 50) {
       return { allowed: false, reason: 'O plano Pro permite no máximo 50 membros por ministério. Faça upgrade para Enterprise.' };

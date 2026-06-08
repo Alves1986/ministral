@@ -13,8 +13,8 @@ const PLANS = {
   trial: {
     name: 'Trial', price: 'Gratuito', duration: '30 dias',
     features: [
-      { label: 'Até 10 membros por ministério', included: true },
-      { label: '1 ministério por organização', included: true },
+      { label: 'Até 30 membros por ministério', included: true },
+      { label: 'Até 2 ministérios por organização', included: true },
       { label: 'Editor de Escala básico', included: true },
       { label: 'Disponibilidade inteligente', included: true },
       { label: 'Avisos e Comunicados', included: true },

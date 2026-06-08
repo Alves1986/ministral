@@ -92,8 +92,8 @@ export const checkMinistryLimit = async (orgId: string, plan_type: string): Prom
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId);
     
-    if (plan_type === 'trial' && (count || 0) >= 1) {
-      return { allowed: false, reason: 'O plano Trial permite apenas 1 ministério. Faça upgrade para Pro.' };
+    if (plan_type === 'trial' && (count || 0) >= 2) {
+      return { allowed: false, reason: 'O plano Trial permite no máximo 2 ministérios. Faça upgrade para Pro.' };
     }
     if (plan_type === 'pro' && (count || 0) >= 3) {
       return { allowed: false, reason: 'O plano Pro permite no máximo 3 ministérios. Faça upgrade para Enterprise.' };
