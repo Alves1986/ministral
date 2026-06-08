@@ -43,8 +43,11 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
     const logsByOrg = useMemo(() => {
         const map: Record<string, { name: string, count: number, ministries: Record<string, { label: string, count: number }> }> = {};
         usageLogs.forEach((log: any) => {
-            const orgName = log.organizations?.name || `Org #${log.org_id}`;
-            const minLabel = log.organization_ministries?.label || `Min #${log.ministry_id}`;
+            const orgData = Array.isArray(log.organizations) ? log.organizations[0] : log.organizations;
+            const minData = Array.isArray(log.organization_ministries) ? log.organization_ministries[0] : log.organization_ministries;
+            
+            const orgName = orgData?.name || `Org #${log.org_id}`;
+            const minLabel = minData?.label || `Min #${log.ministry_id}`;
             
             if (!map[log.org_id]) {
                 map[log.org_id] = { name: orgName, count: 0, ministries: {} };
@@ -507,10 +510,10 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                     })}
                                                 </td>
                                                 <td className="px-6 py-3.5 font-bold text-zinc-800 dark:text-zinc-200">
-                                                    {log.organizations?.name || `Org #${log.org_id}`}
+                                                    {(Array.isArray(log.organizations) ? log.organizations[0]?.name : log.organizations?.name) || `Org #${log.org_id}`}
                                                 </td>
                                                 <td className="px-6 py-3.5 text-zinc-600 dark:text-zinc-400 font-bold">
-                                                    {log.organization_ministries?.label || `Min #${log.ministry_id}`}
+                                                    {(Array.isArray(log.organization_ministries) ? log.organization_ministries[0]?.label : log.organization_ministries?.label) || `Min #${log.ministry_id}`}
                                                 </td>
                                                 <td className="px-6 py-3.5 text-center">
                                                     <span className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
@@ -745,7 +748,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {usageLogs.slice(0, 500).map((log) => (
+                                    {usageLogs.slice(0, 500).map((log: any) => (
                                         <tr key={log.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                             <td className="py-3 px-4 text-sm text-zinc-600 dark:text-zinc-300">
                                                 {new Date(log.created_at).toLocaleString('pt-BR')}
@@ -756,10 +759,10 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                 </span>
                                             </td>
                                             <td className="py-3 px-4 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                                                {log.organizations?.name || '---'}
+                                                {(Array.isArray(log.organizations) ? log.organizations[0]?.name : log.organizations?.name) || '---'}
                                             </td>
                                             <td className="py-3 px-4 text-sm text-zinc-500 dark:text-zinc-400">
-                                                {log.organization_ministries?.label || '---'}
+                                                {(Array.isArray(log.organization_ministries) ? log.organization_ministries[0]?.label : log.organization_ministries?.label) || '---'}
                                             </td>
                                         </tr>
                                     ))}

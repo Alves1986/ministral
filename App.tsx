@@ -406,7 +406,6 @@ const InnerApp = () => {
     { id: 'report', label: 'Relat. Disp.', icon: <FileBarChart size={20}/> },
     { id: 'event-rules', label: 'Regras de Agenda', icon: <CalendarDays size={20}/> },
     { id: 'schedule-rules', label: 'Regras de Escala', icon: <ShieldCheck size={20}/> },
-    { id: 'plan', label: 'Plano e Assinatura', icon: <Crown size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros', icon: <Users size={20}/> },
     { id: 'advanced-ai', label: 'IA Avançada', icon: <Sparkles size={20}/> },
@@ -434,7 +433,7 @@ const InnerApp = () => {
 
   const MANAGEMENT_NAV = useMemo(() => 
     RAW_MANAGEMENT_NAV
-    .filter(item => safeEnabledTabs.includes(item.id) || item.id === 'plan' || item.id === 'advanced-ai')
+    .filter(item => safeEnabledTabs.includes(item.id) || item.id === 'advanced-ai')
     .filter(item => {
       if (!isPro && ['schedule-rules','monthly-report','report','advanced-ai'].includes(item.id))
         return false;
@@ -461,14 +460,23 @@ const InnerApp = () => {
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
-            <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0">
-                <div>
-                    <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
-                        <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
-                    </h1>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
+            <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0 mb-6">
+                <div className="w-full flex items-center justify-between md:justify-start gap-4">
+                    <div>
+                        <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
+                            <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); refreshData(); }} 
+                                className={`p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 ${isRefreshing ? 'animate-spin' : ''}`}
+                                title="Atualizar painel"
+                            >
+                                <RefreshCw size={24} />
+                            </button>
+                        </h1>
+                        <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
+                    </div>
                 </div>
-                <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
+                <div className="w-full md:w-auto animate-fade-in flex items-center" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
             </div>
 
         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>

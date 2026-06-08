@@ -416,6 +416,13 @@ export const DashboardLayout: React.FC<Props> = ({
                 <h1 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tighter truncate max-w-[120px]">{activeLabel}</h1>
             </div>
             <div className="flex items-center gap-2">
+                <button 
+                    onClick={handleHardReload} 
+                    className="p-2 text-slate-400 hover:text-ministral-500 rounded-xl transition-all"
+                    title="Sincronizar Dados"
+                >
+                    <RefreshCw size={18} className={isUpdating ? "animate-spin" : ""} />
+                </button>
                 <NotificationCenter 
                     notifications={notifications} 
                     ministryId={currentUser?.ministryId || null} 

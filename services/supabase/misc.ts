@@ -45,7 +45,9 @@ export const fetchSwapRequests = async (ministryId: string, orgId: string): Prom
         eventTitle: req.event_title,
         status: req.status,
         createdAt: req.created_at,
-        takenByName: req.taken_by_name
+        takenByName: req.taken_by_name,
+        reason: req.reason,
+        origin: req.origin,
     }));
 };
 

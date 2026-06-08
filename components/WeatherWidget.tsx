@@ -76,9 +76,8 @@ export const WeatherWidget: React.FC = () => {
 
       const getLocationAndFetch = () => {
           if (!navigator.geolocation) {
-              setLoading(false);
-              setRefreshing(false);
-              setError(true);
+              console.warn("Geolocalização não suportada. Usando fallback (São Paulo).");
+              fetchWeatherData(-23.5505, -46.6333);
               return;
           }
 
@@ -100,12 +99,9 @@ export const WeatherWidget: React.FC = () => {
                       },
                       (err2) => {
                           console.warn("Erro de geolocalização geral:", err2);
-                          if (isMounted) {
-                              setLoading(false);
-                              setRefreshing(false);
-                              // Se já temos dados em cache, não mostramos erro crítico na tela
-                              if (!weather) setError(true);
-                          }
+                          // Se falhar a geolocalização, usa uma localização padrão (ex: São Paulo) para o widget não sumir
+                          console.log("Usando localização padrão (São Paulo) como fallback.");
+                          fetchWeatherData(-23.5505, -46.6333);
                       },
                       { 
                         enableHighAccuracy: false, 

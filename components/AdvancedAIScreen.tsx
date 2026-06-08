@@ -18,7 +18,12 @@ import {
   Share2,
   X,
   ChevronDown,
-  AlertCircle as AlertCircleIcon
+  AlertCircle as AlertCircleIcon,
+  LineChart,
+  Wand2,
+  ShieldAlert,
+  Settings,
+  Megaphone
 } from 'lucide-react';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
@@ -73,7 +78,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   });
 
   // Aba ativa da tela
-  const [activeTab, setActiveTab] = useState<'schedule' | 'health' | 'messages' | 'explain' | 'predictive'>('health');
+  const [activeTab, setActiveTab] = useState<'health' | 'analysis' | 'conflicts' | 'generator' | 'messages' | 'schedule'>('health');
 
   useEffect(() => {
     const saved = localStorage.getItem(`ai_model_preference_${ministryId}`);
@@ -90,16 +95,12 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
-  // Recurso 3: Explicar decisao
-  const [explanation, setExplanation] = useState<string>('');
-  const [explainLoading, setExplainLoading] = useState(false);
-
-  // Recurso 4: Analise Preditiva
+  // Recurso 3: Analise Preditiva (agora dividida)
   const [scaleSuggestions, setScaleSuggestions] = useState<string>('');
   const [preventiveAlerts, setPreventiveAlerts] = useState<string>('');
   const [predictiveLoading, setPredictiveLoading] = useState(false);
 
-  // Recurso 5: Sugestões e Validação de Escala por IA
+  // Recurso 4: Gerador de Escala (agora aba propria)
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
   const [selectedSuggestionIdxs, setSelectedSuggestionIdxs] = useState<number[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
@@ -439,7 +440,6 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
   const handleSaveAIPreference = () => {
     localStorage.setItem(`ai_model_preference_${ministryId}`, selectedModel);
-    setExplanation(''); // Clear explanation to force re-generation with new model
     addToast('Preferência de IA salva com sucesso!', 'success');
   };
 
@@ -583,20 +583,6 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     };
   };
 
-  const handleExplainSchedule = async () => {
-    setExplainLoading(true);
-    setExplanation('');
-    try {
-      const payload = getReducedPayload();
-      const text = await runAI(AI_TASKS.EXPLAIN_DECISION, getAIContext(), payload, selectedModel);
-      setExplanation(text);
-    } catch (e: any) {
-      addToast('Erro ao gerar explicacao: ' + e.message, 'error');
-    } finally {
-      setExplainLoading(false);
-    }
-  };
-
   const handleGetScaleSuggestions = async () => {
     setPredictiveLoading(true);
     try {
@@ -622,12 +608,6 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       setPredictiveLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (activeTab === 'explain' && !explanation && !explainLoading && Object.keys(schedule).length > 0) {
-      handleExplainSchedule();
-    }
-  }, [activeTab, schedule]);
 
   return (
     <div className='max-w-5xl mx-auto space-y-6 pb-10 animate-fade-in'>
@@ -669,16 +649,17 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       {/* NAVEGACAO DAS ABAS */}
       <div className='flex gap-2 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl overflow-x-auto scrollbar-hide'>
         {[
-          { id: 'health',   label: 'Saúde', icon: HeartPulse },
-          { id: 'predictive', label: 'Preditiva', icon: AlertTriangle },
-          { id: 'messages', label: 'Avisos',        icon: MessageSquare },
-          { id: 'explain',  label: 'Explicar',    icon: Brain      },
-          { id: 'schedule', label: 'Configurar',       icon: Sparkles   },
+          { id: 'health',     label: 'Saúde',              icon: HeartPulse },
+          { id: 'analysis',   label: 'Análise Preditiva',  icon: LineChart },
+          { id: 'conflicts',  label: 'Detectar Conflitos', icon: ShieldAlert },
+          { id: 'generator',  label: 'Gerador Inteligente',icon: Wand2 },
+          { id: 'messages',   label: 'Avisos',             icon: Megaphone },
+          { id: 'schedule',   label: 'Configuração',       icon: Settings },
         ].map(tab => (
           <button key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-2.5
-              px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap
+            className={`flex-1 min-w-max flex items-center justify-center gap-2 py-2.5
+              px-4 rounded-xl text-xs font-bold transition-all whitespace-nowrap
               ${activeTab === tab.id
                 ? 'bg-white dark:bg-zinc-800 text-ministral-500 dark:text-ministral-400 shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
@@ -690,7 +671,12 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   
       {/* ABA: SAUDE DO MINISTERIO */}
       {activeTab === 'health' && (
-        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700'>
+        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden'>
+          <div className="absolute -top-4 -right-4 p-8 opacity-5 pointer-events-none"><HeartPulse size={160} /></div>
+          
+          <div className="relative z-10">
+            <h3 className='font-bold text-zinc-800 dark:text-zinc-100 mb-2'>Saúde do Ministério</h3>
+            <p className='text-sm text-zinc-500 mb-6'>Veja um diagnóstico completo de como anda a escala, sobrecargas e conflitos de membros do ministério.</p>
           {healthInsights && (
             <div className='flex items-center gap-6 mb-6 p-5 bg-zinc-50 dark:bg-zinc-900 rounded-2xl'>
               <div className={`w-20 h-20 rounded-full flex flex-col items-center justify-center font-black shrink-0 border-4 ${healthInsights.score >= 80 ? 'bg-green-50 border-green-500 text-green-600' : healthInsights.score >= 60 ? 'bg-amber-50 border-amber-500 text-amber-600' : 'bg-red-50 border-red-500 text-red-600'}`}>
@@ -762,46 +748,58 @@ export const AdvancedAIScreen: React.FC<Props> = ({
             {healthLoading ? <Loader2 size={14} className='animate-spin'/> : <RefreshCw size={14}/>}
             {healthLoading ? 'Analisando...' : (healthInsights ? 'Reanalisar' : 'Analisar Saúde')}
           </button>
+          </div>
         </div>
       )}
   
-      {/* ABA: CONFIGURAR IA */}
+      {/* ABA: CONFIGURACAO */}
       {activeTab === 'schedule' && (
         <div className="space-y-6">
-          <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700'>
-            <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">Configuração da IA de Escala</h3>
-            <div className="bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 p-4 rounded-xl text-sm mb-6 flex items-start gap-3">
-              <AlertCircleIcon size={20} className="shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold mb-1">Modelo Preferido</p>
-                <p>Selecione abaixo qual modelo de inteligência artificial você deseja que seja o responsável por gerar as escalas automáticas no Editor de Escala.</p>
+          <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden'>
+            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Settings size={120} /></div>
+            <div className="relative z-10">
+              <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-4">Configuração da IA de Escala</h3>
+              <div className="bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 p-4 rounded-xl text-sm mb-6 flex items-start gap-3">
+                <AlertCircleIcon size={20} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold mb-1">Modelo Preferido</p>
+                  <p>Selecione abaixo qual modelo de inteligência artificial você deseja que seja o responsável por gerar as escalas automáticas no Editor de Escala.</p>
+                </div>
               </div>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Selecione o Modelo de IA</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {AI_MODELS.map(model => (
-                  <button key={model.id} onClick={() => setSelectedModel(model.id)} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
-                    <p className={`font-bold text-sm truncate ${selectedModel === model.id ? 'text-ministral-500 dark:text-ministral-400' : 'text-zinc-800 dark:text-zinc-200'}`}>{model.name}</p>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 break-words">{model.description}</p>
-                  </button>
-                ))}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Selecione o Modelo de IA</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {AI_MODELS.map(model => (
+                    <button key={model.id} onClick={() => setSelectedModel(model.id)} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
+                      <p className={`font-bold text-sm truncate ${selectedModel === model.id ? 'text-ministral-500 dark:text-ministral-400' : 'text-zinc-800 dark:text-zinc-200'}`}>{model.name}</p>
+                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 break-words">{model.description}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
+              <button key="save-ai-pref-btn" onClick={handleSaveAIPreference} className="w-full sm:w-auto px-6 py-3 bg-ministral-500 hover:bg-ministral-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2">
+                <CheckCircle2 size={20} />
+                Salvar Modelo Preferido
+              </button>
             </div>
-            <button key="save-ai-pref-btn" onClick={handleSaveAIPreference} className="w-full sm:w-auto px-6 py-3 bg-ministral-500 hover:bg-ministral-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2">
-              <CheckCircle2 size={20} />
-              Salvar Modelo Preferido
-            </button>
           </div>
+        </div>
+      )}
 
-          <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700'>
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={20} className="text-ministral-500" />
-              <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Gerador e Validador Inteligente de Escala por IA</h3>
-            </div>
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6">
-              A IA analisará as disponibilidades e sugerirá preenchimentos para as vagas vazias desse mês. Antes de aplicar, as sugestões serão validadas em tempo real contra as suas <strong>Regras de Conflito</strong> (ex: membros escalados em duas funções simultâneas ou bloqueio entre pessoas).
-            </p>
+      {/* ABA: GERADOR INTELIGENTE */}
+      {activeTab === 'generator' && (
+        <div className="space-y-6">
+
+          <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden'>
+            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wand2 size={120} /></div>
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={20} className="text-ministral-500" />
+                <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Gerador e Validador Inteligente de Escala por IA</h3>
+              </div>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6">
+                A IA analisará as disponibilidades e sugerirá preenchimentos para as vagas vazias desse mês. Antes de aplicar, as sugestões serão validadas em tempo real contra as suas <strong>Regras de Conflito</strong> (ex: membros escalados em duas funções simultâneas ou bloqueio entre pessoas).
+              </p>
 
             {aiSuggestions.length === 0 && (
               <button
@@ -999,17 +997,19 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
   
       {/* ABA: ANALISE PREDITIVA */}
-      {activeTab === 'predictive' && (
-        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 space-y-6'>
-          <h3 className='font-bold text-zinc-800 dark:text-zinc-100'>Análise Preditiva e Alertas</h3>
-          <p className='text-sm text-zinc-500'>Detecte problemas antes que eles aconteçam e receba sugestões de melhoria para sua escala.</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {activeTab === 'analysis' && (
+        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden space-y-6'>
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><LineChart size={120} /></div>
+          <div className="relative z-10">
+            <h3 className='font-bold text-zinc-800 dark:text-zinc-100 mb-2'>Análise Preditiva e Sugestões</h3>
+            <p className='text-sm text-zinc-500 mb-6'>Receba sugestões inteligentes de melhoria e otimização para a sua escala.</p>
+            
             <div className="space-y-4">
               <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
                 <Lightbulb size={16} className="text-amber-500" /> Sugestões de Escala
@@ -1017,18 +1017,29 @@ export const AdvancedAIScreen: React.FC<Props> = ({
               <button 
                 onClick={handleGetScaleSuggestions} 
                 disabled={predictiveLoading}
-                className="w-full py-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-xl border border-amber-100 dark:border-amber-900/40 font-bold text-xs hover:bg-amber-100 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 py-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-xl border border-amber-100 dark:border-amber-900/40 font-bold text-xs hover:bg-amber-100 transition-all flex items-center justify-center gap-2"
               >
                 {predictiveLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Analisar e Sugerir Melhorias
               </button>
               {scaleSuggestions && (
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar animate-fade-in">
                   {scaleSuggestions}
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
 
+      {/* ABA: DETECTAR CONFLITOS */}
+      {activeTab === 'conflicts' && (
+        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden space-y-6'>
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><ShieldAlert size={120} /></div>
+          <div className="relative z-10">
+            <h3 className='font-bold text-zinc-800 dark:text-zinc-100 mb-2'>Detectar Conflitos e Riscos</h3>
+            <p className='text-sm text-zinc-500 mb-6'>Detecte problemas antes que eles aconteçam com a análise avançada de conflitos.</p>
+            
             <div className="space-y-4">
               <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
                 <AlertOctagon size={16} className="text-red-500" /> Alertas Preventivos
@@ -1036,13 +1047,13 @@ export const AdvancedAIScreen: React.FC<Props> = ({
               <button 
                 onClick={handleGetPreventiveAlerts} 
                 disabled={predictiveLoading}
-                className="w-full py-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-900/40 font-bold text-xs hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 py-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-900/40 font-bold text-xs hover:bg-red-100 transition-all flex items-center justify-center gap-2"
               >
                 {predictiveLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
-                Detectar Conflitos e Riscos
+                Detectar Conflitos
               </button>
               {preventiveAlerts && (
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar animate-fade-in">
                   {preventiveAlerts}
                 </div>
               )}
@@ -1053,87 +1064,77 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
       {/* ABA: GERAR AVISOS */}
       {activeTab === 'messages' && (
-        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 space-y-5'>
-          <h3 className='font-bold text-zinc-800 dark:text-zinc-100'>Gerador de Avisos Personalizados</h3>
-          <p className='text-sm text-zinc-500'>Selecione um evento e a IA criará uma mensagem personalizada para cada membro escalado, pronta para enviar no WhatsApp.</p>
-          <div>
-            <label className='text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block mb-2'>Selecione o Evento</label>
-            <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1'>
-              {events.filter((e: any) => e.iso?.startsWith(currentMonth)).map((e: any) => (
-                <button key={e.id || e.iso} onClick={() => { setSelectedEvent(e); setMessages([]); }} className={`p-3 rounded-xl border text-left text-xs font-bold transition-all ${selectedEvent?.iso === e.iso ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100' : 'border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
-                  <div>{e.title}</div>
-                  <div className='text-zinc-400 font-normal mt-0.5'>{e.iso?.split('T')[0]?.split('-').reverse().join('/')} — {e.iso?.split('T')[1]?.slice(0, 5)}</div>
-                </button>
-              ))}
+        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 relative overflow-hidden space-y-6'>
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Megaphone size={120} /></div>
+          <div className="relative z-10">
+            <h3 className='font-bold text-zinc-800 dark:text-zinc-100 mb-2'>Gerador de Avisos Personalizados</h3>
+            <p className='text-sm text-zinc-500 mb-6'>Selecione um evento e a IA criará uma mensagem personalizada para cada membro escalado, pronta para enviar no WhatsApp.</p>
+            <div className="mb-6">
+              <label className='text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block mb-3'>Selecione o Evento</label>
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
+                {events.filter((e: any) => e.iso?.startsWith(currentMonth)).map((e: any) => (
+                  <button key={e.id || e.iso} onClick={() => { setSelectedEvent(e); setMessages([]); }} className={`p-4 rounded-xl border text-left text-xs font-bold transition-all ${selectedEvent?.iso === e.iso ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100' : 'border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
+                    <div className="truncate text-sm">{e.title}</div>
+                    <div className='text-zinc-400 font-normal mt-1'>{e.iso?.split('T')[0]?.split('-').reverse().join('/')} — {e.iso?.split('T')[1]?.slice(0, 5)}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <button onClick={handleGenerateMessages} disabled={messagesLoading || !selectedEvent} className='px-5 py-2.5 bg-ministral-500 hover:bg-ministral-600 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 disabled:opacity-60'>
+            <button onClick={handleGenerateMessages} disabled={messagesLoading || !selectedEvent} className='w-full sm:w-auto px-6 py-3 bg-ministral-500 hover:bg-ministral-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60'>
+              {messagesLoading ? <Loader2 size={18} className='animate-spin'/> : <MessageSquare size={18}/>}
+              {messagesLoading ? 'Gerando mensagens...' : 'Gerar Mensagens'}
+            </button>
 
-            {messagesLoading ? <Loader2 size={14} className='animate-spin'/> : <MessageSquare size={14}/>}
-            {messagesLoading ? 'Gerando mensagens...' : 'Gerar Mensagens'}
-          </button>
-          {messages.length > 0 && (
-            <div className='space-y-3'>
-              <p className='text-xs font-bold text-zinc-500 uppercase tracking-wider'>
-                {messages.length === 1 ? 'Aviso unificado gerado — pronto para o grupo' : `${messages.length} mensagens geradas — clique em Copiar para cada uma`}
-              </p>
-              {messages.map((msg: any, i: number) => (
-                <div key={i} className='bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700'>
-                  <div className='flex items-center justify-between mb-2'>
-                    <div>
-                      <span className='font-bold text-sm text-zinc-800 dark:text-zinc-100'>{msg.name}</span>
-                      <span className='ml-2 text-[10px] bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 px-2 py-0.5 rounded-full font-bold uppercase tracking-tight'>{msg.role}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => { 
-                        const url = `https://wa.me/?text=${encodeURIComponent(msg.message)}`;
-                        window.open(url, '_blank');
-                      }} className='flex items-center gap-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm'>
-                        <Share2 size={12}/>
-                        WhatsApp
-                      </button>
-                      <button onClick={() => { navigator.clipboard.writeText(msg.message); setCopiedIdx(i); setTimeout(() => setCopiedIdx(null), 2000); }} className='flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 transition-all'>
-                        {copiedIdx === i ? <Check size={12}/> : <Copy size={12}/>}
-                        {copiedIdx === i ? 'Copiado!' : 'Copiar'}
-                      </button>
-                    </div>
+            {messages.length > 0 && (
+              <div className='mt-8 space-y-4 animate-fade-in'>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-lg">
+                    <CheckCircle2 size={20} />
                   </div>
-                  <p className='text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed'>{msg.message}</p>
+                  <div>
+                    <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">Mensagens Geradas</h4>
+                    <p className='text-xs text-zinc-500'>
+                      {messages.length === 1 ? 'Aviso unificado pronto para o grupo.' : `${messages.length} mensagens geradas. Envie ou copie individualmente.`}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {messages.map((msg: any, i: number) => (
+                    <div key={i} className='bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-700 flex flex-col justify-between'>
+                      <div>
+                        <div className='flex items-start justify-between mb-4'>
+                          <div>
+                            <span className='font-black text-sm text-zinc-800 dark:text-zinc-100 block'>{msg.name}</span>
+                            <span className='inline-block mt-1 text-[10px] bg-ministral-500/10 text-ministral-600 dark:text-ministral-400 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider'>{msg.role}</span>
+                          </div>
+                        </div>
+                        <div className='text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed bg-white dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800'>
+                          {msg.message}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                        <button onClick={() => { 
+                          const url = `https://wa.me/?text=${encodeURIComponent(msg.message)}`;
+                          window.open(url, '_blank');
+                        }} className='flex-1 flex justify-center items-center gap-1.5 px-3 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-bold transition-all shadow-sm'>
+                          <Share2 size={14}/>
+                          Enviar WhatsApp
+                        </button>
+                        <button onClick={() => { navigator.clipboard.writeText(msg.message); setCopiedIdx(i); setTimeout(() => setCopiedIdx(null), 2000); }} className='flex-1 flex justify-center items-center gap-1.5 px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 transition-all'>
+                          {copiedIdx === i ? <Check size={14}/> : <Copy size={14}/>}
+                          {copiedIdx === i ? 'Copiado!' : 'Copiar'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
-  
-      {/* ABA: EXPLICAR DECISAO */}
-      {activeTab === 'explain' && (
-        <div className='bg-white dark:bg-zinc-800 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-700 space-y-5'>
-          <h3 className='font-bold text-zinc-800 dark:text-zinc-100'>Explicar Decisão da IA</h3>
-          <p className='text-sm text-zinc-500'>Entenda por que cada membro foi escalado na escala atual (usando o modelo configurado).</p>
-          
-          {explainLoading && (
-            <div className='flex flex-col items-center justify-center py-10 text-zinc-500 gap-3'>
-              <Loader2 size={32} className='animate-spin text-ministral-500'/>
-              <p className='text-sm font-medium'>A IA está analisando as decisões da escala...</p>
-            </div>
-          )}
 
-          {explanation && (
-            <div className='bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 animate-fade-in'>
-              <h4 className='text-xs font-black text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2'><Brain size={14}/> Raciocínio da IA</h4>
-              <div className='text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed'>{explanation}</div>
-            </div>
-          )}
-
-          {!explainLoading && !explanation && Object.keys(schedule).length === 0 && (
-            <div className='p-10 text-center text-zinc-500'>
-              <AlertCircle size={40} className='mx-auto mb-3 opacity-20'/>
-              <p>Não há dados de escala para explicar neste mês.</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

@@ -171,6 +171,8 @@ export interface SwapRequest {
   createdAt: string;
   takenByName?: string;
   organizationId?: string;
+  reason?: string;
+  origin?: 'app' | 'whatsapp_text' | 'whatsapp_typebot';
 }
 
 export interface RepertoireItem {

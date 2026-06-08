@@ -248,7 +248,8 @@ serve(async (req: Request) => {
           event_date: action.event_date,
           event_datetime: `${action.event_date}T${ruleData?.time || "00:00"}`,
           role: action.role,
-          status: "pending"
+          status: "pending",
+          origin: "whatsapp_text"
         }).select().single();
 
         if (swapReq) {
