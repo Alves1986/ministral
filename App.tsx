@@ -172,36 +172,57 @@ const InnerApp = () => {
       return false;
   });
 
+  const [spotifyAuthSuccess, setSpotifyAuthSuccess] = useState(false);
+
   // O token deve ser mantido na URL para permitir recarregamento da página
   // A limpeza só deve ocorrer após validação/uso bem-sucedido no InviteScreen
 
   useEffect(() => {
     // Force logout spotify once if needed 
-    if (localStorage.getItem('force_logout_spotify_v1') !== 'done') {
+    if (localStorage.getItem('force_logout_spotify_v2') !== 'done') {
       localStorage.removeItem('spotify_user_token');
       localStorage.removeItem('spotify_token_expiry');
-      localStorage.setItem('force_logout_spotify_v1', 'done');
+      localStorage.setItem('force_logout_spotify_v2', 'done');
     }
 
     // Processa redirecionamentos do Spotify em qualquer aba logada ou deslogada
-    // Se estourar a URL e tirar o Hash, ele armazena antes que seja limpo.
-    const token = handleLoginCallback();
-    if (token) {
-        // Define a flag indicando que acabou de conectar para o RepertoireScreen saber
-        localStorage.setItem('spotify_just_connected', 'true');
+    handleLoginCallback().then(token => {
+      if (token) {
+          localStorage.setItem('spotify_just_connected', 'true');
 
-        // Redireciona para a aba de origem ou default para repertoire-manager
-        const originTab = localStorage.getItem('spotify_login_origin_tab') || 'repertoire-manager';
-        localStorage.removeItem('spotify_login_origin_tab');
+          const originTab = localStorage.getItem('spotify_login_origin_tab') || 'repertoire-manager';
+          localStorage.removeItem('spotify_login_origin_tab');
 
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', originTab);
-        window.history.replaceState({}, '', url.toString());
-        setCurrentTab(originTab);
-    }
+          // Se fomos abertos do oauth em uma nova aba, só mostra a tela de sucesso
+          if (window.opener) {
+              setSpotifyAuthSuccess(true);
+              return;
+          }
+
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', originTab);
+          window.history.replaceState({}, '', url.toString());
+          setCurrentTab(originTab);
+      }
+    });
   }, []);
 
   const hasInitialSync = React.useRef(false);
+
+  if (spotifyAuthSuccess) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 text-white p-6">
+              <div className="w-20 h-20 bg-[#1DB954] rounded-full flex items-center justify-center mb-6 shadow-xl shadow-[#1DB954]/20">
+                  <Music size={40} className="text-white" />
+              </div>
+              <h1 className="text-2xl font-bold mb-4">Spotify Conectado!</h1>
+              <p className="text-zinc-400 mb-8 text-center max-w-sm">O login foi concluído com sucesso. A integração com o sistema foi ativada.<br/><br/>Você já pode retornar e fechar esta aba.</p>
+              <button onClick={() => window.close()} className="bg-white text-black hover:bg-zinc-200 px-8 py-3 flex items-center gap-2 rounded-full font-bold transition-all hover:scale-105">
+                  <ArrowLeft size={20} /> Retornar ao App
+              </button>
+          </div>
+      );
+  }
 
   useEffect(() => {
       if (status === 'ready' && sessionUser) {

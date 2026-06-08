@@ -5,7 +5,7 @@ import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos } from '../services/youtubeService';
-import { searchCifraClub } from '../services/cifraClubService';
+import { searchCifraClub, getVagalumeLyrics } from '../services/cifraClubService';
 import { ChordViewer } from './ChordViewer';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSystemLogo } from '../utils/branding';
@@ -66,23 +66,39 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [cifraQuery, setCifraQuery] = useState("");
   const [cifraResults, setCifraResults] = useState<any[]>([]);
   const [cifraLoading, setCifraLoading] = useState(false);
+  const [addingToDraftId, setAddingToDraftId] = useState<string | null>(null);
 
   const orgId = currentUser?.organizationId;
 
   // Init
   useEffect(() => {
-      const tokenFromHash = handleLoginCallback();
-      const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
+      const checkConnection = () => {
+          const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
+          if (justConnected || isUserLoggedIn()) {
+              if (justConnected) {
+                  localStorage.removeItem('spotify_just_connected');
+                  addToast("Spotify conectado com sucesso!", "success");
+              }
+              setIsSpotifyLoggedIn(true);
+              setActiveTab('playlists');
+              loadUserProfile();
+          } else {
+              setIsSpotifyLoggedIn(false);
+              setSpotifyUser(null);
+          }
+      };
 
-      if (tokenFromHash || justConnected) {
-          localStorage.removeItem('spotify_just_connected');
-          setIsSpotifyLoggedIn(true);
-          setActiveTab('playlists');
-          addToast("Spotify conectado com sucesso!", "success");
-      } else if (isUserLoggedIn()) {
-          setIsSpotifyLoggedIn(true);
-      }
-      if (isUserLoggedIn()) loadUserProfile();
+      checkConnection();
+
+      // Monitora o login feito em outra aba/janela
+      const onStorage = (e: StorageEvent) => {
+          if (e.key === 'spotify_just_connected' && e.newValue === 'true') {
+              checkConnection();
+          }
+      };
+      
+      window.addEventListener('storage', onStorage);
+      return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const handleDateChange = (val: string) => {
@@ -116,7 +132,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       try {
           const url = await getLoginUrl(integrations?.spotifyClientId);
           if (url) {
-              window.location.href = url;
+              window.open(url, '_blank');
           } else {
               addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
           }
@@ -182,7 +198,20 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       const results = await searchCifraClub(cifraQuery);
       setCifraResults(results);
       setCifraLoading(false);
-      if (results.length === 0) addToast("Nenhuma cifra encontrada.", "warning");
+      if (results.length === 0) addToast("Nenhum resultado encontrado no Vagalume.", "warning");
+  };
+
+  const handleAddVagalumeToDraft = async (result: any, idx: number) => {
+      setAddingToDraftId(`vagalume-${idx}`);
+      try {
+          const lyrics = await getVagalumeLyrics(result.artist, result.title);
+          const overrideTitle = result.title + (result.key && result.key !== '-' ? ` (${result.key})` : '');
+          handleAddToDraft(overrideTitle, result.url, lyrics);
+      } catch (err) {
+          addToast("Erro ao buscar letra.", "error");
+      } finally {
+          setAddingToDraftId(null);
+      }
   };
 
   const handleAddToDraft = (overrideTitle?: string, overrideLink?: string, overrideContent?: string) => {
@@ -331,7 +360,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
                       <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-secondary dark:text-white border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><Search size={14}/> Spotify</button>
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
-                      {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-accent border-accent bg-accent/10 dark:bg-accent/20' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras</button>}
+                      <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-accent border-accent bg-accent/10 dark:bg-accent/20' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras/Letras</button>
                       {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-secondary dark:text-white border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Playlists</button>}
                       <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-secondaryHover border-secondaryHover bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><AlignLeft size={14}/> Manual / Cifra</button>
                   </div>
@@ -415,13 +444,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       </div>
                   )}
 
-                  {activeTab === 'cifra' && isLouvor && (
+                  {activeTab === 'cifra' && (
                       <div className="space-y-4 animate-fade-in">
                           <div className="flex gap-2">
                               <input type="text" placeholder="Música ou Artista..." value={cifraQuery} onChange={e => setCifraQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCifraSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-accent text-zinc-900 dark:text-zinc-100" />
                               <button onClick={handleCifraSearch} disabled={cifraLoading} className="bg-accent hover:bg-accent/80 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
                           </div>
-                          {cifraResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{cifraResults.map((result, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 w-full overflow-hidden"><div className="w-10 h-10 rounded bg-accent/10 dark:bg-accent/20 text-accent flex items-center justify-center shrink-0"><span className="font-bold text-xs">{result.key || '?'}</span></div><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p><p className="text-xs text-zinc-500 truncate">{result.artist}</p></div></div><button onClick={() => handleAddToDraft(result.title + (result.key ? ` (${result.key})` : ''), result.url)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-accent/10 dark:bg-accent/20 text-accent hover:bg-accent/20 dark:hover:bg-accent/30 flex items-center gap-1 ml-1"><Plus size={14}/> Add</button></div>))}</div>}
+                          {cifraResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{cifraResults.map((result, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 w-full overflow-hidden"><div className="w-10 h-10 rounded bg-accent/10 dark:bg-accent/20 text-accent flex items-center justify-center shrink-0"><span className="font-bold text-xs">{result.key || '?'}</span></div><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p><p className="text-xs text-zinc-500 truncate">{result.artist}</p></div></div><button onClick={() => handleAddVagalumeToDraft(result, idx)} disabled={addingToDraftId === `vagalume-${idx}`} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-accent/10 dark:bg-accent/20 text-accent hover:bg-accent/20 dark:hover:bg-accent/30 flex items-center gap-1 ml-1 disabled:opacity-50">{addingToDraftId === `vagalume-${idx}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14}/>} Add</button></div>))}</div>}
                       </div>
                   )}
 

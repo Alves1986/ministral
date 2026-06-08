@@ -743,8 +743,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
             </div>
           )}
   
-          <button onClick={handleAnalyzeHealth} disabled={healthLoading} className='mt-4 w-full sm:w-auto px-5 py-2.5 bg-ministral-500 hover:bg-ministral-600 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 disabled:opacity-60'>
-
+          <button onClick={handleAnalyzeHealth} disabled={healthLoading} className="mt-4 w-full sm:w-auto px-6 py-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-xl border border-amber-100 dark:border-amber-900/40 font-bold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
             {healthLoading ? <Loader2 size={14} className='animate-spin'/> : <RefreshCw size={14}/>}
             {healthLoading ? 'Analisando...' : (healthInsights ? 'Reanalisar' : 'Analisar Saúde')}
           </button>

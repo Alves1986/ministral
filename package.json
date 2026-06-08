@@ -30,6 +30,7 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.2.1",
     "tsx": "^4.21.0",
+    "vagalume": "^1.0.3",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
