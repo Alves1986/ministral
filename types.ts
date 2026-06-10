@@ -145,6 +145,13 @@ export const ALL_TABS = [
   'sa-organizations',
   'sa-whatsapp',
   'sa-telemetry',
+  'sa-broadcast',
+  'sa-billing',
+  'sa-users',
+  'sa-support',
+  'sa-audit',
+  'sa-quotas',
+  'support-admin',
 ];
 
 export const DEFAULT_TABS = [...ALL_TABS];

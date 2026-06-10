@@ -20,7 +20,7 @@ import {
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, MousePointerClick, Briefcase, History as HistoryIcon, FileText, ChevronRight,
-  AlertTriangle, Database, RefreshCw, ShieldCheck, Crown, Sparkles
+  AlertTriangle, Database, RefreshCw, ShieldCheck, Crown, Sparkles, Headset
 } from 'lucide-react';
 
 import { LoadingScreen } from './components/LoadingScreen';
@@ -123,6 +123,7 @@ const PullToRefreshContainer: React.FC<{ onRefresh: () => Promise<void>; childre
     );
 };
 import { AdvancedAIScreen } from './components/AdvancedAIScreen';
+import { SupportAdminScreen } from './components/SupportAdminScreen';
 const HistoryScreen = lazy(() => import('./components/HistoryScreen').then(m => ({ default: m.HistoryScreen })));
 const AlertsManager = lazy(() => import('./components/AlertsManager').then(m => ({ default: m.AlertsManager })));
 const PlanScreen = lazy(() => import('./components/PlanScreen').then(m => ({ default: m.PlanScreen })));
@@ -231,7 +232,7 @@ const InnerApp = () => {
 
           // 2. Super Admin puro (sem org): redireciona SEMPRE para a aba sa-organizations
           if (sessionUser.isSuperAdmin && !sessionUser.organizationId) {
-              if (!['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab)) {
+              if (!['sa-organizations', 'sa-telemetry', 'sa-whatsapp', 'sa-broadcast', 'sa-billing', 'sa-users', 'sa-support', 'sa-audit', 'sa-quotas'].includes(currentTab)) {
                   setCurrentTab('sa-organizations');
               }
               setAppReady(true);
@@ -430,6 +431,7 @@ const InnerApp = () => {
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros', icon: <Users size={20}/> },
     { id: 'advanced-ai', label: 'IA Avançada', icon: <Sparkles size={20}/> },
+    { id: 'support-admin', label: 'Ajuda / Suporte', icon: <Headset size={20}/> },
   ], []);
 
   const RAW_QUICK_ACTIONS = useMemo(() => [
@@ -481,24 +483,41 @@ const InnerApp = () => {
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
-            <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0 mb-6">
-                <div className="w-full flex items-center justify-between md:justify-start gap-4">
-                    <div>
-                        <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3">
-                            <span className="text-secondary dark:text-white">{activeUser?.name.split(' ')[0]}</span>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); refreshData(); }} 
-                                className={`p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 ${isRefreshing ? 'animate-spin' : ''}`}
-                                title="Atualizar painel"
-                            >
-                                <RefreshCw size={24} />
-                            </button>
-                        </h1>
-                        <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Excelência na escala. Propósito no servir.</p>
+        <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0 mt-2 md:mt-0 mb-6">
+            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between md:justify-start gap-4">
+                <div>
+                    <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3 flex-wrap">
+                        <span className="text-secondary dark:text-white truncate max-w-[200px] sm:max-w-none">{activeUser?.name.split(' ')[0]}</span>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); refreshData(); }} 
+                            className={`flex sm:hidden md:flex p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 ${isRefreshing ? 'animate-spin' : ''}`}
+                            title="Atualizar painel"
+                        >
+                            <RefreshCw size={24} />
+                        </button>
+                    </h1>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-2 font-medium">Excelência na escala. Propósito no servir.</p>
+                </div>
+                
+                {/* For mobile, if the layout was breaking, let's explicitly add a container that ensures visibility */}
+                <div className="flex sm:hidden items-center justify-start gap-3 w-full mt-2">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); refreshData(); }} 
+                        className={`flex items-center justify-center p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors shadow-sm text-zinc-500 dark:text-zinc-400 ${isRefreshing ? 'animate-spin' : ''}`}
+                        title="Atualizar painel"
+                    >
+                        <RefreshCw size={20} />
+                    </button>
+                    <div className="flex-1">
+                        <WeatherWidget />
                     </div>
                 </div>
-                <div className="w-full md:w-auto animate-fade-in flex items-center" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
             </div>
+            
+            <div className="hidden sm:flex w-full md:w-auto animate-fade-in items-center" style={{ animationDelay: '0.1s' }}>
+                <WeatherWidget />
+            </div>
+        </div>
 
         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
             <NextEventCard 
@@ -840,12 +859,12 @@ const InnerApp = () => {
       
       {activeUser?.isSuperAdmin && !activeUser?.organizationId ? (
           <SuperAdminLayout
-              currentTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab) ? currentTab : 'sa-organizations'}
+              currentTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp', 'sa-broadcast', 'sa-billing', 'sa-users', 'sa-support', 'sa-audit', 'sa-quotas'].includes(currentTab) ? currentTab : 'sa-organizations'}
               onTabChange={setCurrentTab}
               onLogout={handleLogout}
           >
               <Suspense fallback={<LoadingFallback />}>
-                  <SuperAdminDashboard activeTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp'].includes(currentTab) ? currentTab : 'sa-organizations'} />
+                  <SuperAdminDashboard activeTab={['sa-organizations', 'sa-telemetry', 'sa-whatsapp', 'sa-broadcast', 'sa-billing', 'sa-users', 'sa-support', 'sa-audit', 'sa-quotas'].includes(currentTab) ? currentTab : 'sa-organizations'} />
               </Suspense>
           </SuperAdminLayout>
       ) : (
@@ -978,6 +997,13 @@ const InnerApp = () => {
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && status === 'ready' && ministryId.length === 36 && <EventsScreen />}
             {currentTab === 'schedule-rules' && isAdmin && safeEnabledTabs.includes('schedule-rules') && status === 'ready' && ministryId.length === 36 && <ScheduleRulesScreen ministryId={ministryId} orgId={orgId!} availableRoles={roles} members={publicMembers} availableEvents={events.map((e: any) => ({ id: e.id?.split('|')[0] || e.ruleId || e.id, title: e.title })).filter((e: any, i: number, arr: any[]) => arr.findIndex(x => x.id === e.id) === i)} />}
             {currentTab === 'plan' && isAdmin && status === 'ready' && <PlanScreen organization={organization} isAdmin={isAdmin} onRefreshOrg={async () => { await refreshSession(); }} />}
+            {currentTab === 'support-admin' && isAdmin && status === 'ready' && orgId && (
+                <SupportAdminScreen 
+                    orgId={orgId} 
+                    user={activeUser!}
+                    orgName={organization?.name || ''}
+                />
+            )}
             {currentTab === 'advanced-ai' && isAdmin && isPro && status === 'ready' && ministryId.length === 36 && (
                 <AdvancedAIScreen 
                     ministryId={ministryId} 

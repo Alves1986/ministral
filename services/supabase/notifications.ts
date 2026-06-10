@@ -354,6 +354,72 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     return { data: null, error: null };
 };
 
+export const notifyAllOrganizationAdmins = async (title: string, message: string, type: string = 'info') => {
+    const sb = getSupabase();
+    if (!sb) return { error: new Error('Sem conexão com o banco.') };
+
+    // Busca todos os admins de organizações
+    const { data: admins, error: fetchError } = await sb
+      .from('profiles')
+      .select('id, organization_id')
+      .eq('is_admin', true)
+      .not('organization_id', 'is', null);
+
+    if (fetchError) {
+        console.error("[Notifications] Erro ao buscar admins:", fetchError);
+        return { error: fetchError };
+    }
+
+    if (!admins || admins.length === 0) return { data: null, error: null };
+
+    // Agrupa org_ids únicos para inserir apenas UMA notificação por org
+    const orgIds = [...new Set(admins.map(a => a.organization_id))];
+
+    // Monta notificações no painel (uma por organização, apenas admins verão pois ministry_id = nulo)
+    const cleanRawMessage = stripHtml(message);
+    const notificationsToInsert: any[] = orgIds.map(orgId => ({
+        organization_id: orgId,
+        title,
+        message: cleanRawMessage,
+        type,
+        action_link: 'super-admin-message'
+    }));
+
+    if (notificationsToInsert.length > 0) {
+        // Dispara Web Push Notifications não-bloqueante para TODOS os admins (individualmente)
+        setTimeout(() => {
+            admins.forEach(admin => {
+                sb.functions.invoke('push-notification', {
+                    body: {
+                        userId: admin.id,
+                        title: title,
+                        message: cleanRawMessage,
+                        type: type,
+                        actionLink: 'super-admin-message'
+                    }
+                }).catch(() => {});
+            });
+        }, 50);
+
+        // Insere em lotes 
+        const { data, error } = await sb.from('notifications').insert(notificationsToInsert);
+        if (error) {
+             // Fallback se action_link der erro
+             if(error.code === 'PGRST204' || error.message?.includes('action_link')) {
+                 const fallbackInserts = notificationsToInsert.map(n => {
+                     const copy = { ...n };
+                     delete copy.action_link;
+                     return copy;
+                 });
+                 return await sb.from('notifications').insert(fallbackInserts);
+             }
+             return { error };
+        }
+        return { data, error: null };
+    }
+    return { data: null, error: null };
+};
+
 export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {
     const sb = getSupabase();
     if (!sb) return;

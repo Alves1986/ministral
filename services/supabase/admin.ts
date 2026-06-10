@@ -44,6 +44,32 @@ export const fetchOrganizationsWithStats = async () => {
   });
 };
 
+export const fetchGlobalUsers = async () => {
+    const sb = getSupabase();
+    if (!sb) return [];
+
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+
+    const { data: profile } = await sb.from('profiles')
+      .select('is_super_admin')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!profile?.is_super_admin) return [];
+
+    const { data, error } = await sb.from('profiles').select(`
+        id, name, email, phone, is_admin, is_super_admin, created_at, organization_id,
+        organizations ( name )
+    `).order('created_at', { ascending: false });
+
+    if (error) {
+        console.error("Error fetching global users:", error);
+        return [];
+    }
+    return data || [];
+};
+
 export const saveOrganization = async (id: string | null, name: string, slug: string, billing?: any) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };

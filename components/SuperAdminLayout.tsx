@@ -2,7 +2,8 @@ import React, { ReactNode, useState } from 'react';
 import {
     Shield, LogOut, Sun, Moon, Menu, X, Bell,
     Building2, MessageSquare, Activity, Settings,
-    ChevronRight, User as UserIcon
+    ChevronRight, User as UserIcon, Megaphone, CreditCard,
+    Headset, ShieldCheck, Gauge
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { getSystemLogo } from '../utils/branding';
@@ -23,8 +24,14 @@ interface Props {
 
 const SA_NAV_ITEMS: SuperAdminNavItem[] = [
     { id: 'sa-organizations', label: 'Organizações',     icon: <Building2 size={20} /> },
+    { id: 'sa-users',        label: 'Usuários',          icon: <UserIcon size={20} /> },
     { id: 'sa-whatsapp',     label: 'WhatsApp Global',   icon: <MessageSquare size={20} /> },
+    { id: 'sa-broadcast',    label: 'Comunicados',       icon: <Megaphone size={20} /> },
+    { id: 'sa-billing',      label: 'Financeiro',        icon: <CreditCard size={20} /> },
     { id: 'sa-telemetry',    label: 'Telemetria',        icon: <Activity size={20} /> },
+    { id: 'sa-support',      label: 'Suporte',           icon: <Headset size={20} /> },
+    { id: 'sa-audit',        label: 'Auditoria',         icon: <ShieldCheck size={20} /> },
+    { id: 'sa-quotas',       label: 'Quotas',            icon: <Gauge size={20} /> },
 ];
 
 export const SuperAdminLayout: React.FC<Props> = ({
