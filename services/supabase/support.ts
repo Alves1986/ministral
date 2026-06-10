@@ -20,58 +20,95 @@ export interface SupportTicket {
   }[];
 }
 
-const getLocalTickets = (): SupportTicket[] => {
-    try {
-        return JSON.parse(localStorage.getItem('ministral_support_tickets') || '[]');
-    } catch {
-        return [];
-    }
+export const fetchSupportTickets = async (): Promise<SupportTicket[]> => {
+    const sb = getSupabase();
+    if (!sb) return [];
+    
+    // As in other fetch calls, we query from the table
+    const { data, error } = await sb.from('support_tickets')
+        .select(`
+            *,
+            organizations (
+                name
+            )
+        `)
+        .order('created_at', { ascending: false });
+        
+    if (error || !data) return [];
+    
+    return data.map((t: any) => ({
+        id: t.id,
+        orgId: t.organization_id,
+        orgName: t.organizations?.name || 'Organização',
+        authorId: t.author_id,
+        authorName: t.author_name,
+        subject: t.subject,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        createdAt: t.created_at,
+        replies: t.replies || []
+    }));
 };
 
-const saveLocalTickets = (tickets: SupportTicket[]) => {
-    localStorage.setItem('ministral_support_tickets', JSON.stringify(tickets));
-};
+export const createSupportTicket = async (orgId: string, orgName: string, authorId: string | undefined | null, authorName: string, subject: string, description: string, priority: string) => {
+    const sb = getSupabase();
+    if (!sb) return null;
 
-export const fetchSupportTickets = async () => {
-    // Para protótipo e evitar problemas de RLS de SuperAdmin em notifications
-    return getLocalTickets();
-};
-
-export const createSupportTicket = async (orgId: string, orgName: string, authorId: string, authorName: string, subject: string, description: string, priority: string) => {
-    const all = getLocalTickets();
-    const newTicket: SupportTicket = {
-        id: 'TKT-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-        orgId,
-        orgName,
-        authorId,
-        authorName,
+    const payload: any = {
+        organization_id: orgId,
+        author_name: authorName,
         subject,
         description,
         status: 'open',
-        priority: priority as any,
-        createdAt: new Date().toISOString(),
+        priority,
         replies: []
     };
-    all.push(newTicket);
-    saveLocalTickets(all);
-    return newTicket;
+    
+    // Evita enviar authorId como string vazia ou undef, o que quebra o tipo UUID no banco
+    if (authorId && authorId.trim() !== '') {
+        payload.author_id = authorId;
+    }
+
+    const { data, error } = await sb.from('support_tickets').insert(payload).select(`*, organizations(name)`).single();
+
+    if (error) {
+        console.error("Error creating ticket:", error);
+        return null;
+    }
+
+    return {
+        id: data.id,
+        orgId: data.organization_id,
+        orgName: data.organizations?.name || orgName,
+        authorId: data.author_id,
+        authorName: data.author_name,
+        subject: data.subject,
+        description: data.description,
+        status: data.status,
+        priority: data.priority,
+        createdAt: data.created_at,
+        replies: data.replies || []
+    };
 };
 
 export const updateSupportTicket = async (id: string, updates: Partial<SupportTicket>) => {
-    const all = getLocalTickets();
-    const index = all.findIndex(t => t.id === id);
-    if (index !== -1) {
-        all[index] = { ...all[index], ...updates };
-        saveLocalTickets(all);
-        return true;
-    }
-    return false;
+    const sb = getSupabase();
+    if (!sb) return false;
+    
+    const dbUpdates: any = {};
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.priority) dbUpdates.priority = updates.priority;
+    if (updates.replies) dbUpdates.replies = updates.replies;
+
+    const { error } = await sb.from('support_tickets').update(dbUpdates).eq('id', id);
+    return !error;
 };
 
 export const deleteSupportTicket = async (id: string) => {
-    const all = getLocalTickets();
-    const filtered = all.filter(t => t.id !== id);
-    saveLocalTickets(filtered);
-    return true;
+    const sb = getSupabase();
+    if (!sb) return false;
+    
+    const { error } = await sb.from('support_tickets').delete().eq('id', id);
+    return !error;
 };
-

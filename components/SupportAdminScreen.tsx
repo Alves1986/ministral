@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Headset, Plus, Clock, MessageSquare, Ticket, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { User } from '../types';
 import { fetchSupportTickets, createSupportTicket, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
+import { useToast } from './Toast';
 
 export interface SupportTicket {
   id: string;
@@ -24,6 +25,7 @@ export interface SupportTicket {
 }
 
 export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: string }> = ({ orgId, user, orgName }) => {
+    const { addToast } = useToast();
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [isCreating, setIsCreating] = useState(false);
     const [activeTicket, setActiveTicket] = useState<SupportTicket | null>(null);
@@ -51,12 +53,17 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        await createSupportTicket(orgId, orgName, user.id, user.name, subject, description, priority);
-        setIsCreating(false);
-        setSubject("");
-        setDescription("");
-        setPriority("medium");
-        refresh();
+        const created = await createSupportTicket(orgId, orgName, user.id, user.name, subject, description, priority);
+        if (created) {
+            addToast("Chamado criado com sucesso!", "success");
+            setIsCreating(false);
+            setSubject("");
+            setDescription("");
+            setPriority("medium");
+            refresh();
+        } else {
+            addToast("Erro ao criar chamado.", "error");
+        }
     };
 
     const handleReply = async (e: React.FormEvent) => {
@@ -72,18 +79,27 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
         };
         
         const updatedReplies = [...(activeTicket.replies || []), newReply];
-        await updateSupportTicket(activeTicket.id, { replies: updatedReplies });
+        const success = await updateSupportTicket(activeTicket.id, { replies: updatedReplies });
         
-        setReplyContent("");
-        refresh();
+        if (success) {
+            setReplyContent("");
+            refresh();
+        } else {
+            addToast("Falha ao enviar resposta.", "error");
+        }
     };
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (confirm("Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.")) {
-            await deleteSupportTicket(id);
-            if (activeTicket?.id === id) setActiveTicket(null);
-            refresh();
+            const success = await deleteSupportTicket(id);
+            if (success) {
+                addToast("Chamado excluído.", "success");
+                if (activeTicket?.id === id) setActiveTicket(null);
+                refresh();
+            } else {
+                addToast("Erro ao excluir chamado.", "error");
+            }
         }
     };
 
