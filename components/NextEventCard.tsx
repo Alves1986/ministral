@@ -577,6 +577,7 @@ export const NextEventCard: React.FC<Props> = ({
           orgId={currentUser?.organizationId}
           ministryId={ministryId}
           ministryName={ministryName}
+          practicalGuidelines={config?.practicalGuidelines}
           onClose={() => setShowServiceSchedule(false)}
         />
       )}

@@ -18,6 +18,7 @@ interface Props {
   orgId: string | null | undefined;
   ministryId: string | null | undefined;
   ministryName?: string | null;
+  practicalGuidelines?: string;
   onClose: () => void;
 }
 
@@ -28,6 +29,7 @@ export const ServiceSchedule: React.FC<Props> = ({
   orgId,
   ministryId,
   ministryName,
+  practicalGuidelines,
   onClose,
 }) => {
   // 1. Buscar funções do membro no ministério atual
@@ -195,56 +197,62 @@ export const ServiceSchedule: React.FC<Props> = ({
               </h4>
 
               <div className="bg-[#0f1f3d]/5 dark:bg-[#c9a84c]/5 border border-[#0f1f3d]/10 dark:border-[#c9a84c]/10 rounded-3xl p-6 space-y-6">
-                <ul className="space-y-5">
-                  <li className="flex items-start gap-4">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
-                    <div>
-                      <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
-                        Postura Espiritual
-                      </h6>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
-                        Esteja em oração antes do início do culto para ministrar
-                        com graça e integridade.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-4">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
-                    <div>
-                      <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
-                        Pontualidade Britânica
-                      </h6>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
-                        Chegue com pelo menos 30 minutos de antecedência. O
-                        atraso compromete todo o roteiro.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-4">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
-                    <div>
-                      <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
-                        Check-list de Equipamentos
-                      </h6>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
-                        Verifique cabos, baterias, notebooks e conexões antes da
-                        abertura dos portões.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-4">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
-                    <div>
-                      <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
-                        Acolhimento Amoroso
-                      </h6>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
-                        Sorria e receba a igreja com alegria. O serviço começa
-                        com um abraço e bom testemunho.
-                      </p>
-                    </div>
-                  </li>
-                </ul>
+                {practicalGuidelines ? (
+                  <div className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed whitespace-pre-wrap">
+                    {practicalGuidelines}
+                  </div>
+                ) : (
+                  <ul className="space-y-5">
+                    <li className="flex items-start gap-4">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
+                      <div>
+                        <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
+                          Postura Espiritual
+                        </h6>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                          Esteja em oração antes do início do culto para
+                          ministrar com graça e integridade.
+                        </p>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
+                      <div>
+                        <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
+                          Pontualidade Britânica
+                        </h6>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                          Chegue com pelo menos 30 minutos de antecedência. O
+                          atraso compromete todo o roteiro.
+                        </p>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
+                      <div>
+                        <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
+                          Check-list de Equipamentos
+                        </h6>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                          Verifique cabos, baterias, notebooks e conexões antes
+                          da abertura dos portões.
+                        </p>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-[#c9a84c] shrink-0"></span>
+                      <div>
+                        <h6 className="text-xs font-extrabold text-[#0f1f3d] dark:text-white uppercase tracking-wider mb-1">
+                          Acolhimento Amoroso
+                        </h6>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                          Sorria e receba a igreja com alegria. O serviço começa
+                          com um abraço e bom testemunho.
+                        </p>
+                      </div>
+                    </li>
+                  </ul>
+                )}
               </div>
             </div>
           </div>

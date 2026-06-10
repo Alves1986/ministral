@@ -49,9 +49,11 @@ import {
   fetchGlobalBroadcasts,
   deleteGlobalBroadcast,
   deleteGlobalUser,
+  removeGlobalUserFromMinistry,
   toggleMinistryFeature,
 } from "../services/supabaseService";
 import { checkMinistryLimit } from "../services/supabase/admin";
+import { createInviteToken } from "../services/supabase/auth";
 import {
   fetchSupportTickets,
   updateSupportTicket,
@@ -458,6 +460,24 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
         }
       },
     );
+  };
+
+  const handleCopyInviteLink = async (
+    minId: string,
+    orgId: string,
+    label: string,
+  ) => {
+    try {
+      const res = await createInviteToken(minId, orgId, label);
+      if (res.success && res.url) {
+        await navigator.clipboard.writeText(res.url);
+        addToast(`Link de convite para ${label} copiado!`, "success");
+      } else {
+        addToast(res.message || "Erro ao gerar link de convite", "error");
+      }
+    } catch (e: any) {
+      addToast("Erro", "error");
+    }
   };
 
   const handleToggleCronograma = async (code: string) => {
@@ -1410,9 +1430,39 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                                 {u.ministriesDetails.map((m: any) => (
                                   <span
                                     key={m.id}
-                                    className="inline-flex px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs shadow-sm border border-zinc-200 dark:border-zinc-700"
+                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs shadow-sm border border-zinc-200 dark:border-zinc-700"
                                   >
                                     {m.label}
+                                    <button
+                                      onClick={async () => {
+                                        if (
+                                          window.confirm(
+                                            `Deseja realmente remover ${u.name} do ministério ${m.label}?`,
+                                          )
+                                        ) {
+                                          const res =
+                                            await removeGlobalUserFromMinistry(
+                                              u.id,
+                                              m.id,
+                                              u.organization_id,
+                                            );
+                                          if (res.success) {
+                                            queryClient.invalidateQueries({
+                                              queryKey: [
+                                                "super_admin_global_users",
+                                              ],
+                                            });
+                                            addToast(res.message, "success");
+                                          } else {
+                                            addToast(res.message, "error");
+                                          }
+                                        }
+                                      }}
+                                      className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-0.5 rounded-full transition-colors"
+                                      title={`Remover de ${m.label}`}
+                                    >
+                                      <X size={12} />
+                                    </button>
                                   </span>
                                 ))}
                               </div>
@@ -2204,6 +2254,20 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                               title="Toggle Acesso ao Cronograma"
                             >
                               <Sparkles size={16} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleCopyInviteLink(
+                                  min.id,
+                                  editingOrg.id,
+                                  min.label,
+                                );
+                              }}
+                              className="text-zinc-400 hover:text-emerald-500 p-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                              title="Copiar Link de Convite"
+                            >
+                              <LinkIcon size={16} />
                             </button>
                             <button
                               onClick={(e) => {
