@@ -22,7 +22,7 @@ export const fetchOrganizationsWithStats = async () => {
   // Busca orgs e ministerios
   const { data: orgs, error } = await sb
     .from('organizations')
-    .select('*, organization_ministries(id, code, label)')
+    .select('*, organization_ministries(id, code, label, enabled_tabs)')
     .limit(10000);
   if (error) throw error;
 
@@ -163,6 +163,35 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
     }
 
     return error ? { success: false, message: error.message } : { success: true, message: "Salvo" };
+};
+
+export const toggleMinistryFeature = async (orgId: string, code: string, feature: string) => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: "Sem conexão" };
+    
+    const { data: min, error: fetchError } = await sb.from('organization_ministries')
+        .select('enabled_tabs')
+        .eq('organization_id', orgId)
+        .eq('code', code)
+        .maybeSingle();
+        
+    if (fetchError || !min) return { success: false, message: "Ministério não encontrado" };
+    
+    const currentTabs: string[] = min.enabled_tabs || [];
+    let newTabs: string[];
+    
+    if (currentTabs.includes(feature)) {
+        newTabs = currentTabs.filter(t => t !== feature);
+    } else {
+        newTabs = [...currentTabs, feature];
+    }
+    
+    const { error } = await sb.from('organization_ministries')
+        .update({ enabled_tabs: newTabs })
+        .eq('organization_id', orgId)
+        .eq('code', code);
+        
+    return error ? { success: false, message: error.message } : { success: true, message: "Configuração atualizada com sucesso", enabled_tabs: newTabs };
 };
 
 export const deleteOrganizationMinistry = async (orgId: string, code: string) => {

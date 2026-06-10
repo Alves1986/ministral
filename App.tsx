@@ -526,6 +526,7 @@ const InnerApp = () => {
                 attendance={attendance} 
                 roles={roles} 
                 members={publicMembers} 
+                config={ministryConfig}
                 onConfirm={async (key) => {
                     if (nextEvent && nextEvent.event) {
                         const role = key.split('|').slice(2).join('|') || '';
