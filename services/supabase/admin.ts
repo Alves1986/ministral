@@ -112,13 +112,6 @@ export const removeGlobalUserFromMinistry = async (
   const sb = getSupabase();
   if (!sb) return { success: false, message: "Sem conexão com banco de dados" };
 
-  // Delete member functions for this ministry
-  await sb
-    .from("member_functions")
-    .delete()
-    .eq("member_id", userId)
-    .eq("ministry_id", ministryId);
-
   // Delete from ministry_members
   await sb
     .from("ministry_members")
