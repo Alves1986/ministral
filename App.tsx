@@ -456,7 +456,7 @@ const InnerApp = () => {
 
   const MANAGEMENT_NAV = useMemo(() => 
     RAW_MANAGEMENT_NAV
-    .filter(item => safeEnabledTabs.includes(item.id) || item.id === 'advanced-ai')
+    .filter(item => safeEnabledTabs.includes(item.id) || ['advanced-ai', 'support-admin'].includes(item.id))
     .filter(item => {
       if (!isPro && ['schedule-rules','monthly-report','report','advanced-ai'].includes(item.id))
         return false;

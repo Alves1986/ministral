@@ -141,6 +141,7 @@ export const ALL_TABS = [
   'members',
   'super-admin',
   'advanced-ai',
+  'support-admin',
   // Super Admin exclusive tabs
   'sa-organizations',
   'sa-whatsapp',

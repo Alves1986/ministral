@@ -19,6 +19,8 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [searchUserTerm, setSearchUserTerm] = useState("");
+    const [filterOrgId, setFilterOrgId] = useState("");
+    const [filterMinistryId, setFilterMinistryId] = useState("");
     
     // Broadcast state
     const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -334,6 +336,31 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
         o.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         (o.slug && o.slug.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    const availableMinistriesForOrg = useMemo(() => {
+        if (!filterOrgId) return [];
+        const orgUsers = globalUsers.filter((u: any) => u.organization_id === filterOrgId);
+        const uniqueMinistries = new Map();
+        orgUsers.forEach((u: any) => {
+            if (u.ministriesDetails && Array.isArray(u.ministriesDetails)) {
+                u.ministriesDetails.forEach((m: any) => {
+                    if (!uniqueMinistries.has(m.id)) {
+                        uniqueMinistries.set(m.id, m);
+                    }
+                });
+            }
+        });
+        return Array.from(uniqueMinistries.values());
+    }, [globalUsers, filterOrgId]);
+
+    const filteredGlobalUsers = useMemo(() => {
+        return globalUsers.filter((u: any) => {
+            const matchesSearch = u.name?.toLowerCase().includes(searchUserTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchUserTerm.toLowerCase());
+            const matchesOrg = filterOrgId ? u.organization_id === filterOrgId : true;
+            const matchesMinistry = filterMinistryId ? u.allowed_ministries?.includes(filterMinistryId) : true;
+            return matchesSearch && matchesOrg && matchesMinistry;
+        });
+    }, [globalUsers, searchUserTerm, filterOrgId, filterMinistryId]);
 
     return (
         <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
@@ -794,7 +821,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
             {activeTab === 'sa-users' && (
                 <div className="space-y-6 animate-slide-up">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
                             <div>
                                 <h3 className="text-xl font-black text-zinc-900 dark:text-white flex items-center gap-2">
                                     <Users className="text-ministral-500" size={24} /> 
@@ -802,15 +829,43 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                 </h3>
                                 <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Busque rapidamente qualquer usuário do sistema independente da organização</p>
                             </div>
-                            <div className="relative w-full md:w-auto">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar por nome ou email..."
-                                    value={searchUserTerm}
-                                    onChange={(e) => setSearchUserTerm(e.target.value)}
-                                    className="w-full md:w-80 pl-10 pr-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white"
-                                />
+                            <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
+                                <select 
+                                    value={filterOrgId}
+                                    onChange={(e) => {
+                                        setFilterOrgId(e.target.value);
+                                        setFilterMinistryId("");
+                                    }}
+                                    className="w-full md:w-auto px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white"
+                                >
+                                    <option value="">Todas as Organizações</option>
+                                    {organizations.map(org => (
+                                        <option key={org.id} value={org.id}>{org.name}</option>
+                                    ))}
+                                </select>
+                                
+                                <select 
+                                    value={filterMinistryId}
+                                    onChange={(e) => setFilterMinistryId(e.target.value)}
+                                    disabled={!filterOrgId}
+                                    className="w-full md:w-auto px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white disabled:opacity-50"
+                                >
+                                    <option value="">Todos os Ministérios</option>
+                                    {availableMinistriesForOrg.map((m: any) => (
+                                        <option key={m.id} value={m.id}>{m.label}</option>
+                                    ))}
+                                </select>
+
+                                <div className="relative w-full md:w-auto">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por nome ou email..."
+                                        value={searchUserTerm}
+                                        onChange={(e) => setSearchUserTerm(e.target.value)}
+                                        className="w-full md:w-64 pl-10 pr-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -826,14 +881,14 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                         <tr className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-wider text-zinc-500 font-bold">
                                             <th className="px-6 py-4 rounded-tl-2xl">Usuário</th>
                                             <th className="px-6 py-4">Organização</th>
+                                            <th className="px-6 py-4">Ministérios</th>
                                             <th className="px-6 py-4 text-center">Permissão</th>
                                             <th className="px-6 py-4">Último Login</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                                        {globalUsers
-                                            .filter((u: any) => u.name?.toLowerCase().includes(searchUserTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchUserTerm.toLowerCase()))
-                                            .slice(0, 100) // Limite de 100 resultados
+                                        {filteredGlobalUsers
+                                            .slice(0, 100)
                                             .map((u: any) => (
                                                 <tr key={u.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
                                                     <td className="px-6 py-4">
@@ -851,6 +906,19 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                         <span className="text-zinc-900 dark:text-white font-medium">
                                                             {u.organizations?.name || <span className="text-zinc-500 italic">Sem Organização</span>}
                                                         </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {u.ministriesDetails && u.ministriesDetails.length > 0 ? (
+                                                            <div className="flex flex-col gap-1 items-start">
+                                                                {u.ministriesDetails.map((m: any) => (
+                                                                    <span key={m.id} className="inline-flex px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs shadow-sm border border-zinc-200 dark:border-zinc-700">
+                                                                        {m.label}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-zinc-500 italic text-sm">Nenhum</span>
+                                                        )}
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
                                                         {u.is_super_admin ? (

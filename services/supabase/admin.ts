@@ -59,7 +59,7 @@ export const fetchGlobalUsers = async () => {
     if (!profile?.is_super_admin) return [];
 
     const { data, error } = await sb.from('profiles').select(`
-        id, name, email, phone, is_admin, is_super_admin, created_at, organization_id,
+        id, name, email, phone, is_admin, is_super_admin, created_at, organization_id, allowed_ministries,
         organizations ( name )
     `).order('created_at', { ascending: false });
 
@@ -67,7 +67,13 @@ export const fetchGlobalUsers = async () => {
         console.error("Error fetching global users:", error);
         return [];
     }
-    return data || [];
+
+    const { data: ministries } = await sb.from('organization_ministries').select('id, label');
+    
+    return (data || []).map(u => ({
+        ...u,
+        ministriesDetails: ministries ? ministries.filter(m => (u.allowed_ministries || []).includes(m.id)) : []
+    }));
 };
 
 export const saveOrganization = async (id: string | null, name: string, slug: string, billing?: any) => {
