@@ -358,7 +358,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                         {/* Remove Button */}
                         {currentMember && (
                             <div className="p-2 md:p-1 border-b border-zinc-100 dark:border-zinc-800">
-                                {((currentMemberStatus === 'unavailable') || currentMemberConflict.conflict) && !isConfirmed && (
+                                {!isConfirmed && (
                                     <button
                                         type="button"
                                         onMouseDown={(e) => {

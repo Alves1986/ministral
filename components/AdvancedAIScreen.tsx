@@ -1071,12 +1071,21 @@ export const AdvancedAIScreen: React.FC<Props> = ({
             <div className="mb-6">
               <label className='text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block mb-3'>Selecione o Evento</label>
               <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
-                {events.filter((e: any) => e.iso?.startsWith(currentMonth)).map((e: any) => (
-                  <button key={e.id || e.iso} onClick={() => { setSelectedEvent(e); setMessages([]); }} className={`p-4 rounded-xl border text-left text-xs font-bold transition-all ${selectedEvent?.iso === e.iso ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100' : 'border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
-                    <div className="truncate text-sm">{e.title}</div>
-                    <div className='text-zinc-400 font-normal mt-1'>{e.iso?.split('T')[0]?.split('-').reverse().join('/')} — {e.iso?.split('T')[1]?.slice(0, 5)}</div>
-                  </button>
-                ))}
+                {(() => {
+                  const currentEvents = events.filter((e: any) => e.iso?.startsWith(currentMonth)).sort((a: any, b: any) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
+                  const now = new Date().getTime();
+                  const nextEvent = currentEvents.find((e: any) => new Date(e.iso).getTime() >= now);
+                  return currentEvents.map((e: any) => {
+                    const isNext = nextEvent && nextEvent.iso === e.iso;
+                    return (
+                      <button key={e.id || e.iso} onClick={() => { setSelectedEvent(e); setMessages([]); }} className={`p-4 rounded-xl border text-left text-xs font-bold transition-all relative overflow-hidden ${selectedEvent?.iso === e.iso ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100' : isNext ? 'border-amber-400/80 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100 hover:border-amber-500' : 'border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
+                        {isNext && <span className={`absolute top-0 right-0 text-[9px] px-2 py-0.5 rounded-bl-lg font-black tracking-wider ${selectedEvent?.iso === e.iso ? 'bg-ministral-500 text-white' : 'bg-amber-400 text-amber-950'}`}>PRÓXIMO</span>}
+                        <div className={`truncate text-sm ${isNext ? 'pr-14' : ''}`}>{e.title}</div>
+                        <div className={`${selectedEvent?.iso === e.iso ? 'text-ministral-400 dark:text-ministral-300' : isNext ? 'text-amber-700/80 dark:text-amber-400/80' : 'text-zinc-400'} font-normal mt-1`}>{e.iso?.split('T')[0]?.split('-').reverse().join('/')} — {e.iso?.split('T')[1]?.slice(0, 5)}</div>
+                      </button>
+                    );
+                  })
+                })()}
               </div>
             </div>
             <button onClick={handleGenerateMessages} disabled={messagesLoading || !selectedEvent} className='w-full sm:w-auto px-6 py-3 bg-ministral-500 hover:bg-ministral-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60'>

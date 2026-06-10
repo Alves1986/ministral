@@ -140,7 +140,7 @@ export const DashboardLayout: React.FC<Props> = ({
     const isAvailability = currentTab === 'availability';
     const isAnnouncements = currentTab === 'announcements';
     return (
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_30px_rgba(0,0,0,0.1)]">
+      <div className="lg:hidden print:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-around items-center h-[72px] px-2">
           
           <button onClick={() => onTabChange('dashboard')} className="flex flex-col items-center justify-center flex-1 h-full gap-1 group">
@@ -193,7 +193,7 @@ export const DashboardLayout: React.FC<Props> = ({
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 font-sans">
+    <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible print:block bg-slate-50 dark:bg-slate-950 font-sans">
       
       {sidebarOpen && (
         <div className="fixed inset-0 z-[95] bg-slate-950/40 backdrop-blur-sm lg:hidden transition-opacity duration-500" onClick={() => setSidebarOpen(false)} />
@@ -202,7 +202,7 @@ export const DashboardLayout: React.FC<Props> = ({
       <aside 
         onMouseEnter={() => setIsSidebarHovered(true)}
         onMouseLeave={() => setIsSidebarHovered(false)}
-        className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 lg:w-72'}`}
+        className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none print:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 lg:w-72'}`}
       >
         <div className={`py-8 shrink-0 ${isEffectivelyCollapsed ? 'px-4' : 'px-6'}`}>
            <div className={`flex items-center ${isEffectivelyCollapsed ? 'justify-center' : 'gap-4'}`}>
@@ -395,9 +395,9 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 max-w-full bg-transparent overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 max-w-full print:block print:overflow-visible bg-transparent overflow-hidden relative">
         
-        <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/70 dark:bg-ministral-dark/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
+        <header className="lg:hidden print:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/70 dark:bg-ministral-dark/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
             <div className="flex items-center gap-3">
                 <div className="w-9 h-9 flex items-center justify-center overflow-hidden">
                     <img 
@@ -436,7 +436,7 @@ export const DashboardLayout: React.FC<Props> = ({
             </div>
         </header>
 
-        <header className="hidden lg:flex h-20 px-10 items-center justify-between sticky top-0 z-30 bg-slate-50/50 dark:bg-ministral-dark/50 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
+        <header className="hidden lg:flex print:hidden h-20 px-10 items-center justify-between sticky top-0 z-30 bg-slate-50/50 dark:bg-ministral-dark/50 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
              <div className="flex items-center gap-4">
                  <button 
                      onClick={() => setIsDesktopCollapsed(prev => !prev)}
@@ -485,8 +485,8 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 custom-scrollbar relative">
-            <div className={`mx-auto w-full min-h-full pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
+            <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
                 {children}
             </div>
         </div>
