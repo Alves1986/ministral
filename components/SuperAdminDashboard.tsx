@@ -1027,7 +1027,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-xl bg-ministral-500/10 flex items-center justify-center text-ministral-500 font-bold shrink-0">
-                                                                {u.name?.charAt(0).toUpperCase()}
+                                                                {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
                                                             </div>
                                                             <div>
                                                                 <div className="font-bold text-zinc-900 dark:text-white">{u.name}</div>
@@ -1110,7 +1110,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                             <div className="p-6 overflow-y-auto flex-1 space-y-6 bg-zinc-50/50 dark:bg-zinc-900/50">
                                 <div className="flex gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 font-bold text-zinc-500">
-                                        {activeTicket.authorName.charAt(0).toUpperCase()}
+                                        {activeTicket.authorName ? activeTicket.authorName.charAt(0).toUpperCase() : 'U'}
                                     </div>
                                     <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/50 p-4 rounded-b-2xl rounded-tr-2xl shadow-sm relative">
                                         <span className="absolute -top-3 left-4 text-xs font-bold text-zinc-500 bg-zinc-50 dark:bg-zinc-900 px-2 rounded-full">{activeTicket.authorName}</span>
@@ -1128,7 +1128,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                 {activeTicket.replies?.map((reply:any) => (
                                     <div key={reply.id} className={`flex gap-4 ${reply.isSuperAdmin ? 'flex-row-reverse' : ''}`}>
                                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold ${reply.isSuperAdmin ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'}`}>
-                                            {reply.isSuperAdmin ? <Headset size={18} /> : reply.authorName.charAt(0).toUpperCase()}
+                                            {reply.isSuperAdmin ? <Headset size={18} /> : (reply.authorName ? reply.authorName.charAt(0).toUpperCase() : 'U')}
                                         </div>
                                         <div className={`border p-4 shadow-sm relative ${reply.isSuperAdmin ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-500/20 rounded-b-2xl rounded-tl-2xl' : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700/50 rounded-b-2xl rounded-tr-2xl'}`}>
                                             <div className="flex items-center gap-2 mb-2">

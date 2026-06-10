@@ -61,7 +61,7 @@ export const fetchGlobalUsers = async () => {
     if (!profile?.is_super_admin) return [];
 
     const { data, error } = await sb.from('profiles').select(`
-        id, name, email, phone, is_admin, is_super_admin, created_at, organization_id, allowed_ministries,
+        id, name, email, whatsapp, is_admin, is_super_admin, created_at, organization_id, allowed_ministries,
         organizations ( name )
     `).order('created_at', { ascending: false }).limit(10000);
 

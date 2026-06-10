@@ -159,8 +159,10 @@ export interface ScheduleCellProps {
     occurrence: OccurrenceV2;
     role: string;
     currentMemberId: string | null;
+    isConfirmed?: boolean;
     members: MemberV2[];
     onAssign: (date: string, role: string, memberId: string | null, ruleId: string) => void;
+    onConfirm?: (date: string, role: string, ruleId: string) => void;
     processing: boolean;
     availability: Record<string, Record<string, string>>;
     eventTime: string;
@@ -175,8 +177,10 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     occurrence, 
     role, 
     currentMemberId, 
+    isConfirmed,
     members, 
     onAssign,
+    onConfirm,
     processing,
     availability,
     eventTime,
@@ -256,7 +260,14 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
         currentMemberConflict = isConflict(currentMemberId, role, occurrence.ruleId, occurrence.date, otherAssignments, conflictRules, globalConflicts, allOccurrences, eventTime);
     }
 
-    const hasAnyAlert = (currentMemberStatus === 'unavailable') || currentMemberConflict.conflict;
+    const hasAnyAlert = ((currentMemberStatus === 'unavailable') || currentMemberConflict.conflict) && !isConfirmed;
+
+    const handleConfirmOverride = () => {
+        if (onConfirm) {
+            onConfirm(occurrence.date, role, occurrence.ruleId);
+        }
+        setIsOpen(false);
+    };
 
     return (
         <div className="relative w-full h-full min-h-[42px]" ref={dropdownRef}>
@@ -347,6 +358,19 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                         {/* Remove Button */}
                         {currentMember && (
                             <div className="p-2 md:p-1 border-b border-zinc-100 dark:border-zinc-800">
+                                {((currentMemberStatus === 'unavailable') || currentMemberConflict.conflict) && !isConfirmed && (
+                                    <button
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleConfirmOverride();
+                                        }}
+                                        className="w-full text-left px-3 md:px-2 py-3 md:py-2 mb-1 text-sm md:text-xs text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg md:rounded flex items-center gap-2 font-medium transition-colors"
+                                    >
+                                        <Check size={16} className="md:w-3 md:h-3" />
+                                        CONFIRMAR PRESENÇA
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onMouseDown={(e) => {

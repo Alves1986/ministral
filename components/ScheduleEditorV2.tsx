@@ -8,6 +8,7 @@ import {
     generateOccurrencesV2,
     saveAssignmentV2,
     removeAssignmentV2,
+    confirmAssignmentV2,
     AssignmentV2,
     MemberV2,
     OccurrenceV2,
@@ -45,6 +46,7 @@ const MemoizedEditorCell = React.memo<{
     role: string;
     members: MemberV2[];
     onAssign: (date: string, role: string, memberId: string | null, ruleId: string) => void;
+    onConfirm: (date: string, role: string, ruleId: string) => void;
     processing: boolean;
     availability: any;
     conflictRules: any;
@@ -52,7 +54,7 @@ const MemoizedEditorCell = React.memo<{
     memberCounts: Record<string, number>;
     globalConflicts?: any;
     allOccurrences?: any;
-}>(({ occurrence, role, members, onAssign, processing, availability, conflictRules, assignments, memberCounts, globalConflicts, allOccurrences }) => {
+}>(({ occurrence, role, members, onAssign, onConfirm, processing, availability, conflictRules, assignments, memberCounts, globalConflicts, allOccurrences }) => {
     const assignment = assignments.find(a => {
         const aDate = a.event_date?.slice(0, 10);
         const oDate = occurrence.date?.slice(0, 10);
@@ -64,8 +66,10 @@ const MemoizedEditorCell = React.memo<{
             occurrence={occurrence}
             role={role}
             currentMemberId={assignment?.member_id || null}
+            isConfirmed={assignment?.confirmed || false}
             members={members}
             onAssign={onAssign}
+            onConfirm={onConfirm}
             processing={processing}
             availability={availability}
             eventTime={occurrence.time}
@@ -409,6 +413,37 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         }
     };
 
+    const handleConfirmAssignment = useCallback(async (date: string, role: string, ruleId: string) => {
+        setProcessing(true);
+        let previousAssignments: AssignmentV2[] = [];
+        
+        setAssignments(prev => {
+            previousAssignments = [...prev];
+            return prev.map(a => {
+                if (a.event_date === date && a.role === role && a.event_rule_id === ruleId) {
+                    return { ...a, confirmed: true };
+                }
+                return a;
+            });
+        });
+
+        try {
+            await confirmAssignmentV2(ministryId, orgId, {
+                event_rule_id: ruleId,
+                event_date: date,
+                role
+            });
+            addToast('Presença confirmada manualmente', 'success');
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+        } catch (error) {
+            console.error(error);
+            addToast('Erro ao confirmar presença', 'error');
+            setAssignments(previousAssignments);
+        } finally {
+            setProcessing(false);
+        }
+    }, [ministryId, orgId, currentMonth, queryClient, addToast]);
+
     const handleAssignmentChange = useCallback(async (date: string, role: string, memberId: string | null, ruleId: string) => {
         setProcessing(true);
         
@@ -725,6 +760,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     role={role}
                                                     members={members}
                                                     onAssign={handleAssignmentChange}
+                                                    onConfirm={handleConfirmAssignment}
                                                     processing={processing}
                                                     availability={availability}
                                                     conflictRules={conflictRules}
@@ -785,6 +821,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     role={role}
                                                     members={members}
                                                     onAssign={handleAssignmentChange}
+                                                    onConfirm={handleConfirmAssignment}
                                                     processing={processing}
                                                     availability={availability}
                                                     conflictRules={conflictRules}

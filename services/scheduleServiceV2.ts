@@ -274,6 +274,33 @@ export const fetchMinistryRoles = async (
   return [...new Set(allRoles)].filter(r => Boolean(r)) as string[];
 };
 
+export const confirmAssignmentV2 = async (
+  ministryId: string,
+  orgId: string,
+  payload: {
+    event_rule_id: string;
+    event_date: string;
+    role: string;
+  }
+) => {
+  const sb = getSupabase();
+  if (!sb) throw new Error("NO_SUPABASE");
+
+  const { data, error } = await sb
+    .from("schedule_assignments")
+    .update({ confirmed: true })
+    .match({
+      organization_id: orgId,
+      ministry_id: ministryId,
+      event_rule_id: payload.event_rule_id,
+      event_date: payload.event_date,
+      role: payload.role
+    });
+
+  if (error) throw error;
+  return data;
+};
+
 export const saveAssignmentV2 = async (
   ministryId: string,
   orgId: string,
