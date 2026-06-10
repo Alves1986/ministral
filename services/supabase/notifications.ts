@@ -354,6 +354,45 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     return { data: null, error: null };
 };
 
+export const fetchGlobalBroadcasts = async () => {
+    const sb = getSupabase();
+    if (!sb) return [];
+    
+    const { data, error } = await sb.from('notifications')
+        .select('title, message, type, created_at')
+        .eq('action_link', 'super-admin-message')
+        .order('created_at', { ascending: false })
+        .limit(300);
+        
+    if (error || !data) return [];
+    
+    const unique = [];
+    const seen = new Set();
+    
+    for (const item of data) {
+        const key = `${item.title}-${item.message}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+        }
+    }
+    
+    return unique;
+};
+
+export const deleteGlobalBroadcast = async (title: string, message: string) => {
+    const sb = getSupabase();
+    if (!sb) return { error: new Error('Sem conexão') };
+    
+    const { error } = await sb.from('notifications')
+        .delete()
+        .eq('title', title)
+        .eq('message', message)
+        .eq('action_link', 'super-admin-message');
+        
+    return { error };
+};
+
 export const notifyAllOrganizationAdmins = async (title: string, message: string, type: string = 'info') => {
     const sb = getSupabase();
     if (!sb) return { error: new Error('Sem conexão com o banco.') };

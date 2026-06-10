@@ -3,12 +3,12 @@ import {
     Building2, Users, Layers, Activity, Plus, Edit2, 
     ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock, Link as LinkIcon,
     MessageSquare, BarChart3, Clock, Crown, ShieldAlert, Wifi, RefreshCw, Megaphone, Send,
-    Headset, ShieldCheck, Gauge, AlertTriangle, CheckCircle2, Ticket
+    Headset, ShieldCheck, Gauge, AlertTriangle, CheckCircle2, Ticket, X, AlertCircle
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabase/client';
 import { Organization } from '../types';
-import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL, notifyAllOrganizationAdmins, fetchGlobalUsers } from '../services/supabaseService';
+import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL, notifyAllOrganizationAdmins, fetchGlobalUsers, fetchGlobalBroadcasts, deleteGlobalBroadcast } from '../services/supabaseService';
 import { checkMinistryLimit } from '../services/supabase/admin';
 import { fetchSupportTickets, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
 import { useToast } from './Toast';
@@ -28,6 +28,22 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
     const [broadcastMessage, setBroadcastMessage] = useState("");
     const [broadcastType, setBroadcastType] = useState("info");
     const [sendingBroadcast, setSendingBroadcast] = useState(false);
+    const [pastBroadcasts, setPastBroadcasts] = useState<any[]>([]);
+    const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
+    const [viewingBroadcast, setViewingBroadcast] = useState<any | null>(null);
+
+    const loadPastBroadcasts = async () => {
+        setIsLoadingBroadcasts(true);
+        const data = await fetchGlobalBroadcasts();
+        setPastBroadcasts(data);
+        setIsLoadingBroadcasts(false);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'sa-broadcast') {
+            loadPastBroadcasts();
+        }
+    }, [activeTab]);
 
     const handleSendBroadcast = async () => {
         if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
@@ -47,10 +63,28 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
             setBroadcastTitle("");
             setBroadcastMessage("");
             setBroadcastType("info");
+            loadPastBroadcasts();
         } catch (e: any) {
             addToast(e.message || "Erro ao enviar comunicado global", "error");
         } finally {
             setSendingBroadcast(false);
+        }
+    };
+
+    const handleDeleteBroadcast = async (e: React.MouseEvent, title: string, message: string) => {
+        e.stopPropagation();
+        if (!confirm("Tem certeza que deseja excluir as notificações deste comunicado?")) return;
+        
+        try {
+            const { error } = await deleteGlobalBroadcast(title, message);
+            if (error) throw error;
+            addToast("Comunicado excluído com sucesso!", "success");
+            loadPastBroadcasts();
+            if (viewingBroadcast && viewingBroadcast.title === title && viewingBroadcast.message === message) {
+                setViewingBroadcast(null);
+            }
+        } catch (e: any) {
+            addToast(e.message || "Erro ao excluir comunicado", "error");
         }
     };
 
@@ -624,6 +658,93 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                         <><Send size={20}/> Disparar para Todos</>
                                     )}
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 md:p-8 shadow-sm border border-zinc-200 dark:border-zinc-800">
+                        <h3 className="text-xl font-black text-zinc-800 dark:text-white mb-6">Histórico de Comunicados</h3>
+                        
+                        {isLoadingBroadcasts ? (
+                            <div className="flex justify-center p-8"><Loader2 className="animate-spin text-ministral-500" size={32} /></div>
+                        ) : pastBroadcasts.length === 0 ? (
+                            <p className="text-zinc-500 text-center py-8">Nenhum comunicado enviado ainda.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {pastBroadcasts.map((b, idx) => (
+                                    <div key={idx} className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700/50 hover:border-ministral-500/30 transition-colors">
+                                        <div className="flex justify-between items-start gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`w-2 h-2 rounded-full ${
+                                                        b.type === 'error' ? 'bg-red-500' :
+                                                        b.type === 'warning' ? 'bg-amber-500' :
+                                                        b.type === 'success' ? 'bg-emerald-500' :
+                                                        'bg-blue-500'
+                                                    }`} />
+                                                    <h4 className="font-bold text-zinc-900 dark:text-white truncate">{b.title}</h4>
+                                                </div>
+                                                <p className="text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2">{b.message}</p>
+                                                <span className="text-xs text-zinc-400 mt-2 block font-medium">
+                                                    Enviado em: {new Date(b.created_at).toLocaleString('pt-BR')}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setViewingBroadcast(b)}
+                                                    className="p-2 text-zinc-400 hover:text-ministral-500 hover:bg-ministral-50 dark:hover:bg-ministral-500/10 rounded-lg transition-colors"
+                                                    title="Visualizar Mensagem"
+                                                >
+                                                    <MessageSquare size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => handleDeleteBroadcast(e, b.title, b.message)}
+                                                    className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    title="Excluir Comunicado"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de visualização de comunicado */}
+            {viewingBroadcast && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-scale-up border border-zinc-200 dark:border-zinc-800">
+                        <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
+                            <h3 className="text-xl font-black text-zinc-800 dark:text-white flex items-center gap-2">
+                                <Megaphone className="text-ministral-500" size={24} /> Pré-visualização
+                            </h3>
+                            <button onClick={() => setViewingBroadcast(null)} className="p-2 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <h4 className="font-bold text-zinc-900 dark:text-white text-lg">{viewingBroadcast.title}</h4>
+                                <div className="mt-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl whitespace-pre-wrap text-zinc-700 dark:text-zinc-300 leading-relaxed border border-zinc-200 dark:border-zinc-700/50">
+                                    {viewingBroadcast.message}
+                                </div>
+                                <div className="mt-4 flex items-center justify-between text-sm font-medium">
+                                    <span className="text-zinc-500">
+                                        Data de envio: {new Date(viewingBroadcast.created_at).toLocaleString('pt-BR')}
+                                    </span>
+                                    <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
+                                        viewingBroadcast.type === 'error' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' :
+                                        viewingBroadcast.type === 'warning' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30' :
+                                        viewingBroadcast.type === 'success' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
+                                        'bg-blue-100 text-blue-600 dark:bg-blue-900/30'
+                                    }`}>
+                                        {viewingBroadcast.type}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>

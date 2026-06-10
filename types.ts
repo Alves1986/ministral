@@ -16,7 +16,7 @@ export interface Organization {
   ministries?: MinistryDef[];
   // Billing & Access Control
   plan_type?: 'trial' | 'pro' | 'enterprise';
-  billing_status?: 'active' | 'past_due' | 'canceled' | 'trial';
+  billing_status?: 'active' | 'past_due' | 'canceled' | 'trial' | 'trialing';
   whatsapp_enabled?: boolean;
   trial_ends_at?: string;
   checkout_url?: string;

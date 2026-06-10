@@ -12,6 +12,7 @@ export interface SupportTicket {
   authorName: string;
   subject: string;
   description: string;
+  imageUrl?: string;
   status: 'open' | 'in_progress' | 'resolved';
   priority: 'low' | 'medium' | 'high' | 'critical';
   createdAt: string;
