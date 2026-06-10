@@ -67,7 +67,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
         const settings = await fetchMinistrySettings(selectedMinistry, orgId);
         const dynamicRoles = settings?.roles;
         if (dynamicRoles && dynamicRoles.length > 0) {
-            setAvailableRoles(dynamicRoles.filter((r: string) => !r.startsWith('__vocal_count:')));
+            setAvailableRoles(dynamicRoles.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:')));
         } else {
             setAvailableRoles(defaults);
         }

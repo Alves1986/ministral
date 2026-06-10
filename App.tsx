@@ -945,7 +945,7 @@ const InnerApp = () => {
                       ministryId: id, 
                       ministry_functions: access.functions,
                       allowedMinistries: profileCheck.data?.allowed_ministries || activeUser!.allowedMinistries, 
-                      access_role: activeUser!.isOrgAdmin ? 'admin' : (access.role === 'admin' ? 'admin' : 'member')
+                      access_role: (activeUser!.isOrgAdmin || activeUser!.isSuperAdmin) ? 'admin' : (access.role === 'admin' ? 'admin' : 'member')
                   });
 
                   const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';

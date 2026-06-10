@@ -269,26 +269,34 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
   const { confirmAction } = useToast();
   
   const [vocalCount, setVocalCount] = useState(1);
+  const [danceCount, setDanceCount] = useState(1);
 
   useEffect(() => {
-      const match = roles.find(r => r.startsWith('__vocal_count:'));
-      setVocalCount(match ? parseInt(match.split(':')[1]) : 1);
+      const vocalMatch = roles.find(r => r.startsWith('__vocal_count:'));
+      setVocalCount(vocalMatch ? parseInt(vocalMatch.split(':')[1]) : 1);
+      
+      const danceMatch = roles.find(r => r.startsWith('__dance_count:'));
+      setDanceCount(danceMatch ? parseInt(danceMatch.split(':')[1]) : 1);
   }, [roles]);
 
-  const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:'));
+  const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
   const hasVocal = cleanRoles.includes('Vocal');
+  const hasDance = cleanRoles.includes('Dança');
 
-  const handleUpdate = (newCleanRoles: string[], newCount: number) => {
+  const handleUpdate = (newCleanRoles: string[], newVocalCount: number, newDanceCount: number) => {
       const finalRoles = [...newCleanRoles];
-      if (newCleanRoles.includes('Vocal') && newCount > 1) {
-          finalRoles.push(`__vocal_count:${newCount}`);
+      if (newCleanRoles.includes('Vocal') && newVocalCount > 1) {
+          finalRoles.push(`__vocal_count:${newVocalCount}`);
+      }
+      if (newCleanRoles.includes('Dança') && newDanceCount > 1) {
+          finalRoles.push(`__dance_count:${newDanceCount}`);
       }
       onUpdate(finalRoles);
   };
 
   const add = () => {
     if (newRole && !cleanRoles.includes(newRole)) {
-      handleUpdate([...cleanRoles, newRole], vocalCount);
+      handleUpdate([...cleanRoles, newRole], vocalCount, danceCount);
       setNewRole("");
     }
   };
@@ -297,7 +305,7 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
     confirmAction(
       "Remover Função",
       `Deseja realmente remover a função "${r}"? Isso removerá esta coluna da escala.`,
-      () => handleUpdate(cleanRoles.filter(role => role !== r), vocalCount)
+      () => handleUpdate(cleanRoles.filter(role => role !== r), vocalCount, danceCount)
     );
   };
 
@@ -308,7 +316,7 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
       } else if (direction === 'down' && index < newRoles.length - 1) {
           [newRoles[index], newRoles[index + 1]] = [newRoles[index + 1], newRoles[index]];
       }
-      handleUpdate(newRoles, vocalCount);
+      handleUpdate(newRoles, vocalCount, danceCount);
   };
 
   return (
@@ -381,9 +389,33 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
                         max="10"
                         value={vocalCount}
                         onChange={(e) => {
-                            const val = parseInt(e.target.value) || 1;
+                            const val = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
                             setVocalCount(val);
-                            handleUpdate(cleanRoles, val);
+                            handleUpdate(cleanRoles, val, danceCount);
+                        }}
+                        className="w-20 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-ministral-500 text-zinc-900 dark:text-zinc-100 text-center font-bold"
+                    />
+                </div>
+            </div>
+        )}
+
+        {hasDance && (
+            <div className="mt-6 p-4 bg-ministral-50 dark:bg-ministral-900/10 border border-ministral-100 dark:border-ministral-900/30 rounded-xl">
+                <h4 className="text-sm font-bold text-ministral-700 dark:text-ministral-300 mb-2">Configuração de Dança</h4>
+                <p className="text-xs text-ministral-600/80 dark:text-ministral-400/80 mb-3">
+                    Defina quantas coreografias/pessoas podem ser escaladas em Dança simultaneamente.
+                </p>
+                <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Quantidade:</span>
+                    <input 
+                        type="number" 
+                        min="1" 
+                        max="10"
+                        value={danceCount}
+                        onChange={(e) => {
+                            const val = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                            setDanceCount(val);
+                            handleUpdate(cleanRoles, vocalCount, val);
                         }}
                         className="w-20 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-ministral-500 text-zinc-900 dark:text-zinc-100 text-center font-bold"
                     />

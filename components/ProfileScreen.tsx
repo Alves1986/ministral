@@ -47,7 +47,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           .single();
         
         if (settingsData?.roles) {
-          const cleanRoles = settingsData.roles.filter((r: string) => !r.startsWith('__vocal_count:'));
+          const cleanRoles = settingsData.roles.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
           setAvailableRoles(cleanRoles);
         }
 
@@ -60,7 +60,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           .single();
 
         if (memberData?.functions) {
-          const cleanFunctions = memberData.functions.filter((r: string) => !r.startsWith('__vocal_count:'));
+          const cleanFunctions = memberData.functions.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
           setSelectedRoles(cleanFunctions);
         }
       } catch (error) {

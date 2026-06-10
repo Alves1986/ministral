@@ -78,6 +78,20 @@ export const fetchGlobalUsers = async () => {
     }));
 };
 
+export const deleteGlobalUser = async (userId: string) => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: "Sem conexão com banco de dados" };
+    
+    // Remover o usuário do perfil (a tabela profiles é principal para visualizar)
+    // Opcionalmente, se tiver endpoint que limpa o auth.user seria melhor,
+    // Mas deletar do perfil geralmente resolve a exibição no app.
+    const { error } = await sb.from('profiles').delete().eq('id', userId);
+    if (error) {
+        return { success: false, message: error.message };
+    }
+    return { success: true, message: "Usuário removido com sucesso." };
+};
+
 export const saveOrganization = async (id: string | null, name: string, slug: string, billing?: any) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };

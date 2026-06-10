@@ -313,7 +313,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 id: profile.id,
                 name: profile.name || 'Usuário',
                 email: profile.email || sessionUser.email,
-                access_role: profile.is_admin ? 'admin' : (ministry_role === 'admin' ? 'admin' : 'member'),
+                access_role: (profile.is_admin || profile.is_super_admin) ? 'admin' : (ministry_role === 'admin' ? 'admin' : 'member'),
                 ministryId: activeMinistry,
                 allowedMinistries,
                 organizationId: orgId,

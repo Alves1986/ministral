@@ -123,12 +123,15 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [settingsQuery.data, mid, availableMinistries]);
 
   const cleanRoles = useMemo(() => {
-      return rawRoles.filter(r => !r.startsWith('__vocal_count:'));
+      return rawRoles.filter(r => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
   }, [rawRoles]);
 
   const expandedRoles = useMemo(() => {
       const vocalCountMatch = rawRoles.find(r => r.startsWith('__vocal_count:'));
       let vocalCount = vocalCountMatch ? parseInt(vocalCountMatch.split(':')[1]) : 1;
+      
+      const danceCountMatch = rawRoles.find(r => r.startsWith('__dance_count:'));
+      let danceCount = danceCountMatch ? parseInt(danceCountMatch.split(':')[1]) : 1;
       
       // Fallback para ministério de louvor (legado/padrão)
       if (vocalCount === 1 && (mid === 'louvor' || foundMinistry?.code === 'louvor')) {
@@ -138,6 +141,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return cleanRoles.flatMap(role => {
           if (role === 'Vocal' && vocalCount > 1) {
               return Array.from({ length: vocalCount }, (_, i) => `Vocal ${i + 1}`);
+          }
+          if (role === 'Dança' && danceCount > 1) {
+              return Array.from({ length: danceCount }, (_, i) => `Dança ${i + 1}`);
           }
           return [role];
       });

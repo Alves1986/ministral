@@ -88,7 +88,11 @@ export const EventDetailsModal: React.FC<Props> = ({
   const expandedRoles = useMemo(() => {
       const vocalCountMatch = roles.find(r => r.startsWith('__vocal_count:'));
       const vocalCount = vocalCountMatch ? parseInt(vocalCountMatch.split(':')[1]) : 1;
-      const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:'));
+      
+      const danceCountMatch = roles.find(r => r.startsWith('__dance_count:'));
+      const danceCount = danceCountMatch ? parseInt(danceCountMatch.split(':')[1]) : 1;
+      
+      const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
 
       return cleanRoles.flatMap(role => {
           if (role === 'Vocal' && vocalCount > 1) {
@@ -96,6 +100,14 @@ export const EventDetailsModal: React.FC<Props> = ({
                   display: `Vocal ${i + 1}`,
                   keySuffix: `Vocal ${i + 1}`,
                   baseRole: 'Vocal',
+                  index: i
+              }));
+          }
+          if (role === 'Dança' && danceCount > 1) {
+              return Array.from({ length: danceCount }, (_, i) => ({
+                  display: `Dança ${i + 1}`,
+                  keySuffix: `Dança ${i + 1}`,
+                  baseRole: 'Dança',
                   index: i
               }));
           }
@@ -127,7 +139,7 @@ export const EventDetailsModal: React.FC<Props> = ({
       const baseList = assignmentMap[roleObj.baseRole];
       if (!baseList) return null;
       
-      return baseList[roleObj.index] || (roleObj.baseRole !== 'Vocal' ? baseList[0] : null);
+      return baseList[roleObj.index] || (roleObj.baseRole !== 'Vocal' && roleObj.baseRole !== 'Dança' ? baseList[0] : null);
   };
 
   return (

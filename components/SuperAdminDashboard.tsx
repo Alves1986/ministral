@@ -8,7 +8,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabase/client';
 import { Organization } from '../types';
-import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL, notifyAllOrganizationAdmins, fetchGlobalUsers, fetchGlobalBroadcasts, deleteGlobalBroadcast } from '../services/supabaseService';
+import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL, notifyAllOrganizationAdmins, fetchGlobalUsers, fetchGlobalBroadcasts, deleteGlobalBroadcast, deleteGlobalUser } from '../services/supabaseService';
 import { checkMinistryLimit } from '../services/supabase/admin';
 import { fetchSupportTickets, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
 import { useToast } from './Toast';
@@ -1017,6 +1017,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                             <th className="px-6 py-4">Ministérios</th>
                                             <th className="px-6 py-4 text-center">Permissão</th>
                                             <th className="px-6 py-4">Último Login</th>
+                                            <th className="px-6 py-4 text-center rounded-tr-2xl">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -1070,6 +1071,25 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                     </td>
                                                     <td className="px-6 py-4 text-sm text-zinc-500">
                                                         {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : 'Desconhecido'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <button 
+                                                            onClick={async () => {
+                                                                if(window.confirm(`Tem certeza que deseja remover permanentemente o usuário ${u.name}?`)) {
+                                                                    const res = await deleteGlobalUser(u.id);
+                                                                    if(res.success) {
+                                                                        addToast("Usuário removido", "success");
+                                                                        queryClient.invalidateQueries({ queryKey: ['super_admin_global_users'] });
+                                                                    } else {
+                                                                        addToast("Erro ao remover: " + res.message, "error");
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                            title="Remover Usuário"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}

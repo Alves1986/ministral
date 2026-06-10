@@ -46,7 +46,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 if (res.data?.ministryId) {
                     setMinistryName(res.data.ministryName || 'Ministério');
                     if (res.data.ministry_functions && res.data.ministry_functions.length > 0) {
-                        setAvailableRoles(res.data.ministry_functions.filter((r: string) => !r.startsWith('__vocal_count:')));
+                        setAvailableRoles(res.data.ministry_functions.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:')));
                     } else {
                         setAvailableRoles([]);
                     }
