@@ -5,6 +5,7 @@ create table public.support_tickets (
   author_name text not null,
   subject text not null,
   description text not null,
+  image_url text,
   status text not null default 'open',
   priority text not null default 'normal',
   replies jsonb not null default '[]'::jsonb,

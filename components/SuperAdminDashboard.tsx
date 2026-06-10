@@ -994,6 +994,13 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                     <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/50 p-4 rounded-b-2xl rounded-tr-2xl shadow-sm relative">
                                         <span className="absolute -top-3 left-4 text-xs font-bold text-zinc-500 bg-zinc-50 dark:bg-zinc-900 px-2 rounded-full">{activeTicket.authorName}</span>
                                         <p className="text-zinc-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap leading-relaxed">{activeTicket.description}</p>
+                                        {activeTicket.imageUrl && (
+                                            <div className="mt-4">
+                                                <a href={activeTicket.imageUrl} target="_blank" rel="noopener noreferrer">
+                                                    <img src={activeTicket.imageUrl} alt="Anexo do chamado" className="max-w-full max-h-64 object-contain rounded-lg border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:opacity-90 transition-opacity" />
+                                                </a>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

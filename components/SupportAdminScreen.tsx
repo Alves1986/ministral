@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Headset, Plus, Clock, MessageSquare, Ticket, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Headset, Plus, Clock, MessageSquare, Ticket, AlertCircle, CheckCircle2, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { User } from '../types';
-import { fetchSupportTickets, createSupportTicket, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
+import { fetchSupportTickets, createSupportTicket, updateSupportTicket, deleteSupportTicket, uploadTicketImage } from '../services/supabase/support';
 import { useToast } from './Toast';
 
 export interface SupportTicket {
@@ -33,6 +33,8 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
     const [subject, setSubject] = useState("");
     const [description, setDescription] = useState("");
     const [priority, setPriority] = useState<'low'|'medium'|'high'|'critical'>('medium');
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const [replyContent, setReplyContent] = useState("");
 
@@ -53,13 +55,28 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        const created = await createSupportTicket(orgId, orgName, user.id, user.name, subject, description, priority);
+        
+        setIsUploading(true);
+        let imageUrl = undefined;
+        if (imageFile) {
+            const uploadedUrl = await uploadTicketImage(imageFile);
+            if (uploadedUrl) {
+                imageUrl = uploadedUrl;
+            } else {
+                addToast("Erro ao fazer upload da imagem. O chamado será criado sem imagem.", "error");
+            }
+        }
+
+        const created = await createSupportTicket(orgId, orgName, user.id, user.name, subject, description, priority, imageUrl);
+        setIsUploading(false);
+        
         if (created) {
             addToast("Chamado criado com sucesso!", "success");
             setIsCreating(false);
             setSubject("");
             setDescription("");
             setPriority("medium");
+            setImageFile(null);
             refresh();
         } else {
             addToast("Erro ao criar chamado.", "error");
@@ -143,9 +160,23 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
                             <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Descrição Detalhada</label>
                             <textarea required rows={5} value={description} onChange={e => setDescription(e.target.value)} placeholder="Descreva o problema com o máximo de detalhes..." className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white transition-all resize-none"></textarea>
                         </div>
+                        <div>
+                            <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-2">
+                                <ImageIcon size={18} /> Anexo (Imagem/Print)
+                            </label>
+                            <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={e => setImageFile(e.target.files?.[0] || null)}
+                                className="w-full text-sm text-zinc-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 transition-all cursor-pointer"
+                            />
+                            {imageFile && <p className="text-xs text-ministral-500 mt-2 font-medium">Arquivo selecionado: {imageFile.name}</p>}
+                        </div>
                         <div className="pt-4 flex justify-end gap-3">
-                            <button type="button" onClick={() => setIsCreating(false)} className="px-6 py-3 rounded-xl font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">Cancelar</button>
-                            <button type="submit" className="px-6 py-3 rounded-xl font-bold bg-ministral-500 text-white hover:bg-ministral-600 transition-colors shadow-lg shadow-ministral-500/20">Enviar Chamado</button>
+                            <button type="button" onClick={() => setIsCreating(false)} disabled={isUploading} className="px-6 py-3 rounded-xl font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50">Cancelar</button>
+                            <button type="submit" disabled={isUploading} className="px-6 py-3 rounded-xl font-bold bg-ministral-500 text-white hover:bg-ministral-600 transition-colors shadow-lg shadow-ministral-500/20 disabled:opacity-75 flex items-center gap-2">
+                                {isUploading ? <><Loader2 size={18} className="animate-spin" /> Enviando...</> : "Enviar Chamado"}
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -181,6 +212,13 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
                             <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/50 p-4 rounded-b-2xl rounded-tr-2xl shadow-sm relative">
                                 <span className="absolute -top-3 left-4 text-xs font-bold text-zinc-500 bg-zinc-50 dark:bg-zinc-900 px-2 rounded-full">{activeTicket.authorName}</span>
                                 <p className="text-zinc-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap leading-relaxed">{activeTicket.description}</p>
+                                {activeTicket.imageUrl && (
+                                    <div className="mt-4">
+                                        <a href={activeTicket.imageUrl} target="_blank" rel="noopener noreferrer">
+                                            <img src={activeTicket.imageUrl} alt="Anexo do chamado" className="max-w-full max-h-64 object-contain rounded-lg border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:opacity-90 transition-opacity" />
+                                        </a>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
