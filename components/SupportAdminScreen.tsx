@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Headset, Plus, Clock, MessageSquare, Ticket, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { User } from '../types';
+import { fetchSupportTickets, createSupportTicket, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
 
 export interface SupportTicket {
   id: string;
@@ -22,18 +23,6 @@ export interface SupportTicket {
   }[];
 }
 
-export const getTickets = (): SupportTicket[] => {
-    try {
-        return JSON.parse(localStorage.getItem('ministral_support_tickets') || '[]');
-    } catch {
-        return [];
-    }
-};
-
-export const saveTickets = (tickets: SupportTicket[]) => {
-    localStorage.setItem('ministral_support_tickets', JSON.stringify(tickets));
-};
-
 export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: string }> = ({ orgId, user, orgName }) => {
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [isCreating, setIsCreating] = useState(false);
@@ -45,40 +34,24 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
 
     const [replyContent, setReplyContent] = useState("");
 
-    const refresh = () => {
-        const all = getTickets();
-        setTickets(all.filter(t => t.orgId === orgId).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    const refresh = async () => {
+        const all: any = await fetchSupportTickets();
+        setTickets(all.filter((t: any) => t.orgId === orgId).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
         if (activeTicket) {
-            const updated = all.find(t => t.id === activeTicket.id);
+            const updated = all.find((t: any) => t.id === activeTicket.id);
             if (updated) setActiveTicket(updated);
         }
     };
 
     useEffect(() => {
         refresh();
-        // Um pequeno pollig para ver atualizações caso super admin responda em outra aba
         const interval = setInterval(refresh, 5000);
         return () => clearInterval(interval);
     }, [orgId, activeTicket?.id]);
 
-    const handleCreate = (e: React.FormEvent) => {
+    const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        const all = getTickets();
-        const newTicket: SupportTicket = {
-            id: 'TKT-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-            orgId,
-            orgName,
-            authorId: user.id || 'unknown',
-            authorName: user.name,
-            subject,
-            description,
-            status: 'open',
-            priority,
-            createdAt: new Date().toISOString(),
-            replies: []
-        };
-        all.push(newTicket);
-        saveTickets(all);
+        await createSupportTicket(orgId, orgName, user.id, user.name, subject, description, priority);
         setIsCreating(false);
         setSubject("");
         setDescription("");
@@ -86,23 +59,32 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
         refresh();
     };
 
-    const handleReply = (e: React.FormEvent) => {
+    const handleReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!activeTicket || !replyContent.trim()) return;
-        const all = getTickets();
-        const tIndex = all.findIndex(t => t.id === activeTicket.id);
-        if(tIndex === -1) return;
         
-        all[tIndex].replies.push({
+        const newReply = {
             id: 'RPL-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
             authorName: user.name,
             isSuperAdmin: user.isSuperAdmin || false,
             content: replyContent,
             createdAt: new Date().toISOString()
-        });
-        saveTickets(all);
+        };
+        
+        const updatedReplies = [...(activeTicket.replies || []), newReply];
+        await updateSupportTicket(activeTicket.id, { replies: updatedReplies });
+        
         setReplyContent("");
         refresh();
+    };
+
+    const handleDelete = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (confirm("Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.")) {
+            await deleteSupportTicket(id);
+            if (activeTicket?.id === id) setActiveTicket(null);
+            refresh();
+        }
     };
 
     return (
@@ -164,9 +146,14 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
                             <h3 className="text-xl font-black text-zinc-900 dark:text-white">{activeTicket.subject}</h3>
                             <p className="text-sm text-zinc-500 mt-1">Aberto em {new Date(activeTicket.createdAt).toLocaleString('pt-BR')}</p>
                         </div>
-                        <button onClick={() => setActiveTicket(null)} className="p-2 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
-                            <X size={20} />
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={(e) => handleDelete(e, activeTicket.id)} className="p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Excluir Chamado">
+                                <X size={20} />
+                            </button>
+                            <button onClick={() => setActiveTicket(null)} className="p-2 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
                     </div>
                     
                     <div className="p-6 overflow-y-auto flex-1 space-y-6 bg-zinc-50/50 dark:bg-zinc-900/50">
@@ -238,11 +225,16 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
                                         <p className="text-xs text-zinc-500 mt-1 line-clamp-1">{ticket.description}</p>
                                     </div>
                                 </div>
-                                <div className="text-right shrink-0 ml-4 flex flex-col items-end gap-2">
-                                    {ticket.status === 'open' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-500">Aberto</span> :
-                                     ticket.status === 'in_progress' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-500">Em Andamento</span> :
-                                     <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Resolvido</span>}
-                                    <span className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Clock size={12}/> {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                <div className="flex items-center gap-6 shrink-0 ml-4">
+                                    <div className="text-right flex flex-col items-end gap-2">
+                                        {ticket.status === 'open' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-500">Aberto</span> :
+                                         ticket.status === 'in_progress' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-500">Em Andamento</span> :
+                                         <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Resolvido</span>}
+                                        <span className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Clock size={12}/> {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                    </div>
+                                    <button onClick={(e) => handleDelete(e, ticket.id)} className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="Excluir Chamado">
+                                        <X size={18} />
+                                    </button>
                                 </div>
                             </div>
                         ))

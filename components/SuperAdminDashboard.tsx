@@ -10,6 +10,7 @@ import { getSupabase } from '../services/supabase/client';
 import { Organization } from '../types';
 import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry, deleteOrganizationSQL, notifyAllOrganizationAdmins, fetchGlobalUsers } from '../services/supabaseService';
 import { checkMinistryLimit } from '../services/supabase/admin';
+import { fetchSupportTickets, updateSupportTicket, deleteSupportTicket } from '../services/supabase/support';
 import { useToast } from './Toast';
 import { getSystemLogo } from '../utils/branding';
 import { GlobalWhatsAppConnect } from './GlobalWhatsAppConnect';
@@ -136,10 +137,10 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
     const [activeTicket, setActiveTicket] = useState<any | null>(null);
     const [replyContent, setReplyContent] = useState("");
 
-    const loadTickets = () => {
+    const loadTickets = async () => {
         try {
-            const t = JSON.parse(localStorage.getItem('ministral_support_tickets') || '[]');
-            setGlobalTickets(t.sort((a:any, b:any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            const t = await fetchSupportTickets();
+            setGlobalTickets(t);
             if(activeTicket) {
                 const updated = t.find((x:any) => x.id === activeTicket.id);
                 if(updated) setActiveTicket(updated);
@@ -155,35 +156,43 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
         }
     }, [activeTab, activeTicket?.id]);
 
-    const handleReplyTicket = (e: React.FormEvent, statusChange?: 'resolved' | 'in_progress') => {
+    const handleReplyTicket = async (e: React.FormEvent, statusChange?: 'resolved' | 'in_progress') => {
         e.preventDefault();
         if(!activeTicket) return;
         
         try {
-            const all = JSON.parse(localStorage.getItem('ministral_support_tickets') || '[]');
-            const tIndex = all.findIndex((t:any) => t.id === activeTicket.id);
-            if(tIndex === -1) return;
+            const updates: any = {};
+            const newReply = {
+                id: 'RPL-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                authorName: 'Equipe Ministral (Super Admin)',
+                isSuperAdmin: true,
+                content: replyContent,
+                createdAt: new Date().toISOString()
+            };
             
             if (replyContent.trim()) {
-                all[tIndex].replies.push({
-                    id: 'RPL-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-                    authorName: 'Equipe Ministral (Super Admin)',
-                    isSuperAdmin: true,
-                    content: replyContent,
-                    createdAt: new Date().toISOString()
-                });
-            }
-
-            if (statusChange) {
-                all[tIndex].status = statusChange;
-            } else if (all[tIndex].status === 'open') {
-                all[tIndex].status = 'in_progress';
+                updates.replies = [...(activeTicket.replies || []), newReply];
             }
             
-            localStorage.setItem('ministral_support_tickets', JSON.stringify(all));
+            if (statusChange) {
+                updates.status = statusChange;
+            } else if (activeTicket.status === 'open') {
+                updates.status = 'in_progress';
+            }
+            
+            await updateSupportTicket(activeTicket.id, updates);
             setReplyContent("");
             loadTickets();
         } catch {}
+    };
+
+    const handleDeleteTicket = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (confirm("Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.")) {
+            await deleteSupportTicket(id);
+            if (activeTicket?.id === id) setActiveTicket(null);
+            loadTickets();
+        }
     };
 
     const ticketsOpen = globalTickets.filter(t => t.status === 'open').length;
@@ -967,9 +976,14 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                     <h3 className="text-xl font-black text-zinc-900 dark:text-white">{activeTicket.subject}</h3>
                                     <p className="text-sm text-zinc-500 mt-1">Aberto por {activeTicket.authorName} em {new Date(activeTicket.createdAt).toLocaleString('pt-BR')}</p>
                                 </div>
-                                <button onClick={() => setActiveTicket(null)} className="p-2 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
-                                    X
-                                </button>
+                                <div className="flex gap-2">
+                                    <button onClick={(e) => handleDeleteTicket(e, activeTicket.id)} className="p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Excluir Chamado">
+                                        <Trash2 size={20} />
+                                    </button>
+                                    <button onClick={() => setActiveTicket(null)} className="p-2 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                                        X
+                                    </button>
+                                </div>
                             </div>
                             
                             <div className="p-6 overflow-y-auto flex-1 space-y-6 bg-zinc-50/50 dark:bg-zinc-900/50">
@@ -1070,11 +1084,16 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                                     <p className="text-xs text-zinc-500 mt-1 line-clamp-1">{ticket.description}</p>
                                                 </div>
                                             </div>
-                                            <div className="text-right shrink-0 ml-4 flex flex-col items-end gap-2">
-                                                {ticket.status === 'open' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-500">Aberto</span> :
-                                                 ticket.status === 'in_progress' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-500">Em Andamento</span> :
-                                                 <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Resolvido</span>}
-                                                <span className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Clock size={12}/> {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                            <div className="flex items-center gap-6 shrink-0 ml-4">
+                                                <div className="text-right flex flex-col items-end gap-2">
+                                                    {ticket.status === 'open' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-500">Aberto</span> :
+                                                     ticket.status === 'in_progress' ? <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-500">Em Andamento</span> :
+                                                     <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Resolvido</span>}
+                                                    <span className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Clock size={12}/> {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
+                                                </div>
+                                                <button onClick={(e) => handleDeleteTicket(e, ticket.id)} className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="Excluir Chamado">
+                                                    <Trash2 size={18} />
+                                                </button>
                                             </div>
                                         </div>
                                     ))
