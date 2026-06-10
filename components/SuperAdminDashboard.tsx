@@ -356,7 +356,9 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
     const filteredGlobalUsers = useMemo(() => {
         return globalUsers.filter((u: any) => {
             const matchesSearch = u.name?.toLowerCase().includes(searchUserTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchUserTerm.toLowerCase());
-            const matchesOrg = filterOrgId ? u.organization_id === filterOrgId : true;
+            const matchesOrg = filterOrgId 
+                ? (filterOrgId === "none" ? !u.organization_id : String(u.organization_id) === filterOrgId) 
+                : true;
             const matchesMinistry = filterMinistryId ? u.allowed_ministries?.includes(filterMinistryId) : true;
             return matchesSearch && matchesOrg && matchesMinistry;
         });
@@ -839,6 +841,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                     className="w-full md:w-auto px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-ministral-500 dark:text-white"
                                 >
                                     <option value="">Todas as Organizações</option>
+                                    <option value="none">Sem Organização</option>
                                     {organizations.map(org => (
                                         <option key={org.id} value={org.id}>{org.name}</option>
                                     ))}
@@ -888,7 +891,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({ activeTa
                                     </thead>
                                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                                         {filteredGlobalUsers
-                                            .slice(0, 100)
+                                            .slice(0, 1500) // Increase limit to show more members
                                             .map((u: any) => (
                                                 <tr key={u.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
                                                     <td className="px-6 py-4">

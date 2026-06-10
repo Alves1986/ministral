@@ -479,7 +479,7 @@ const InnerApp = () => {
     [RAW_QUICK_ACTIONS, safeEnabledTabs, integrations.quickAccessItems]
   );
 
-  const isTabValid = safeEnabledTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai'].includes(currentTab);
+  const isTabValid = safeEnabledTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai', 'support-admin'].includes(currentTab);
 
   const dashboardScreen = useMemo(() => (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
@@ -954,7 +954,7 @@ const InnerApp = () => {
                   // Validação de aba para o NOVO ministério (atualizado para usar o ID passado)
                   const newConfig = availableMinistries.find(m => m.id === id);
                   const newTabs = newConfig?.enabledTabs || DEFAULT_TABS;
-                  const isTabStillValid = newTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai'].includes(currentTab);
+                  const isTabStillValid = newTabs.includes(currentTab) || ['profile', 'super-admin', 'dashboard', 'plan', 'history', 'advanced-ai', 'support-admin'].includes(currentTab);
 
                   if (!isTabStillValid) {
                       setCurrentTab('dashboard');
@@ -971,7 +971,7 @@ const InnerApp = () => {
     >
         <Suspense fallback={<LoadingFallback />}>
             <div className="h-full">
-                {(currentTab === 'dashboard' || !isTabValid) && dashboardScreen}
+                {currentTab === 'dashboard' && dashboardScreen}
 
                 {currentTab === 'calendar' && safeEnabledTabs.includes('calendar') && calendarScreen}
 
@@ -997,9 +997,9 @@ const InnerApp = () => {
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && status === 'ready' && ministryId.length === 36 && <EventsScreen />}
             {currentTab === 'schedule-rules' && isAdmin && safeEnabledTabs.includes('schedule-rules') && status === 'ready' && ministryId.length === 36 && <ScheduleRulesScreen ministryId={ministryId} orgId={orgId!} availableRoles={roles} members={publicMembers} availableEvents={events.map((e: any) => ({ id: e.id?.split('|')[0] || e.ruleId || e.id, title: e.title })).filter((e: any, i: number, arr: any[]) => arr.findIndex(x => x.id === e.id) === i)} />}
             {currentTab === 'plan' && isAdmin && status === 'ready' && <PlanScreen organization={organization} isAdmin={isAdmin} onRefreshOrg={async () => { await refreshSession(); }} />}
-            {currentTab === 'support-admin' && isAdmin && status === 'ready' && orgId && (
+            {currentTab === 'support-admin' && isAdmin && status === 'ready' && (
                 <SupportAdminScreen 
-                    orgId={orgId} 
+                    orgId={orgId || ''} 
                     user={activeUser!}
                     orgName={organization?.name || ''}
                 />

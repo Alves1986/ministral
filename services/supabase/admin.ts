@@ -22,13 +22,15 @@ export const fetchOrganizationsWithStats = async () => {
   // Busca orgs e ministerios
   const { data: orgs, error } = await sb
     .from('organizations')
-    .select('*, organization_ministries(id, code, label)');
+    .select('*, organization_ministries(id, code, label)')
+    .limit(10000);
   if (error) throw error;
 
   // Busca contagem de usuarios por org
   const { data: profiles } = await sb
     .from('profiles')
-    .select('organization_id');
+    .select('organization_id')
+    .limit(10000);
 
   return (orgs || []).map((o: any) => {
     const userCount = profiles?.filter((p: any) => p.organization_id === o.id).length || 0;
@@ -61,7 +63,7 @@ export const fetchGlobalUsers = async () => {
     const { data, error } = await sb.from('profiles').select(`
         id, name, email, phone, is_admin, is_super_admin, created_at, organization_id, allowed_ministries,
         organizations ( name )
-    `).order('created_at', { ascending: false });
+    `).order('created_at', { ascending: false }).limit(10000);
 
     if (error) {
         console.error("Error fetching global users:", error);
