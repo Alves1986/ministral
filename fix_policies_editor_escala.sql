@@ -18,3 +18,15 @@ DROP POLICY IF EXISTS "Permitir leitura de ministry_settings para usuarios auten
 CREATE POLICY "Permitir leitura de ministry_settings para usuarios autenticados"
 ON public.ministry_settings FOR SELECT
 USING ( auth.role() = 'authenticated' );
+
+-- Restaura a leitura de organization_ministries (necessário para buscar detalhes do ministério)
+DROP POLICY IF EXISTS "Permitir leitura de organization_ministries para usuarios autenticados" ON public.organization_ministries;
+CREATE POLICY "Permitir leitura de organization_ministries para usuarios autenticados"
+ON public.organization_ministries FOR SELECT
+USING ( auth.role() = 'authenticated' );
+
+-- Restaura a leitura de organizations (necessário para detalhes da organização)
+DROP POLICY IF EXISTS "Permitir leitura de organizations para usuarios autenticados" ON public.organizations;
+CREATE POLICY "Permitir leitura de organizations para usuarios autenticados"
+ON public.organizations FOR SELECT
+USING ( auth.role() = 'authenticated' );
