@@ -34,6 +34,6 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: setup do Antigravity — skills, GSD e mapa do codebase configurados
-- Próximo passo: corrigir race condition em AvailabilityScreen.tsx (flag isSyncing)
-- Decisão tomada: usar junctions Windows em vez de symlinks para .agents/skills/
+- Último trabalho: Debugging severo de regressão na UI do Editor de Escalas (ScheduleEditorV2). Funções desapareceram pois `fetchMinistrySettings` pedia colunas inexistentes no DB (`practical_guidelines`, etc), causando erro 400 silencioso e fallback para a role default 'Membro'. Adicionado `fix_ministry_settings_schema.sql` para corrigir o DB.
+- Refatoração SQL: Função `is_super_admin` foi restaurada usando `SECURITY DEFINER` para evitar recursão infinita no RLS sem quebrar o acesso de contas Super Admin que não possuem `organization_id` atrelado no `profiles`.
+- Próximo passo: corrigir race condition em AvailabilityScreen.tsx (flag isSyncing).
