@@ -29,6 +29,7 @@ export interface MinistryDef {
   code: string;
   label: string;
   enabledTabs?: string[];
+  enabled_tabs?: string[];
   organizationId?: string;
   qrCodeUrl?: string;
   socialLinkUrl?: string;

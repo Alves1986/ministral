@@ -151,6 +151,22 @@ export const deleteGlobalUser = async (userId: string) => {
   const sb = getSupabase();
   if (!sb) return { success: false, message: "Sem conexão com banco de dados" };
 
+  // 1. Remover escalas associadas ao membro
+  await sb.from("schedule_assignments").delete().eq("member_id", userId);
+
+  // 2. Remover vínculos de ministérios
+  await sb.from("ministry_members").delete().eq("profile_id", userId);
+
+  // 3. Remover disponibilidades registradas
+  await sb.from("member_availability").delete().eq("user_id", userId);
+
+  // 4. Remover inscrições de notificações por push
+  await sb.from("push_subscriptions").delete().eq("user_id", userId);
+
+  // 5. Remover solicitações de trocas (como solicitante ou substituto)
+  await sb.from("swap_requests").delete().eq("requester_id", userId);
+  await sb.from("swap_requests").delete().eq("taken_by_id", userId);
+
   // Remover o usuário do perfil (a tabela profiles é principal para visualizar)
   // Opcionalmente, se tiver endpoint que limpa o auth.user seria melhor,
   // Mas deletar do perfil geralmente resolve a exibição no app.

@@ -34,7 +34,7 @@ import {
   Sparkles,
   Trash,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "../services/supabase/client";
 import { Organization } from "../types";
 import {
@@ -66,6 +66,7 @@ import { GlobalWhatsAppConnect } from "./GlobalWhatsAppConnect";
 export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
   activeTab = "sa-organizations",
 }) => {
+  const queryClient = useQueryClient();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
