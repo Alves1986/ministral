@@ -75,7 +75,17 @@ const HistoryModal = ({ isOpen, onClose, history, memberName, totalPoints }: { i
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate">{item.description}</p>
-                                        <p className="text-[10px] text-zinc-500 uppercase font-medium">{new Date(item.date).toLocaleDateString('pt-BR')} • {new Date(item.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p>
+                                        {(() => {
+                                            const isDateOnly = !item.date.includes('T');
+                                            if (isDateOnly) {
+                                                const [y, m, d] = item.date.split('-');
+                                                const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+                                                return <p className="text-[10px] text-zinc-500 uppercase font-medium">{dateObj.toLocaleDateString('pt-BR')}</p>;
+                                            } else {
+                                                const dateObj = new Date(item.date);
+                                                return <p className="text-[10px] text-zinc-500 uppercase font-medium">{dateObj.toLocaleDateString('pt-BR')} • {dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</p>;
+                                            }
+                                        })()}
                                     </div>
                                     <div className={`font-black text-sm whitespace-nowrap ${item.points > 0 ? 'text-secondary dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
                                         {item.points > 0 ? '+' : ''}{item.points}
