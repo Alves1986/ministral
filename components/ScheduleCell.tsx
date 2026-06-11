@@ -270,13 +270,13 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     };
 
     return (
-        <div className="relative w-full h-full min-h-[42px]" ref={dropdownRef}>
+        <div className="relative w-full h-full min-h-[42px] flex items-center gap-1" ref={dropdownRef}>
             {/* Main Button Trigger */}
             <button
                 type="button"
                 onClick={() => !processing && setIsOpen(!isOpen)}
                 disabled={processing}
-                className={`schedule-cell button hover:scale-[1.02] duration-200 w-full h-full px-2 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
+                className={`schedule-cell button flex-1 hover:scale-[1.02] duration-200 h-full px-2 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
                     ${currentMember 
                         ? hasAnyAlert
                             ? 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-300 dark:border-red-800/50 hover:bg-red-100 dark:hover:bg-red-900/20'
@@ -303,34 +303,6 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                     )}
                     
                     <div className="flex items-center gap-1 shrink-0 ml-1">
-                        {currentMember && onConfirm && (
-                            <div 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!isConfirmed) {
-                                        onConfirm(occurrence.date, role, occurrence.ruleId);
-                                    }
-                                }}
-                                className={`p-1 rounded transition-colors flex items-center justify-center ${
-                                    isConfirmed 
-                                        ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 cursor-default' 
-                                        : (() => {
-                                            let timeStr = eventTime || '23:59:59';
-                                            if (timeStr.length === 5) timeStr += ':00';
-                                            const eventDateTime = new Date(`${occurrence.date}T${timeStr}`);
-                                            const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
-                                            const isPast = new Date() > checkinClosedTime;
-                                            
-                                            return isPast 
-                                                ? 'text-red-500 bg-red-50 dark:bg-red-500/10 cursor-pointer hover:bg-red-100 dark:hover:bg-red-500/20' 
-                                                : 'text-zinc-300 dark:text-zinc-600 hover:text-secondary cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800';
-                                        })()
-                                }`}
-                                title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
-                            >
-                                <Check size={14} className={isConfirmed ? "stroke-[3px]" : "stroke-2"} />
-                            </div>
-                        )}
                         <ChevronDown size={12} className={`opacity-50 transition-transform ${isOpen ? 'rotate-180 text-secondary dark:text-white' : ''} ${hasAnyAlert ? 'text-red-500' : ''}`} />
                     </div>
                 </div>
@@ -345,6 +317,38 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                     </div>
                 )}
             </button>
+
+
+            {/* Check-in Button Outside */}
+            {currentMember && onConfirm && (
+                <button 
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isConfirmed) {
+                            onConfirm(occurrence.date, role, occurrence.ruleId);
+                        }
+                    }}
+                    className={`shrink-0 p-2 rounded-lg transition-colors border flex items-center justify-center ${
+                        isConfirmed 
+                            ? 'text-emerald-500 bg-emerald-50 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/20 cursor-default' 
+                            : (() => {
+                                let timeStr = eventTime || '23:59:59';
+                                if (timeStr.length === 5) timeStr += ':00';
+                                const eventDateTime = new Date(`${occurrence.date}T${timeStr}`);
+                                const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
+                                const isPast = new Date() > checkinClosedTime;
+                                
+                                return isPast 
+                                    ? 'text-red-500 bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/20 cursor-pointer hover:bg-red-100 dark:hover:bg-red-500/30' 
+                                    : 'text-zinc-400 bg-zinc-50 border-zinc-200 dark:text-zinc-500 dark:bg-zinc-800/50 dark:border-zinc-700 hover:text-secondary cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800';
+                            })()
+                    }`}
+                    title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
+                >
+                    <Check size={16} className={isConfirmed ? "stroke-[3px]" : "stroke-2"} />
+                </button>
+            )}
 
             {/* Dropdown Menu */}
             {isOpen && (
