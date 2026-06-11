@@ -789,16 +789,6 @@ const InnerApp = () => {
                 <span className="text-secondary dark:text-white truncate max-w-[200px] sm:max-w-none">
                   {activeUser?.name.split(" ")[0]}
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    refreshData();
-                  }}
-                  className={`flex sm:hidden md:flex p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 ${isRefreshing ? "animate-spin" : ""}`}
-                  title="Atualizar painel"
-                >
-                  <RefreshCw size={24} />
-                </button>
               </h1>
               <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-2 font-medium">
                 Excelência na escala. Propósito no servir.
@@ -807,16 +797,6 @@ const InnerApp = () => {
 
             {/* For mobile, if the layout was breaking, let's explicitly add a container that ensures visibility */}
             <div className="flex sm:hidden items-center justify-start gap-3 w-full mt-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  refreshData();
-                }}
-                className={`flex items-center justify-center p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors shadow-sm text-zinc-500 dark:text-zinc-400 ${isRefreshing ? "animate-spin" : ""}`}
-                title="Atualizar painel"
-              >
-                <RefreshCw size={20} />
-              </button>
               <div className="flex-1">
                 <WeatherWidget />
               </div>

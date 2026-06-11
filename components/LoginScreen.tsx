@@ -116,7 +116,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                   
                   <form onSubmit={handleLoginSubmit} className="space-y-6">
                       <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail</label>
                           <div className="relative group">
                               <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-secondary transition-colors" />
                               <input 
@@ -238,21 +238,6 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                           )}
                       </div>
                   )}
-              </div>
-
-              <div className='mt-6 text-center'>
-                  <p className='text-slate-500 text-xs mb-3'>
-                    Sua igreja ainda nao usa o sistema?
-                  </p>
-                  <a
-                    href='/?register=true'
-                    className='inline-flex items-center gap-2 px-6 py-3 bg-ministral-500
-                      hover:bg-ministral-600 text-white text-xs font-black uppercase
-                      tracking-widest rounded-xl transition-all active:scale-95 shadow-lg
-                      shadow-ministral-500/20'
-                  >
-                    <Building2 size={16} /> Cadastrar minha Igreja
-                  </a>
               </div>
 
               <div className="mt-8 text-center">
