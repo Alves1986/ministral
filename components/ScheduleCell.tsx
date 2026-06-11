@@ -289,19 +289,50 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
             >
                 <div className="flex items-center justify-between w-full">
                     {currentMember ? (
-                        <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="flex items-center gap-2 overflow-hidden flex-1">
                             <Avatar name={currentMember.name} avatarUrl={currentMember.avatar_url} />
                             <span className="truncate text-xs font-bold">{currentMember.name.split(' ')[0]}</span>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2 opacity-40 group-hover:opacity-60 transition-opacity">
+                        <div className="flex items-center gap-2 opacity-40 group-hover:opacity-60 transition-opacity flex-1">
                             <div className="w-6 h-6 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600 flex items-center justify-center">
                                 <User size={10} className="text-zinc-400" />
                             </div>
                             <span className="text-[10px] font-black uppercase tracking-widest">Vazio</span>
                         </div>
                     )}
-                    <ChevronDown size={12} className={`opacity-50 transition-transform ${isOpen ? 'rotate-180 text-secondary dark:text-white' : ''} ${hasAnyAlert ? 'text-red-500' : ''}`} />
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                        {currentMember && onConfirm && (
+                            <div 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isConfirmed) {
+                                        onConfirm(occurrence.date, role, occurrence.ruleId);
+                                    }
+                                }}
+                                className={`p-1 rounded transition-colors flex items-center justify-center ${
+                                    isConfirmed 
+                                        ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 cursor-default' 
+                                        : (() => {
+                                            let timeStr = eventTime || '23:59:59';
+                                            if (timeStr.length === 5) timeStr += ':00';
+                                            const eventDateTime = new Date(`${occurrence.date}T${timeStr}`);
+                                            const checkinClosedTime = new Date(eventDateTime.getTime() + 120 * 60000);
+                                            const isPast = new Date() > checkinClosedTime;
+                                            
+                                            return isPast 
+                                                ? 'text-red-500 bg-red-50 dark:bg-red-500/10 cursor-pointer hover:bg-red-100 dark:hover:bg-red-500/20' 
+                                                : 'text-zinc-300 dark:text-zinc-600 hover:text-secondary cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800';
+                                        })()
+                                }`}
+                                title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
+                            >
+                                <Check size={14} className={isConfirmed ? "stroke-[3px]" : "stroke-2"} />
+                            </div>
+                        )}
+                        <ChevronDown size={12} className={`opacity-50 transition-transform ${isOpen ? 'rotate-180 text-secondary dark:text-white' : ''} ${hasAnyAlert ? 'text-red-500' : ''}`} />
+                    </div>
                 </div>
                 {currentMemberStatus === 'unavailable' && (
                     <div className="mt-1 text-[9px] font-bold text-red-600 dark:text-red-500 bg-red-100 dark:bg-red-500/20 px-1.5 py-0.5 rounded w-full text-center">
@@ -358,19 +389,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                         {/* Remove Button */}
                         {currentMember && (
                             <div className="p-2 md:p-1 border-b border-zinc-100 dark:border-zinc-800">
-                                {!isConfirmed && (
-                                    <button
-                                        type="button"
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            handleConfirmOverride();
-                                        }}
-                                        className="w-full text-left px-3 md:px-2 py-3 md:py-2 mb-1 text-sm md:text-xs text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg md:rounded flex items-center gap-2 font-medium transition-colors"
-                                    >
-                                        <Check size={16} className="md:w-3 md:h-3" />
-                                        CONFIRMAR PRESENÇA
-                                    </button>
-                                )}
+
                                 <button
                                     type="button"
                                     onMouseDown={(e) => {
