@@ -18,9 +18,5 @@ DROP POLICY IF EXISTS "Super admins podem atualizar ministry_members" ON public.
 DROP POLICY IF EXISTS "Super admins podem inserir ministry_members" ON public.ministry_members;
 DROP POLICY IF EXISTS "Super admins podem deletar ministry_members" ON public.ministry_members;
 
--- 5. Remove a função is_super_admin
-DROP FUNCTION IF EXISTS public.is_super_admin();
-
--- NOTA: As políticas que o script de correção (fix_policies_editor_escala.sql) criou 
--- serão mantidas para garantir que os usuários normais tenham acesso de leitura, 
--- já que são políticas básicas padrão para usuários autenticados.
+-- 5. Não remover a função is_super_admin() pois o banco de dados inteiro depende dela!
+-- A função is_super_admin() faz parte das políticas originais (core) do sistema.
