@@ -283,14 +283,13 @@ serve(async (req: Request) => {
           console.error(`[whatsapp-swap-notify] Erro ao criar ação pendente para ${phone}:`, pendingErr.message);
         }
 
-        // Gravar log de uso do WhatsApp (assíncrono/não-bloqueante)
-        supabase.from("whatsapp_usage_logs").insert({
+        // Gravar log de uso do WhatsApp (deve usar await para não ser abortado no Deno)
+        const { error: logErr } = await supabase.from("whatsapp_usage_logs").insert({
           organization_id: orgId,
           ministry_id: ministryId,
           instance_name: instance
-        }).then(({ error: logErr }) => {
-          if (logErr) console.warn(`[whatsapp-swap-notify] Falha ao registrar log:`, logErr.message);
         });
+        if (logErr) console.warn(`[whatsapp-swap-notify] Falha ao registrar log:`, logErr.message);
       } else {
         console.warn(`[whatsapp-swap-notify] Falha ao enviar para ${phone}:`, msgErr);
       }

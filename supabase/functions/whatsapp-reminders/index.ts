@@ -490,15 +490,14 @@ async function processNotification(
       if (msgOk) {
         console.log(`[whatsapp-reminders] ✅ ${profile.name} (${formattedPhone})`);
         sent++;
-        // Registra log de forma não-bloqueante
-        supabase.from("whatsapp_usage_logs").insert({
+        // Registra log (deve usar await para não ser abortado no Deno)
+        const { error: logErr } = await supabase.from("whatsapp_usage_logs").insert({
           organization_id: orgId,
           ministry_id: a.ministry_id,
           instance_name: currentInstance,
           recipient_phone: formattedPhone
-        }).then(({ error: logErr }) => {
-          if (logErr) console.warn("[whatsapp-reminders] Log error:", logErr.message);
         });
+        if (logErr) console.warn("[whatsapp-reminders] Log error:", logErr.message);
       } else {
         console.error(`[whatsapp-reminders] ❌ ${formattedPhone}:`, msgErr);
         errors++;
