@@ -193,20 +193,71 @@ serve(async (req: Request) => {
 
     // ── Cria nova instância na Evolution API ──
     const createEndpoint = `${evolutionApiUrl}/instance/create`;
-    const createResponse = await fetch(createEndpoint, {
+
+    const buildCreatePayload = () => JSON.stringify({
+      instanceName,
+      integration: "WHATSAPP-BAILEYS",
+      qrcode: true,
+    });
+
+    let createResponse = await fetch(createEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "apikey": evolutionApiKey,
       },
-      body: JSON.stringify({
-        instanceName,
-        integration: "WHATSAPP-BAILEYS",
-        qrcode: true,
-      }),
+      body: buildCreatePayload(),
     });
 
-    const result = await createResponse.json();
+    let result = await createResponse.json();
+
+    // ── Auto-recovery: instância fantasma (exists in Prisma but not in manager) ──
+    // A Evolution API retorna 403 "already in use" quando a instância foi desconectada
+    // pelo celular sem ser deletada via API. Solução: deletar e recriar automaticamente.
+    if (!createResponse.ok && createResponse.status === 403 && JSON.stringify(result).includes("already in use")) {
+      console.log(`[whatsapp-connect] Instância "${instanceName}" travada (403 already in use). Iniciando auto-recovery...`);
+
+      // Tenta logout primeiro (revoga sessão WhatsApp Web)
+      try {
+        await fetch(`${evolutionApiUrl}/instance/logout/${instanceName}`, {
+          method: "DELETE",
+          headers: { "apikey": evolutionApiKey },
+        });
+      } catch (e) {
+        console.warn("[whatsapp-connect] Auto-recovery: logout falhou (ignorado):", e);
+      }
+
+      // Deleta a instância do Prisma
+      const delRes = await fetch(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
+        method: "DELETE",
+        headers: { "apikey": evolutionApiKey },
+      });
+
+      if (!delRes.ok && delRes.status !== 404) {
+        const delBody = await delRes.text().catch(() => "");
+        console.error(`[whatsapp-connect] Auto-recovery: falha ao deletar (${delRes.status}): ${delBody}`);
+        return new Response(
+          JSON.stringify({ error: `Instância em estado inválido e não foi possível limpá-la. Tente novamente em alguns segundos. (${delRes.status})` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[whatsapp-connect] Auto-recovery: instância "${instanceName}" deletada. Aguardando 2s antes de recriar...`);
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Recria a instância limpa
+      createResponse = await fetch(createEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": evolutionApiKey,
+        },
+        body: buildCreatePayload(),
+      });
+
+      result = await createResponse.json();
+      console.log(`[whatsapp-connect] Auto-recovery: create após reset — status ${createResponse.status}`);
+    }
 
     if (!createResponse.ok) {
       return new Response(
