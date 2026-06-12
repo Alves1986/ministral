@@ -55,36 +55,7 @@ export async function sendWhatsAppMessage(
   }
   return { success: false, error: lastError };
 }
-export async function sendWhatsAppButtons(
-  apiUrl: string, apiKey: string, instanceName: string, phone: string,
-  content: { title: string, description: string, footer: string },
-  buttons: Array<{ id: string, text: string }>
-): Promise<{ success: boolean; error?: string }> {
-  const endpoint = `${apiUrl}/message/sendButtons/${instanceName}`;
-  const payload = {
-    number: phone,
-    options: { delay: 1200, presence: "composing" },
-    buttonMessage: {
-      title: content.title, description: content.description, footer: content.footer,
-      buttons: buttons.map((b) => ({ buttonId: b.id, buttonText: { displayText: b.text }, type: 1 }))
-    }
-  };
-  try {
-    const response = await fetchWithTimeout(endpoint, {
-      method: "POST", headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) throw new Error(`Status ${response.status}`);
-    return { success: true };
-  } catch (error: any) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return { success: true, error: "timeout_assumed_delivered" };
-    }
-    console.warn(`[whatsapp] Falha ao enviar botões para ${phone}. Acionando Fallback Textual.`);
-    let fallbackText = `*${content.title}*\n\n${content.description}\n\n_${content.footer}_`;
-    return sendWhatsAppMessage(apiUrl, apiKey, instanceName, phone, fallbackText);
-  }
-}
+// sendWhatsAppButtons removida. O webhook usará fallback em texto diretamente se precisar.
 export function formatBrazilPhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let digits = raw.replace(/\D/g, "");
@@ -280,14 +251,16 @@ serve(async (req: Request) => {
 
               const [y, mm, d] = action.event_date.split("-");
               const dFormat = `${d}/${mm}/${y}`;
-              const swapContent = {
-                title: "⚠️ Solicitação de Troca",
-                description: `*${reqName}* precisa de uma troca para a escala de *${action.role}*.\n\n🗓️ Data: ${dFormat}\n⏰ Hora: ${ruleData?.time?.substring(0,5) || ""}\n\nVocê pode assumir essa escala?`,
-                footer: "Ministral • Troca de Escala"
-              };
-              await sendWhatsAppButtons(apiUrl, apiKey, instance, mPhone, swapContent, [
-                { id: "SWAP_ACCEPT", text: "✅ Aceitar Escala" }
-              ]);
+              
+              const swapText = `⚠️ *Solicitação de Troca*\n\n` +
+                `*${reqName}* precisa de uma troca para a escala de *${action.role}*.\n\n` +
+                `🗓️ Data: ${dFormat}\n` +
+                `⏰ Hora: ${ruleData?.time?.substring(0,5) || ""}\n\n` +
+                `Você pode assumir essa escala?\n` +
+                `👉 *Responda SIM para aceitar*\n\n` +
+                `_Ministral • Troca de Escala_`;
+              
+              await sendWhatsAppMessage(apiUrl, apiKey, instance, mPhone, swapText);
             }
           }
 

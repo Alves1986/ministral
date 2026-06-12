@@ -172,13 +172,13 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             if (!orgId) {
                 isProcessingRef.current = false;
-                setTimeout(() => {
-                    if (isMountedRef.current && !userRef.current) {
-                        setUser(null);
-                        setStatus('unauthenticated');
-                        if (channel) channel.unsubscribe();
-                    }
-                }, 10000);
+                console.warn("[SessionProvider] Conta sem organização vinculada. Efetuando logout.");
+                sb.auth.signOut().catch(console.error);
+                if (isMountedRef.current) {
+                    setUser(null);
+                    setStatus('unauthenticated');
+                }
+                if (channel) channel.unsubscribe();
                 return;
             }
 

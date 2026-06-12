@@ -162,6 +162,7 @@ const AvailabilityReportScreen = lazy(() =>
   })),
 );
 import { MonthlyReportScreen } from "./components/MonthlyReportScreen";
+import { UpdatePasswordScreen } from "./components/UpdatePasswordScreen";
 
 const PullToRefreshContainer: React.FC<{
   onRefresh: () => Promise<void>;
@@ -310,6 +311,13 @@ const InnerApp = () => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       return params.has("register");
+    }
+    return false;
+  });
+
+  const [isRecovery, setIsRecovery] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.location.hash.includes("type=recovery");
     }
     return false;
   });
@@ -1345,6 +1353,19 @@ const InnerApp = () => {
   );
 
   // --- Conditional Rendering ---
+
+  if (isRecovery) {
+    return (
+      <UpdatePasswordScreen
+        onPasswordUpdated={() => {
+          setIsRecovery(false);
+          const url = new URL(window.location.href);
+          url.hash = '';
+          window.history.replaceState({}, "", url.toString());
+        }}
+      />
+    );
+  }
 
   if (showSetup && status !== "ready") {
     return <OnboardingScreen />;
