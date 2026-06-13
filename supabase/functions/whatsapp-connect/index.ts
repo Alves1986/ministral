@@ -228,16 +228,21 @@ serve(async (req: Request) => {
       }
 
       // Deleta a instância do Prisma
+      // Nota: evoapicloud retorna 400 quando a sessão Baileys já foi destruída
+      // (WhatsApp revogado pelo celular), mas o registro Prisma É removido mesmo assim.
+      // Tratamos 400 e 404 como aceitáveis e prosseguimos com a recriação.
       const delRes = await fetch(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
         method: "DELETE",
         headers: { "apikey": evolutionApiKey },
       });
 
-      if (!delRes.ok && delRes.status !== 404) {
-        const delBody = await delRes.text().catch(() => "");
-        console.error(`[whatsapp-connect] Auto-recovery: falha ao deletar (${delRes.status}): ${delBody}`);
+      const delBody = await delRes.text().catch(() => "");
+      console.log(`[whatsapp-connect] Auto-recovery: delete retornou ${delRes.status}: ${delBody.slice(0, 200)}`);
+
+      // Apenas status 5xx sinaliza falha real — 400 e 404 são aceitáveis
+      if (!delRes.ok && delRes.status >= 500) {
         return new Response(
-          JSON.stringify({ error: `Instância em estado inválido e não foi possível limpá-la. Tente novamente em alguns segundos. (${delRes.status})` }),
+          JSON.stringify({ error: `Não foi possível limpar a instância travada (servidor retornou ${delRes.status}). Tente novamente em alguns segundos.` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
