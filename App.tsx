@@ -87,6 +87,7 @@ import { ToolsMenu } from "./components/ToolsMenu";
 import { InstallModal } from "./components/InstallModal";
 import { JoinMinistryModal } from "./components/JoinMinistryModal";
 import { InstallBanner } from "./components/InstallBanner";
+import { NotificationPermissionBanner } from "./components/NotificationPermissionBanner";
 import {
   EventsModal,
   AvailabilityModal,
@@ -1936,6 +1937,7 @@ const InnerApp = () => {
               onDismiss={() => setShowInstallBanner(false)}
               appName={ministryTitle}
             />
+            <NotificationPermissionBanner />
             <InstallModal
               isOpen={showInstallModal}
               onClose={() => setShowInstallModal(false)}
