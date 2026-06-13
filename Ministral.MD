@@ -48,6 +48,8 @@
 
 ## Backlog (ordem de prioridade)
 - [x] **[FEAT]** Login via Google restrito — apenas membros já cadastrados podem logar; novos usuários recebem erro amigável
+- [x] **[FEAT]** Web Push Notifications — service worker, banner de permissão, edge function `push-notification`, tabela `push_subscriptions` com RLS
+- [ ] **[CONFIG]** Atualizar `VITE_VAPID_PUBLIC_KEY` no Vercel com novo par VAPID: `BJuYfUrshkI3K9FRVydn3KmQeVSHeGr7iMvBAW4ZMtM9x4hM5NYFDuU9s--DrKfdmXz6yZH71HPCOzzt7ke7OoU`
 - [ ] **[BUG]** Race condition `AvailabilityScreen.tsx` — implementar flag `isSyncing` para bloquear Realtime durante optimistic update
 - [ ] **[BUG]** Ministry-switching lento — paralelizar `Promise.all` em `onSwitchMinistry` / `SessionContext.tsx`
 - [ ] **[FEAT]** Validar fluxo end-to-end WhatsApp botões — testar `CONFIRMAR`, `RECUSAR`, `TROCA` com payload real da Evolution API
@@ -57,9 +59,9 @@
 - [ ] **[FEAT]** Notificações de swap aprovado — notificar voluntário via WhatsApp quando troca for aceita
 
 ## Contexto da última sessão (atualizar ao fechar)
-- **Último trabalho**: Implementação completa do Login via Google restrito. Código adicionado em `services/supabase/auth.ts` (`loginWithGoogle`), `components/LoginScreen.tsx` (botão + tratamento de erro `access_denied`), `context/SessionContext.tsx` (logout de ghost accounts). Configuração externa: Google Provider habilitado no Supabase com Client ID/Secret corretos; URL de callback `https://fyenjzfyjlfhvayelrpp.supabase.co/auth/v1/callback` adicionada ao Google Cloud Console. "Allow new users to sign up" desabilitado no Supabase para bloquear cadastros não convidados.
-- **O que ficou pendente**: Teste end-to-end do fluxo de login Google com uma conta real de membro.
-- **Próximo passo**: corrigir race condition em `AvailabilityScreen.tsx` (flag `isSyncing`) — topo do backlog
+- **Último trabalho**: Implementação completa de Web Push Notifications. Criados: `public/sw.js` (service worker que exibe notificações nativas), `components/NotificationPermissionBanner.tsx` (banner de solicitação de permissão com delay de 3s), `utils/pushUtils.ts` (subscribe + save no banco), Edge Function `push-notification` deployada no Supabase (envia para todos os devices do ministério). Tabela `push_subscriptions` criada com RLS granular. Chaves VAPID regeneradas e sincronizadas: Supabase secrets ✅, `.env` local ✅. Vercel pending.
+- **O que ficou pendente**: Atualizar `VITE_VAPID_PUBLIC_KEY` no Vercel com o novo valor: `BJuYfUrshkI3K9FRVydn3KmQeVSHeGr7iMvBAW4ZMtM9x4hM5NYFDuU9s--DrKfdmXz6yZH71HPCOzzt7ke7OoU` (acessar Settings → Environment Variables no painel Vercel).
+- **Próximo passo**: Após atualizar Vercel, testar push end-to-end; depois corrigir race condition em `AvailabilityScreen.tsx` (flag `isSyncing`)
 
 ---
 
