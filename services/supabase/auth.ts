@@ -406,6 +406,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
       .update({
         role: "member",
         functions: functionsToSave,
+        organization_id: invite.organization_id,
       })
       .eq("id", existingMember.id);
     memberError = error;
@@ -413,6 +414,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
     const { error } = await sb.from("ministry_members").insert({
       profile_id: userId,
       ministry_id: invite.ministry_id,
+      organization_id: invite.organization_id,
       role: "member",
       functions: functionsToSave,
     });
