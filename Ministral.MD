@@ -49,6 +49,7 @@
 ## Backlog (ordem de prioridade)
 - [x] **[FEAT]** Login via Google restrito — apenas membros já cadastrados podem logar; novos usuários recebem erro amigável
 - [x] **[FEAT]** Web Push Notifications — service worker, banner de permissão, edge function `push-notification`, tabela `push_subscriptions` com RLS
+- [x] **[BUG]** Corrigir bloqueio de cadastro de membros via convite com Google OAuth (preservar token, permitir signup e vincular à organização)
 - [ ] **[CONFIG]** Atualizar `VITE_VAPID_PUBLIC_KEY` no Vercel com novo par VAPID: `BJuYfUrshkI3K9FRVydn3KmQeVSHeGr7iMvBAW4ZMtM9x4hM5NYFDuU9s--DrKfdmXz6yZH71HPCOzzt7ke7OoU`
 - [ ] **[BUG]** Race condition `AvailabilityScreen.tsx` — implementar flag `isSyncing` para bloquear Realtime durante optimistic update
 - [ ] **[BUG]** Ministry-switching lento — paralelizar `Promise.all` em `onSwitchMinistry` / `SessionContext.tsx`
@@ -59,9 +60,9 @@
 - [ ] **[FEAT]** Notificações de swap aprovado — notificar voluntário via WhatsApp quando troca for aceita
 
 ## Contexto da última sessão (atualizar ao fechar)
-- **Último trabalho**: Implementação completa de Web Push Notifications. Criados: `public/sw.js` (service worker que exibe notificações nativas), `components/NotificationPermissionBanner.tsx` (banner de solicitação de permissão com delay de 3s), `utils/pushUtils.ts` (subscribe + save no banco), Edge Function `push-notification` deployada no Supabase (envia para todos os devices do ministério). Tabela `push_subscriptions` criada com RLS granular. Chaves VAPID regeneradas e sincronizadas: Supabase secrets ✅, `.env` local ✅. Vercel pending.
-- **O que ficou pendente**: Atualizar `VITE_VAPID_PUBLIC_KEY` no Vercel com o novo valor: `BJuYfUrshkI3K9FRVydn3KmQeVSHeGr7iMvBAW4ZMtM9x4hM5NYFDuU9s--DrKfdmXz6yZH71HPCOzzt7ke7OoU` (acessar Settings → Environment Variables no painel Vercel).
-- **Próximo passo**: Após atualizar Vercel, testar push end-to-end; depois corrigir race condition em `AvailabilityScreen.tsx` (flag `isSyncing`)
+- **Último trabalho**: Implementado suporte a cadastro de convidados via Google OAuth. Ajustado `auth.ts` para preservar token de convite no redirect e no localStorage. Modificados `InviteScreen`, `App.tsx` e `SessionContext` para suportar fluxo de "convite pendente" pós-OAuth, impedindo logout prematuro e finalizando o vínculo do novo membro ao ministério.
+- **O que ficou pendente**: Reabilitar "Allow new users to sign up" (desmarcar "Disable sign ups") no Supabase Dashboard → Authentication → Settings para permitir os convidados via Google. Atualizar `VITE_VAPID_PUBLIC_KEY` no Vercel.
+- **Próximo passo**: Após configurações manuais no Vercel e Supabase Dashboard, testar fluxo, e em seguida corrigir race condition em `AvailabilityScreen.tsx` (flag `isSyncing`).
 
 ---
 
