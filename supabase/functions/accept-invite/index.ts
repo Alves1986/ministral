@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { token, email, password, name } = await req.json()
+    const { token, email, password, name, functions = [] } = await req.json()
 
     if (!token || !email || !password || !name) {
       return new Response(
@@ -80,6 +80,89 @@ serve(async (req) => {
       }
       throw authError;
     }
+
+    const userId = authData.user?.id;
+
+    if (!userId) {
+      throw new Error("Usuário criado sem ID");
+    }
+
+    // Esperar pelo profile (criado pelo trigger)
+    let profileExists = false;
+    for (let i = 0; i < 5; i++) {
+      const { data: profileCheck } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profileCheck) {
+        profileExists = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (!profileExists) {
+        // Se após 5s o trigger falhou ainda assim, tente inserir manualmente
+        await supabaseAdmin.from("profiles").insert({
+            id: userId,
+            email: email,
+            name: name,
+            ministry_id: invite.ministry_id,
+            organization_id: invite.organization_id,
+        });
+    }
+
+    // Identificar se é o primeiro do ministério para setar admin
+    const { count: membersCount } = await supabaseAdmin
+      .from("ministry_members")
+      .select("id", { count: "exact", head: true })
+      .eq("ministry_id", invite.ministry_id);
+
+    const isFirstMember = membersCount === 0;
+
+    // Atualizar Profile
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        name: name,
+        email: email,
+        organization_id: invite.organization_id,
+        ministry_id: invite.ministry_id,
+        allowed_ministries: [invite.ministry_id],
+        is_admin: isFirstMember,
+        is_super_admin: false,
+      })
+      .eq("id", userId);
+
+    // Inserir ou atualizar na ministry_members
+    const { data: existingMember } = await supabaseAdmin
+      .from("ministry_members")
+      .select("id")
+      .eq("profile_id", userId)
+      .eq("ministry_id", invite.ministry_id)
+      .maybeSingle();
+
+    if (existingMember) {
+      await supabaseAdmin
+        .from("ministry_members")
+        .update({ role: "member", functions: functions })
+        .eq("id", existingMember.id);
+    } else {
+      await supabaseAdmin.from("ministry_members").insert({
+        profile_id: userId,
+        ministry_id: invite.ministry_id,
+        role: "member",
+        functions: functions,
+      });
+    }
+
+    // Marcar convite como usado
+    await supabaseAdmin
+      .from("invite_tokens")
+      .update({ used: true })
+      .eq("token", token);
 
     return new Response(
       JSON.stringify({

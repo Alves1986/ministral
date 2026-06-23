@@ -122,8 +122,7 @@ export const checkMemberLimit = async (
   const { count } = await sb
     .from("ministry_members")
     .select("id", { count: "exact", head: true })
-    .eq("ministry_id", ministryId)
-    .eq("organization_id", orgId);
+    .eq("ministry_id", ministryId);
 
   if (plan_type === "trial" && (count || 0) >= 30) {
     return {
@@ -288,39 +287,39 @@ export const registerWithInvite = async (token: string, userData: any) => {
     return { success: false, message: "Convite inválido ou já usado" };
   }
 
-  // Invocar Edge Function para contornar a restrição de signups globales
-  const { data: inviteRes, error: fnError } = await sb.functions.invoke("accept-invite", {
-    body: {
-      token,
-      email: userData.email,
-      password: userData.password,
-      name: userData.name
-    }
+  const { data: authData, error: authError } = await (sb.auth as any).signUp({
+    email: userData.email,
+    password: userData.password,
+    options: {
+      data: {
+        full_name: userData.name,
+        ministry_id: invite.ministry_id,
+        organization_id: invite.organization_id,
+      },
+    },
   });
 
-  if (fnError) {
-    return { success: false, message: fnError.message || "Erro na infraestrutura do convite." };
+  if (authError) {
+    const isExisting =
+      authError.message?.toLowerCase().includes("already registered") ||
+      authError.message?.toLowerCase().includes("already exists");
+    if (isExisting) {
+      return {
+        success: false,
+        isExistingUser: true,
+        message:
+          "Este e-mail já possui uma conta. Faça login para entrar no ministério.",
+        inviteData: {
+          orgId: invite.organization_id,
+          ministryId: invite.ministry_id,
+          token,
+        },
+      };
+    }
+    return { success: false, message: authError.message };
   }
-
-  if (inviteRes?.isExistingUser) {
-    return {
-      success: false,
-      isExistingUser: true,
-      message: "Este e-mail já possui uma conta. Faça login para entrar no ministério.",
-      inviteData: {
-        orgId: invite.organization_id,
-        ministryId: invite.ministry_id,
-        token,
-      },
-    };
-  }
-
-  if (!inviteRes?.success) {
-    return { success: false, message: inviteRes?.message || "Erro ao processar convite." };
-  }
-
-  const userId = inviteRes.data?.user_id;
-  if (!userId) return { success: false, message: "Erro ao criar usuário (ID vazia)." };
+  const userId = authData.user?.id;
+  if (!userId) return { success: false, message: "Erro ao criar usuário" };
 
   // Loga o usuário imediatamente para que as inserções subsequentes (RLS) funcionem
   const { error: signInError } = await sb.auth.signInWithPassword({
@@ -329,7 +328,9 @@ export const registerWithInvite = async (token: string, userData: any) => {
   });
 
   if (signInError) {
-    return { success: false, message: "Cadastro realizado, mas erro ao logar." };
+    console.warn("Erro ao fazer login após signUp:", signInError);
+    // Não vamos falhar aqui, apenas alertar, pois se a confirmação de email
+    // estiver habilitada e falhar o signIn, as rules vão falhar depois de qualquer jeito.
   }
 
   // Aguarda o trigger do Supabase Auth criar o perfil (polling)
@@ -406,7 +407,6 @@ export const registerWithInvite = async (token: string, userData: any) => {
       .update({
         role: "member",
         functions: functionsToSave,
-        organization_id: invite.organization_id,
       })
       .eq("id", existingMember.id);
     memberError = error;
@@ -414,7 +414,6 @@ export const registerWithInvite = async (token: string, userData: any) => {
     const { error } = await sb.from("ministry_members").insert({
       profile_id: userId,
       ministry_id: invite.ministry_id,
-      organization_id: invite.organization_id,
       role: "member",
       functions: functionsToSave,
     });
