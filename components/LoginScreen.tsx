@@ -20,7 +20,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
 
   useEffect(() => {
     if (window.location.hash.includes('error=access_denied') || window.location.hash.includes('error_description=Signups+not+allowed')) {
-      setErrorMsg("Este e-mail não possui convite. Peça ao administrador para adicioná-lo antes de fazer login.");
+      setErrorMsg("Não foi possível completar o login. Se você recebeu um link de convite, use-o para se cadastrar. Caso contrário, peça ao administrador para adicioná-lo.");
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);

@@ -19,15 +19,196 @@ export const loginWithGoogle = async () => {
   if (!sb)
     return { success: false, message: "Erro: Supabase não inicializado." };
   
+  // Preserva o invite token na URL de redirect, se existir
+  const currentUrl = new URL(window.location.href);
+  const inviteToken = currentUrl.searchParams.get('invite');
+  const redirectUrl = new URL(window.location.origin);
+  if (inviteToken) {
+    redirectUrl.searchParams.set('invite', inviteToken);
+    // Salva no localStorage como fallback (Supabase pode strippar query params)
+    localStorage.setItem('pending_invite_token', inviteToken);
+  }
+
   const { data, error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin
+      redirectTo: redirectUrl.toString()
     }
   });
 
   if (error) return { success: false, message: error.message };
   return { success: true, data };
+};
+
+/**
+ * Inicia o fluxo de cadastro via Google para um membro convidado.
+ * Salva o invite token e roles selecionados no localStorage antes de redirecionar.
+ */
+export const registerWithGoogleInvite = async (
+  token: string,
+  selectedRoles: string[],
+) => {
+  const sb = getSupabase();
+  if (!sb)
+    return { success: false, message: "Erro: Supabase não inicializado." };
+
+  // Salva dados do convite no localStorage para recuperar após redirect
+  localStorage.setItem('pending_invite_token', token);
+  localStorage.setItem('pending_invite_roles', JSON.stringify(selectedRoles));
+
+  const redirectUrl = new URL(window.location.origin);
+  redirectUrl.searchParams.set('invite', token);
+
+  const { data, error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: redirectUrl.toString()
+    }
+  });
+
+  if (error) return { success: false, message: error.message };
+  return { success: true, data };
+};
+
+/**
+ * Processa o convite pendente após o redirect do Google OAuth.
+ * Chamado pelo App.tsx quando detecta um pending_invite_token + usuário logado.
+ */
+export const processGoogleInviteAfterRedirect = async (): Promise<{
+  success: boolean;
+  message?: string;
+}> => {
+  const sb = getSupabase();
+  if (!sb) return { success: false, message: "Supabase não inicializado." };
+
+  const pendingToken = localStorage.getItem('pending_invite_token');
+  const pendingRoles = localStorage.getItem('pending_invite_roles');
+
+  if (!pendingToken) return { success: false, message: "Nenhum convite pendente." };
+
+  try {
+    // 1. Validar o token de convite
+    const { data: invite, error: inviteError } = await sb
+      .from('invite_tokens')
+      .select('*')
+      .eq('token', pendingToken)
+      .maybeSingle();
+
+    if (
+      inviteError ||
+      !invite ||
+      invite.used ||
+      new Date() > new Date(invite.expires_at)
+    ) {
+      clearPendingInvite();
+      return { success: false, message: "Convite inválido ou já usado." };
+    }
+
+    // 2. Obter usuário logado
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) {
+      return { success: false, message: "Usuário não autenticado." };
+    }
+
+    // 3. Aguardar o trigger do Supabase criar o perfil (polling)
+    let profile: Record<string, unknown> | null = null;
+    for (let i = 0; i < 15; i++) {
+      const { data } = await sb
+        .from('profiles')
+        .select('id, organization_id, allowed_ministries, is_admin')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (data) {
+        profile = data;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    if (!profile) {
+      clearPendingInvite();
+      return { success: false, message: "Perfil não encontrado após registro." };
+    }
+
+    const roles: string[] = pendingRoles ? JSON.parse(pendingRoles) : [];
+
+    // 4. Atualizar perfil com org e ministério do convite
+    const { error: profileError } = await sb
+      .from('profiles')
+      .update({
+        name: user.user_metadata?.full_name || user.user_metadata?.name || profile.name || 'Usuário',
+        email: user.email,
+        organization_id: invite.organization_id,
+        ministry_id: invite.ministry_id,
+        allowed_ministries: [invite.ministry_id],
+        is_admin: false,
+        is_super_admin: false,
+      })
+      .eq('id', user.id);
+
+    if (profileError) {
+      console.error('[processGoogleInviteAfterRedirect] Erro ao atualizar perfil:', profileError);
+      clearPendingInvite();
+      return { success: false, message: 'Erro ao configurar perfil: ' + profileError.message };
+    }
+
+    // 5. Vincular ao ministério (upsert para segurança)
+    const { data: existingMember } = await sb
+      .from('ministry_members')
+      .select('id')
+      .eq('profile_id', user.id)
+      .eq('ministry_id', invite.ministry_id)
+      .maybeSingle();
+
+    if (existingMember) {
+      await sb
+        .from('ministry_members')
+        .update({ role: 'member', functions: roles })
+        .eq('id', existingMember.id);
+    } else {
+      const { error: memberError } = await sb.from('ministry_members').insert({
+        profile_id: user.id,
+        ministry_id: invite.ministry_id,
+        role: 'member',
+        functions: roles,
+      });
+      if (memberError) {
+        console.error('[processGoogleInviteAfterRedirect] Erro ao vincular membro:', memberError);
+        clearPendingInvite();
+        return { success: false, message: 'Erro ao vincular ao ministério: ' + memberError.message };
+      }
+    }
+
+    // 6. Marcar token como usado
+    await sb
+      .from('invite_tokens')
+      .update({ used: true })
+      .eq('token', pendingToken);
+
+    // 7. Notificar super admins
+    await notifySuperAdmins(
+      'Novo Membro Registrado (Google)',
+      `O usuário ${user.user_metadata?.full_name || user.email} se registrou via Google com convite.`,
+      'members',
+      invite.ministry_id,
+      invite.organization_id,
+    );
+
+    // 8. Limpar localStorage
+    clearPendingInvite();
+
+    return { success: true };
+  } catch (err: unknown) {
+    console.error('[processGoogleInviteAfterRedirect] Erro crítico:', err);
+    clearPendingInvite();
+    return { success: false, message: err instanceof Error ? err.message : 'Erro desconhecido.' };
+  }
+};
+
+/** Limpa dados de convite pendente do localStorage */
+export const clearPendingInvite = () => {
+  localStorage.removeItem('pending_invite_token');
+  localStorage.removeItem('pending_invite_roles');
 };
 
 export const logout = async () => {
@@ -122,8 +303,7 @@ export const checkMemberLimit = async (
   const { count } = await sb
     .from("ministry_members")
     .select("id", { count: "exact", head: true })
-    .eq("ministry_id", ministryId)
-    .eq("organization_id", orgId);
+    .eq("ministry_id", ministryId);
 
   if (plan_type === "trial" && (count || 0) >= 30) {
     return {
@@ -321,6 +501,18 @@ export const registerWithInvite = async (token: string, userData: any) => {
   }
   const userId = authData.user?.id;
   if (!userId) return { success: false, message: "Erro ao criar usuário" };
+
+  // Loga o usuário imediatamente para que as inserções subsequentes (RLS) funcionem
+  const { error: signInError } = await sb.auth.signInWithPassword({
+    email: userData.email,
+    password: userData.password,
+  });
+
+  if (signInError) {
+    console.warn("Erro ao fazer login após signUp:", signInError);
+    // Não vamos falhar aqui, apenas alertar, pois se a confirmação de email
+    // estiver habilitada e falhar o signIn, as rules vão falhar depois de qualquer jeito.
+  }
 
   // Aguarda o trigger do Supabase Auth criar o perfil (polling)
   let profileExists = false;

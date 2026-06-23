@@ -172,6 +172,35 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             if (!orgId) {
                 isProcessingRef.current = false;
+                
+                // Verifica se há um convite pendente (cadastro via Google OAuth em andamento)
+                const hasPendingInvite = localStorage.getItem('pending_invite_token');
+                
+                if (hasPendingInvite) {
+                    console.log("[SessionProvider] Conta sem org, mas convite pendente detectado. Aguardando processamento...");
+                    // Não faz logout — o InviteScreen/App.tsx vai processar o convite
+                    // e atualizar o profile.organization_id via Realtime
+                    // Timeout de segurança: se após 30s o perfil ainda não tem org, fazer logout
+                    setTimeout(async () => {
+                        if (!isMountedRef.current) return;
+                        const freshProfile = await sb
+                            .from('profiles')
+                            .select('organization_id')
+                            .eq('id', sessionUser.id)
+                            .maybeSingle();
+                        if (!freshProfile?.data?.organization_id && isMountedRef.current) {
+                            console.warn("[SessionProvider] Timeout: convite pendente não foi processado. Efetuando logout.");
+                            localStorage.removeItem('pending_invite_token');
+                            localStorage.removeItem('pending_invite_roles');
+                            sb.auth.signOut().catch(console.error);
+                            setUser(null);
+                            setStatus('unauthenticated');
+                            if (channel) channel.unsubscribe();
+                        }
+                    }, 30000);
+                    return;
+                }
+                
                 console.warn("[SessionProvider] Conta sem organização vinculada. Efetuando logout.");
                 sb.auth.signOut().catch(console.error);
                 if (isMountedRef.current) {

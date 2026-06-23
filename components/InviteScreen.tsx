@@ -20,6 +20,9 @@ import {
   registerWithInvite,
   getSupabase,
   joinMinistry,
+  registerWithGoogleInvite,
+  processGoogleInviteAfterRedirect,
+  clearPendingInvite,
 } from "../services/supabaseService";
 import { isValidEmail } from "../utils/validation";
 
@@ -56,6 +59,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [processingGoogleInvite, setProcessingGoogleInvite] = useState(false);
 
   useEffect(() => {
     const check = async () => {
@@ -89,6 +94,46 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     };
     check();
   }, [token]);
+
+  // Detecta se o usuário voltou do Google OAuth já autenticado
+  useEffect(() => {
+    const pendingToken = localStorage.getItem('pending_invite_token');
+    if (!pendingToken || pendingToken !== token) return;
+
+    const sb = getSupabase();
+    if (!sb) return;
+
+    const checkGoogleAuth = async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.user) {
+        // Usuário voltou do Google OAuth com sessão ativa — processar convite
+        setProcessingGoogleInvite(true);
+        try {
+          const result = await processGoogleInviteAfterRedirect();
+          if (result.success) {
+            setStatus('success');
+            // Limpar a URL
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('invite');
+              window.history.replaceState({}, '', url.toString());
+            } catch (_e) {
+              // ignore
+            }
+            setTimeout(() => onClear(), 2000);
+          } else {
+            setErrorMsg(result.message || 'Erro ao processar convite com Google.');
+          }
+        } catch (e: unknown) {
+          setErrorMsg(e instanceof Error ? e.message : 'Erro desconhecido.');
+        } finally {
+          setProcessingGoogleInvite(false);
+        }
+      }
+    };
+
+    checkGoogleAuth();
+  }, [token, onClear]);
 
   const toggleRole = (role: string) => {
     let newRoles;
@@ -204,19 +249,55 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
       setStatus("success");
       onClear(); // Limpar convite da URL
-    } catch (e: any) {
-      setErrorMsg(e.message || "Erro ao fazer login.");
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Erro ao fazer login.');
     } finally {
       setLoginLoading(false);
     }
   };
 
-  if (status === "loading") {
+  const handleGoogleRegister = async () => {
+    if (selectedRoles.length === 0 && availableRoles.length > 0) {
+      setErrorMsg('Selecione pelo menos uma função antes de cadastrar com Google.');
+      return;
+    }
+    setGoogleLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await registerWithGoogleInvite(token, selectedRoles);
+      if (!res.success) {
+        setErrorMsg(res.message || 'Erro ao conectar com Google.');
+        setGoogleLoading(false);
+      }
+      // Se sucesso, o navegador será redirecionado para o Google
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Erro desconhecido.');
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleLoginWithInvite = async () => {
+    // Para usuários existentes que querem fazer login com Google e aceitar convite
+    setGoogleLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await registerWithGoogleInvite(token, selectedRoles);
+      if (!res.success) {
+        setErrorMsg(res.message || 'Erro ao conectar com Google.');
+        setGoogleLoading(false);
+      }
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Erro desconhecido.');
+      setGoogleLoading(false);
+    }
+  };
+
+  if (status === 'loading' || processingGoogleInvite) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white">
         <Loader2 className="animate-spin text-ministral-500 mb-4" size={32} />
         <p className="text-sm font-medium text-zinc-400">
-          Validando convite...
+          {processingGoogleInvite ? 'Processando seu cadastro...' : 'Validando convite...'}
         </p>
       </div>
     );
@@ -349,6 +430,33 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                   className="w-full text-zinc-500 text-[10px] font-bold uppercase hover:text-zinc-400 transition-colors"
                 >
                   Voltar para cadastro
+                </button>
+
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-white/10"></div>
+                  <span className="flex-shrink-0 mx-4 text-zinc-600 text-[9px] font-black uppercase tracking-widest">ou</span>
+                  <div className="flex-grow border-t border-white/10"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleLoginWithInvite}
+                  disabled={googleLoading}
+                  className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                >
+                  {googleLoading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      Entrar com Google
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -545,19 +653,53 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
           )}
 
           {!isExistingUser && (
-            <button
-              type="submit"
-              disabled={registering || !isFormValid}
-              className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-ministral-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-            >
-              {registering ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <span className="flex items-center gap-2">
-                  Finalizar Cadastro <ArrowRight size={16} />
-                </span>
+            <>
+              <button
+                type="submit"
+                disabled={registering || !isFormValid}
+                className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-ministral-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              >
+                {registering ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Finalizar Cadastro <ArrowRight size={16} />
+                  </span>
+                )}
+              </button>
+
+              <div className="relative flex items-center py-1">
+                <div className="flex-grow border-t border-white/10"></div>
+                <span className="flex-shrink-0 mx-4 text-zinc-600 text-[9px] font-black uppercase tracking-widest">ou</span>
+                <div className="flex-grow border-t border-white/10"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoogleRegister}
+                disabled={googleLoading || (availableRoles.length > 0 && selectedRoles.length === 0)}
+                className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-bold py-3.5 rounded-xl shadow-lg shadow-white/5 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {googleLoading ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    Cadastrar com Google
+                  </>
+                )}
+              </button>
+              {availableRoles.length > 0 && selectedRoles.length === 0 && (
+                <p className="text-[10px] text-zinc-600 text-center">
+                  Selecione suas funções acima para habilitar o cadastro com Google.
+                </p>
               )}
-            </button>
+            </>
           )}
         </form>
       </div>

@@ -305,7 +305,10 @@ const InnerApp = () => {
   const [inviteToken, setInviteToken] = useState<string | null>(() => {
     // Ler o token IMEDIATAMENTE na inicializacao do state (antes do primeiro render)
     const params = new URLSearchParams(window.location.search);
-    return params.get("invite") || null;
+    const urlToken = params.get("invite") || null;
+    // Fallback: se o Supabase OAuth stripou o ?invite= do redirect, tentar o localStorage
+    const pendingToken = localStorage.getItem("pending_invite_token");
+    return urlToken || pendingToken || null;
   });
 
   const [isRegistering] = useState<boolean>(() => {
@@ -1378,6 +1381,9 @@ const InnerApp = () => {
         token={inviteToken}
         onClear={() => {
           setInviteToken(null);
+          // Limpar localStorage de convite pendente
+          localStorage.removeItem("pending_invite_token");
+          localStorage.removeItem("pending_invite_roles");
           const url = new URL(window.location.href);
           url.searchParams.delete("invite");
           window.history.replaceState({}, "", url.toString());
