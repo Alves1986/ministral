@@ -452,185 +452,46 @@ export const registerWithInvite = async (token: string, userData: any) => {
   const sb = getSupabase();
   if (!sb) return { success: false };
 
-  // Validar buscando o token diretamente
-  const { data: invite, error: inviteError } = await sb
-    .from("invite_tokens")
-    .select("*")
-    .eq("token", token)
-    .maybeSingle();
-
-  if (
-    inviteError ||
-    !invite ||
-    invite.used ||
-    new Date() > new Date(invite.expires_at)
-  ) {
-    return { success: false, message: "Convite inválido ou já usado" };
-  }
-
-  const { data: authData, error: authError } = await (sb.auth as any).signUp({
-    email: userData.email,
-    password: userData.password,
-    options: {
-      data: {
-        full_name: userData.name,
-        ministry_id: invite.ministry_id,
-        organization_id: invite.organization_id,
+  try {
+    const { data, error } = await sb.functions.invoke("accept-invite", {
+      body: {
+        token,
+        email: userData.email,
+        password: userData.password,
+        name: userData.name,
+        whatsapp: userData.whatsapp,
+        birthDate: userData.birthDate,
+        functions: userData.roles || userData.ministry_functions || [],
       },
-    },
-  });
+    });
 
-  if (authError) {
-    const isExisting =
-      authError.message?.toLowerCase().includes("already registered") ||
-      authError.message?.toLowerCase().includes("already exists");
-    if (isExisting) {
+    if (error) {
+      console.error("[registerWithInvite] Edge function error:", error);
       return {
         success: false,
-        isExistingUser: true,
-        message:
-          "Este e-mail já possui uma conta. Faça login para entrar no ministério.",
-        inviteData: {
-          orgId: invite.organization_id,
-          ministryId: invite.ministry_id,
-          token,
-        },
+        message: error.message || "Erro desconhecido ao processar convite.",
       };
     }
-    return { success: false, message: authError.message };
-  }
-  const userId = authData.user?.id;
-  if (!userId) return { success: false, message: "Erro ao criar usuário" };
 
-  // Loga o usuário imediatamente para que as inserções subsequentes (RLS) funcionem
-  const { error: signInError } = await sb.auth.signInWithPassword({
-    email: userData.email,
-    password: userData.password,
-  });
-
-  if (signInError) {
-    console.warn("Erro ao fazer login após signUp:", signInError);
-    // Não vamos falhar aqui, apenas alertar, pois se a confirmação de email
-    // estiver habilitada e falhar o signIn, as rules vão falhar depois de qualquer jeito.
-  }
-
-  // Aguarda o trigger do Supabase Auth criar o perfil (polling)
-  let profileExists = false;
-  for (let i = 0; i < 10; i++) {
-    const { data } = await sb
-      .from("profiles")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
-    if (data) {
-      profileExists = true;
-      break;
+    if (data && data.success === false) {
+      return data; // Pode conter isExistingUser, message, etc.
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
 
-  if (!profileExists) {
-    console.warn(
-      "[registerWithInvite] Perfil não encontrado após aguardar o trigger.",
-    );
-  }
-
-  // Verifica se já existem membros no ministério para saber se este é o primeiro
-  const { count: membersCount } = await sb
-    .from("ministry_members")
-    .select("id", { count: "exact", head: true })
-    .eq("ministry_id", invite.ministry_id);
-
-  const isFirstMember = membersCount === 0;
-
-  // Usamos UPDATE (não upsert) para garantir que organization_id e demais campos
-  // sejam gravados corretamente, sem o risco do onConflict ignorar a atualização.
-  const { error: profileError } = await sb
-    .from("profiles")
-    .update({
-      name: userData.name,
+    // Se sucesso, vamos tentar fazer login imediatamente para que o usuário já entre na plataforma
+    const { error: signInError } = await sb.auth.signInWithPassword({
       email: userData.email,
-      whatsapp: userData.whatsapp,
-      birth_date: userData.birthDate,
-      organization_id: invite.organization_id,
-      ministry_id: invite.ministry_id,
-      allowed_ministries: [invite.ministry_id],
-      is_admin: isFirstMember,
-      is_super_admin: false,
-    })
-    .eq("id", userId);
-
-  if (profileError) {
-    console.error(
-      "[registerWithInvite] Erro ao atualizar perfil:",
-      profileError,
-    );
-    return {
-      success: false,
-      message: "Erro ao configurar perfil: " + profileError.message,
-    };
-  }
-
-  // Verifica se o vínculo já existe (caso algum trigger já tenha criado)
-  const { data: existingMember } = await sb
-    .from("ministry_members")
-    .select("id")
-    .eq("profile_id", userId)
-    .eq("ministry_id", invite.ministry_id)
-    .maybeSingle();
-
-  let memberError = null;
-  const functionsToSave = userData.roles || userData.ministry_functions || [];
-
-  if (existingMember) {
-    const { error } = await sb
-      .from("ministry_members")
-      .update({
-        role: "member",
-        functions: functionsToSave,
-      })
-      .eq("id", existingMember.id);
-    memberError = error;
-  } else {
-    const { error } = await sb.from("ministry_members").insert({
-      profile_id: userId,
-      ministry_id: invite.ministry_id,
-      role: "member",
-      functions: functionsToSave,
+      password: userData.password,
     });
-    memberError = error;
+
+    if (signInError) {
+      console.warn("Login automático falhou após cadastro:", signInError);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[registerWithInvite] Exception:", err);
+    return { success: false, message: err.message || "Erro de conexão." };
   }
-
-  if (memberError) {
-    console.error("[registerWithInvite] Erro ao vincular membro:", memberError);
-    return {
-      success: false,
-      message: "Erro ao vincular ao ministério: " + memberError.message,
-    };
-  }
-
-  // Marca o token como usado (used: true)
-  const { error: tokenError } = await sb
-    .from("invite_tokens")
-    .update({ used: true })
-    .eq("token", token);
-  if (tokenError) {
-    console.warn(
-      "[registerWithInvite] Erro ao marcar token como usado:",
-      tokenError,
-    );
-  }
-
-  // Notify super admins about new member
-  await notifySuperAdmins(
-    "Novo Membro Registrado",
-    `O usuário ${userData.name} acabou de se registrar via convite no sistema.`,
-    "members",
-    invite.ministry_id,
-    invite.organization_id,
-  );
-
-  return { success: true };
 };
 
 export const registerNewOrganization = async (data: {

@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { token, email, password, name, functions = [] } = await req.json()
+    const { token, email, password, name, whatsapp, birthDate, functions = [] } = await req.json()
 
     if (!token || !email || !password || !name) {
       return new Response(
@@ -109,6 +109,8 @@ serve(async (req) => {
             id: userId,
             email: email,
             name: name,
+            whatsapp: whatsapp,
+            birth_date: birthDate,
             ministry_id: invite.ministry_id,
             organization_id: invite.organization_id,
         });
@@ -128,6 +130,8 @@ serve(async (req) => {
       .update({
         name: name,
         email: email,
+        whatsapp: whatsapp,
+        birth_date: birthDate,
         organization_id: invite.organization_id,
         ministry_id: invite.ministry_id,
         allowed_ministries: [invite.ministry_id],
