@@ -84,10 +84,21 @@ export function useScreenMemos(props: ScreenMemosProps) {
         }} 
         onAcceptRequest={async (reqId) => { 
             try {
+                // Optimistic update: remove imediatamente da lista local para evitar
+                // que outro membro tente assumir a mesma vaga enquanto a API responde
+                queryClient.setQueryData(
+                    ['swaps', ministryId, orgId],
+                    (old: SwapRequest[] | undefined) => (old || []).filter(r => r.id !== reqId)
+                );
                 await Supabase.performSwapSQL(ministryId, orgId!, reqId, activeUser!.name, activeUser!.id!); 
                 addToast("Escala assumida com sucesso.", "success");
+                // Garante que o cache está sincronizado com o servidor
+                queryClient.invalidateQueries({ queryKey: ['swaps', ministryId, orgId] });
+                queryClient.invalidateQueries({ queryKey: ['schedule', ministryId, orgId] });
                 refreshData();
             } catch (e: any) {
+                // Rollback: revalida o cache para restaurar o estado correto
+                queryClient.invalidateQueries({ queryKey: ['swaps', ministryId, orgId] });
                 addToast("Erro ao assumir escala: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
             }
