@@ -4,3 +4,6 @@ dist
 check_schema.ts
 test-rpc.js
 .ev.example
+supabase/.temp
+diagnose_*.mjs
+check_*.ts
