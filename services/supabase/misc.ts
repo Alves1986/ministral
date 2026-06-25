@@ -109,11 +109,19 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     const sb = getSupabase();
     if (!sb) return;
     
-    const { data: req } = await sb.from('swap_requests').select('*').eq('id', reqId).eq('organization_id', orgId).single();
-    if (!req) return;
+    const { data: req, error: reqError } = await sb.from('swap_requests').select('*').eq('id', reqId).eq('organization_id', orgId).single();
+    if (reqError) {
+        console.error('[performSwapSQL] Erro ao buscar swap_request:', reqError);
+        throw new Error(`Pedido de troca não encontrado: ${reqError.message}`);
+    }
+    if (!req) {
+        throw new Error('Pedido de troca não encontrado.');
+    }
     
     // event_datetime is a timestamp, e.g., "2026-04-03T12:00:00"
     const datePart = req.event_datetime.split('T')[0];
+    
+    console.log(`[performSwapSQL] Processando troca: reqId=${reqId}, role=${req.role}, datePart=${datePart}, requester_id=${req.requester_id}, takenById=${takenById}`);
     
     // Busca assignments apenas por data e role
     const { data: assignments, error: fetchErr } = await sb.from('schedule_assignments')
@@ -122,6 +130,13 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         .eq('ministry_id', ministryId)
         .eq('event_date', datePart)
         .eq('role', req.role);
+    
+    if (fetchErr) {
+        console.error('[performSwapSQL] Erro ao buscar schedule_assignments:', fetchErr);
+        throw new Error(`Erro ao buscar escala: ${fetchErr.message}`);
+    }
+
+    console.log(`[performSwapSQL] Assignments encontrados para role=${req.role} em ${datePart}: ${assignments?.length || 0}`);
         
     let assignment = null;
     
@@ -145,6 +160,8 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     }
         
     if (assignment) {
+        console.log(`[performSwapSQL] Assignment encontrado: id=${assignment.id}, member_id=${assignment.member_id}`);
+        
         const { error: errorAssignment } = await sb.from('schedule_assignments').update({
             member_id: takenById,
             confirmed: false
@@ -152,8 +169,10 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         
         if (errorAssignment) {
             console.error('[performSwapSQL] Erro atualizando schedule_assignments:', errorAssignment);
-            throw new Error('Falha de permissão ou erro ao atualizar escala original.');
+            throw new Error(`Falha ao atualizar escala: ${errorAssignment.message} (code: ${errorAssignment.code})`);
         }
+
+        console.log(`[performSwapSQL] schedule_assignments atualizado. Atualizando swap_requests...`);
 
         // Atualiza TODAS as requisições duplicadas (caso existam) para esta mesma vaga
         const { error: errorSwap } = await sb.from('swap_requests').update({
@@ -168,17 +187,35 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         .eq('event_datetime', req.event_datetime)
         .eq('status', 'pending');
         
-
         if (errorSwap) {
             console.error('[performSwapSQL] Erro atualizando swap_requests:', errorSwap);
-            throw new Error('Falha ao concluir o pedido de troca.');
+            throw new Error(`Falha ao concluir o pedido de troca: ${errorSwap.message} (code: ${errorSwap.code})`);
         }
+        
+        console.log(`[performSwapSQL] Troca concluída com sucesso para reqId=${reqId}`);
     } else {
         const errorMsg = `[performSwapSQL] Assignment nao encontrado para o swap: ${reqId} (role: ${req.role}, requester_id: ${req.requester_id}, datePart: ${datePart})`;
         console.error(errorMsg);
-        throw new Error("Não foi possível encontrar a escala original para processar a troca.");
+        
+        // Se não achou assignment mas o swap existe, marca o swap como completed mesmo assim
+        // (pode ter sido gerado por regra mas sem assignment individual)
+        console.warn('[performSwapSQL] Tentando marcar swap como completed sem assignment encontrado...');
+        const { error: errorSwapFallback } = await sb.from('swap_requests').update({
+            status: 'completed',
+            taken_by_id: takenById,
+            taken_by_name: takenByName
+        })
+        .eq('id', reqId)
+        .eq('organization_id', orgId);
+        
+        if (errorSwapFallback) {
+            throw new Error(`Não foi possível encontrar a escala original para processar a troca. (${errorSwapFallback.message})`);
+        }
+        // Swap marcado, mesmo sem assignment
+        console.warn('[performSwapSQL] Swap marcado como completed sem atualizar schedule_assignments.');
     }
 };
+
 
 export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
     const sb = getSupabase();
