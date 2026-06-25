@@ -178,7 +178,8 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         const { error: errorSwap } = await sb.from('swap_requests').update({
             status: 'completed',
             taken_by_id: takenById,
-            taken_by_name: takenByName
+            taken_by_name: takenByName,
+            taken_at: new Date().toISOString()
         })
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
@@ -203,7 +204,8 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         const { error: errorSwapFallback } = await sb.from('swap_requests').update({
             status: 'completed',
             taken_by_id: takenById,
-            taken_by_name: takenByName
+            taken_by_name: takenByName,
+            taken_at: new Date().toISOString()
         })
         .eq('id', reqId)
         .eq('organization_id', orgId);
