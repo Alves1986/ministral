@@ -474,6 +474,9 @@ const InnerApp = () => {
   const [currentTab, setCurrentTab] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      if (params.get("calendar_connected") === "true") {
+        return "profile";
+      }
       return params.get("tab") || "dashboard";
     }
     return "dashboard";
