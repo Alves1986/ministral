@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2, RefreshCw } from 'lucide-react';
+import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2, RefreshCw, Wind } from 'lucide-react';
 
 interface WeatherData {
   temperature: number;
@@ -8,7 +8,7 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data_v5';
+const CACHE_KEY = 'widget_weather_data_v6';
 const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {
@@ -17,15 +17,14 @@ export const WeatherWidget: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
-  const getWeatherIcon = (code: number) => {
-    // WMO Weather interpretation codes (WW)
-    if (code === 0) return <Sun className="text-orange-500" size={24} />;
-    if (code >= 1 && code <= 3) return <Cloud className="text-zinc-400" size={24} />;
-    if (code >= 51 && code <= 67) return <CloudRain className="text-blue-400" size={24} />;
-    if (code >= 71 && code <= 77) return <CloudSnow className="text-cyan-200" size={24} />;
-    if (code >= 80 && code <= 82) return <CloudRain className="text-blue-500" size={24} />;
-    if (code >= 95) return <CloudLightning className="text-purple-500" size={24} />;
-    return <Sun className="text-orange-500" size={24} />;
+  const getWeatherIcon = (code: number, size = 24) => {
+    if (code === 0) return <Sun className="text-orange-400" size={size} />;
+    if (code >= 1 && code <= 3) return <Cloud className="text-zinc-400" size={size} />;
+    if (code >= 51 && code <= 67) return <CloudRain className="text-blue-400" size={size} />;
+    if (code >= 71 && code <= 77) return <CloudSnow className="text-cyan-200" size={size} />;
+    if (code >= 80 && code <= 82) return <CloudRain className="text-blue-500" size={size} />;
+    if (code >= 95) return <CloudLightning className="text-purple-500" size={size} />;
+    return <Sun className="text-orange-400" size={size} />;
   };
 
   const getWeatherDescription = (code: number) => {
@@ -38,125 +37,120 @@ export const WeatherWidget: React.FC = () => {
   };
 
   useEffect(() => {
-      let isMounted = true;
+    let isMounted = true;
 
-      const fetchWeatherData = async (lat: number, lon: number) => {
-          try {
-              const weatherRes = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+    const fetchWeatherData = async (lat: number, lon: number) => {
+      try {
+        // Chama a API do Open-Meteo diretamente do browser (sem servidor Express)
+        const weatherRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
+        );
 
-              if (!weatherRes.ok) {
-                  const errText = await weatherRes.text();
-                  throw new Error(`Weather API Error: ${weatherRes.status} ${errText}`);
-              }
-              const weatherJson = await weatherRes.json();
-              
-              const newData: WeatherData = {
-                  temperature: weatherJson.temperature,
-                  weatherCode: weatherJson.weatherCode,
-                  city: weatherJson.city,
-                  timestamp: Date.now()
-              };
+        if (!weatherRes.ok) throw new Error(`Weather API Error: ${weatherRes.status}`);
+        const weatherJson = await weatherRes.json();
 
-              if (isMounted) {
-                  setWeather(newData);
-                  localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
-                  setError(false);
-              }
-
-          } catch (e: any) {
-              console.warn("Aviso ao buscar clima:", e.message || e);
-              if (isMounted) setError(true);
-          } finally {
-              if (isMounted) {
-                  setLoading(false);
-                  setRefreshing(false);
-              }
-          }
-      };
-
-      const getLocationAndFetch = () => {
-          if (!navigator.geolocation) {
-              console.warn("Geolocalização não suportada. Usando fallback (São Paulo).");
-              fetchWeatherData(-23.5505, -46.6333);
-              return;
-          }
-
-          const options = { 
-            enableHighAccuracy: true, // Solicita dados mais precisos do GPS/WiFi
-            timeout: 5000, 
-            maximumAge: refreshing ? 0 : 600000 
-          };
-
-          navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                  fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
-              },
-              (err) => {
-                  console.warn("Erro ao obter local de alta precisão, tentando fallback convencional:", err);
-                  navigator.geolocation.getCurrentPosition(
-                      (pos) => {
-                          fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
-                      },
-                      (err2) => {
-                          console.warn("Erro de geolocalização geral:", err2);
-                          // Se falhar a geolocalização, usa uma localização padrão (ex: São Paulo) para o widget não sumir
-                          console.log("Usando localização padrão (São Paulo) como fallback.");
-                          fetchWeatherData(-23.5505, -46.6333);
-                      },
-                      { 
-                        enableHighAccuracy: false, 
-                        timeout: 10000, 
-                        maximumAge: refreshing ? 0 : 600000 
-                      }
-                  );
-              },
-              options
+        let city = "Sua Localização";
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const cityRes = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`,
+            { signal: controller.signal, headers: { 'User-Agent': 'GestaoEscala/1.0' } }
           );
-      };
-
-      // 1. Tenta carregar do Cache
-      const cached = localStorage.getItem(CACHE_KEY);
-      let shouldFetch = true;
-
-      if (cached) {
-          try {
-              const parsed: WeatherData = JSON.parse(cached);
-              setWeather(parsed);
-              setLoading(false); 
-              
-              // Se o cache é recente e não estamos num refresh manual, não precisa buscar
-              if (Date.now() - parsed.timestamp < CACHE_EXPIRATION && !refreshing) {
-                  shouldFetch = false;
-              }
-          } catch (e) {
-              localStorage.removeItem(CACHE_KEY);
+          clearTimeout(timeoutId);
+          if (cityRes.ok) {
+            const cityJson = await cityRes.json();
+            const addr = cityJson.address;
+            city = addr?.city || addr?.town || addr?.village || addr?.suburb || addr?.county || "Sua Localização";
           }
-      }
+        } catch { /* ignora erro de geocodificação reversa */ }
 
-      // 2. Se não tem cache válido ou é refresh manual, busca novos dados
-      if (shouldFetch || refreshing) {
-          getLocationAndFetch();
-      }
+        const newData: WeatherData = {
+          temperature: weatherJson.current_weather?.temperature ?? 0,
+          weatherCode: weatherJson.current_weather?.weathercode ?? 0,
+          city,
+          timestamp: Date.now()
+        };
 
-      return () => { isMounted = false; };
+        if (isMounted) {
+          setWeather(newData);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
+          setError(false);
+        }
+      } catch (e: any) {
+        console.warn("Aviso ao buscar clima:", e.message || e);
+        if (isMounted) setError(true);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    };
+
+    const getLocationAndFetch = () => {
+      if (!navigator.geolocation) {
+        fetchWeatherData(-23.5505, -46.6333); // fallback São Paulo
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => fetchWeatherData(pos.coords.latitude, pos.coords.longitude),
+        () => fetchWeatherData(-23.5505, -46.6333), // fallback se recusar
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: refreshing ? 0 : 600000 }
+      );
+    };
+
+    // 1. Tenta carregar do cache
+    const cached = localStorage.getItem(CACHE_KEY);
+    let shouldFetch = true;
+    if (cached) {
+      try {
+        const parsed: WeatherData = JSON.parse(cached);
+        setWeather(parsed);
+        setLoading(false);
+        if (Date.now() - parsed.timestamp < CACHE_EXPIRATION && !refreshing) {
+          shouldFetch = false;
+        }
+      } catch {
+        localStorage.removeItem(CACHE_KEY);
+      }
+    }
+
+    if (shouldFetch || refreshing) {
+      getLocationAndFetch();
+    }
+
+    return () => { isMounted = false; };
   }, [refreshing]);
 
   const handleRefresh = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setRefreshing(true);
+    e.stopPropagation();
+    setRefreshing(true);
   };
 
+  // Estado de loading
   if (loading && !weather) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-pulse">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-white/80 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-pulse">
         <Loader2 size={16} className="animate-spin text-zinc-400" />
-        <span className="text-xs text-zinc-400">Localizando...</span>
+        <span className="text-xs text-zinc-400 font-medium">Localizando...</span>
       </div>
     );
   }
 
+  // Fallback visual quando erro e sem cache — NÃO some, mostra widget vazio
   if (error && !weather) {
-      return null;
+    return (
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-white/80 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+        <Wind size={20} className="text-zinc-400 shrink-0" />
+        <div>
+          <p className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Clima indisponível</p>
+          <button onClick={handleRefresh} className="text-[10px] text-zinc-400 hover:text-ministral-500 flex items-center gap-1 transition-colors" disabled={refreshing}>
+            <RefreshCw size={8} className={refreshing ? "animate-spin text-ministral-500" : ""} /> Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!weather) return null;
@@ -192,3 +186,5 @@ export const WeatherWidget: React.FC = () => {
     </div>
   );
 };
+
+
