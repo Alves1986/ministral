@@ -274,7 +274,8 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     const allAdmins = [...(admins || []), ...ministryAdmins];
     const uniqueAdmins = Array.from(new Map(allAdmins.map(a => [a.id, a])).values());
 
-    if (!uniqueAdmins.length) return;
+    // Se não temos admins e também não temos um alvo explícito, não há para quem enviar
+    if (!uniqueAdmins.length && !(orgId && targetMinistryId)) return;
 
     // ── 3. Resolve ministérios de cada admin em BATCH ─────────────────────
     // Admins que já têm targetMinistryId definido → usam diretamente
@@ -306,6 +307,11 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
 
     // ── 4. Monta o mapa de targets (orgId|minId) único ────────────────────
     const targetMap = new Map<string, { orgId: string, minId: string }>();
+
+    // Garante que o alvo explícito sempre receba a notificação (ignora RLS se houver alvo)
+    if (orgId && targetMinistryId) {
+        targetMap.set(`${orgId}|${targetMinistryId}`, { orgId, minId: targetMinistryId });
+    }
 
     for (const admin of uniqueAdmins) {
         if (!admin.organization_id) continue; // SA sem org: skip (sem ministério para notificar)
