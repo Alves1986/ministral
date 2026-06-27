@@ -254,6 +254,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
     setIsSubmitting(true);
     let successCount = 0;
+    let lastErrorMsg = "";
     
     // Optimistic update
     const newItems = draftItems.map(item => ({
@@ -270,14 +271,19 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     });
 
     for (const item of draftItems) {
-        const success = await addToRepertoire(ministryId, orgId, {
-            title: item.title,
-            link: item.link,
-            date,
-            addedBy: currentUser?.name || 'Admin',
-            content: item.content
-        });
-        if (success) successCount++;
+        try {
+            const success = await addToRepertoire(ministryId, orgId, {
+                title: item.title,
+                link: item.link,
+                date,
+                addedBy: currentUser?.name || 'Admin',
+                content: item.content
+            });
+            if (success) successCount++;
+        } catch (err: any) {
+            console.error("Erro ao adicionar:", err);
+            lastErrorMsg = err?.message || err?.details || JSON.stringify(err);
+        }
     }
 
     if (successCount > 0) {
@@ -300,7 +306,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             }
         }
     } else {
-        addToast("Erro ao salvar músicas.", "error");
+        addToast(`Erro ao salvar: ${lastErrorMsg}`, "error");
         await setRepertoire([]); // Revert optimistic update
     }
     setIsSubmitting(false);
