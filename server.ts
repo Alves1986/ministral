@@ -133,6 +133,18 @@ async function startServer() {
     }
   });
 
+  app.post("/api/cifraclub/lyrics", async (req, res) => {
+    try {
+      const { getVagalumeLyrics } = await import("./services/cifraClubService.ts");
+      const { artist, song } = req.body;
+      const result = await getVagalumeLyrics(artist, song);
+      res.json({ lyrics: result });
+    } catch (error: any) {
+      console.error("Error in /api/cifraclub/lyrics:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch Vagalume lyrics" });
+    }
+  });
+
   app.post("/api/youtube/search", async (req, res) => {
     try {
       const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
