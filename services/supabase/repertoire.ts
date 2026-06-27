@@ -8,13 +8,13 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
         .select('*')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
-        .order('event_date', { ascending: false });
+        .order('date', { ascending: false });
         
     return (data || []).map((r: any) => ({
         id: r.id,
         title: r.title,
         link: r.link,
-        date: r.event_date,
+        date: r.date || r.event_date,
         observation: r.observation,
         addedBy: r.added_by,
         createdAt: r.created_at,
@@ -51,7 +51,7 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
         ministry_id: ministryId,
         title: item.title ? item.title.substring(0, 250) : 'Sem Título',
         link: item.link ? item.link.substring(0, 500) : '',
-        event_date: item.date,
+        date: item.date,
         added_by: item.addedBy ? item.addedBy.substring(0, 100) : 'Admin',
         content: item.content,
         event_rule_id: eventRuleId
