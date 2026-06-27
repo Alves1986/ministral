@@ -49,13 +49,18 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
     const { error } = await sb.from('repertoire_items').insert({
         organization_id: orgId,
         ministry_id: ministryId,
-        title: item.title,
-        link: item.link,
+        title: item.title ? item.title.substring(0, 250) : 'Sem Título',
+        link: item.link ? item.link.substring(0, 500) : '',
         event_date: item.date,
-        added_by: item.addedBy,
+        added_by: item.addedBy ? item.addedBy.substring(0, 100) : 'Admin',
         content: item.content,
         event_rule_id: eventRuleId
     });
+
+    if (error) {
+        console.error("Erro ao inserir no repertoire_items:", error);
+        throw error;
+    }
 
     if (!error) {
         await notifySuperAdmins(
