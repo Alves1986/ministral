@@ -261,7 +261,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         title: item.title,
         link: item.link,
         date,
-        addedBy: currentUser.name,
+        addedBy: currentUser?.name || 'Admin',
         content: item.content
     }));
     queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
@@ -274,7 +274,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             title: item.title,
             link: item.link,
             date,
-            addedBy: currentUser.name,
+            addedBy: currentUser?.name || 'Admin',
             content: item.content
         });
         if (success) successCount++;
@@ -287,13 +287,17 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         addToast(`${successCount} músicas salvas no repertório!`, "success");
 
         if (ministryId) {
-            const dateFormatted = date.split('-').reverse().join('/');
-            await sendNotificationSQL(ministryId, orgId, {
-                title: "Novo Repertório",
-                message: `${successCount} músicas foram adicionadas para o culto de ${dateFormatted}.`,
-                type: 'info',
-                actionLink: 'repertoire'
-            });
+            const dateFormatted = date?.split('-').reverse().join('/');
+            try {
+                await sendNotificationSQL(ministryId, orgId, {
+                    title: "Novo Repertório",
+                    message: `${successCount} músicas foram adicionadas para o culto de ${dateFormatted}.`,
+                    type: 'info',
+                    actionLink: 'repertoire'
+                });
+            } catch (err) {
+                console.error("Erro ao enviar notificação de repertório:", err);
+            }
         }
     } else {
         addToast("Erro ao salvar músicas.", "error");
@@ -329,7 +333,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const groupedRepertoire = repertoire.reduce((acc, item) => {
-      const dateKey = item.date;
+      const dateKey = item.date || '0000-00-00';
       if (!acc[dateKey]) acc[dateKey] = [];
       acc[dateKey].push(item);
       return acc;
@@ -490,7 +494,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
       <div className="space-y-8 mt-8">
           {sortedDates.length === 0 ? <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800"><Music className="mx-auto mb-3 opacity-20" size={48}/><p>Nenhum louvor cadastrado ainda.</p></div> : sortedDates.map(dateKey => {
-              const [y, m, d] = dateKey.split('-');
+              const [y, m, d] = (dateKey || '').split('-');
               return (
                   <div key={dateKey} className="animate-slide-up">
                       <div className="flex items-center gap-2 mb-3 px-1 border-b border-zinc-100 dark:border-zinc-700 pb-2"><div className="bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white p-1.5 rounded-lg"><Calendar size={16} /></div><h3 className="font-bold text-zinc-700 dark:text-zinc-200 text-lg">Culto {d}/{m}/{y}</h3></div>
@@ -498,13 +502,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           {groupedRepertoire[dateKey].map((item, idx) => (
                               <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
                                   <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => setSelectedChordItem(item)}>
-                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.link.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
-                                          {item.link.includes('youtu') ? <Youtube size={20}/> : (item.link.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
+                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.link?.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link?.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                          {item.link?.includes('youtu') ? <Youtube size={20}/> : (item.link?.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
                                       </div>
                                       <div className="min-w-0">
                                           <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
                                           <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                              <span>• Adicionado por {item.addedBy.split(' ')[0]}</span>
+                                              <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
                                               {item.content && <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600">CIFRA</span>}
                                           </div>
                                       </div>
