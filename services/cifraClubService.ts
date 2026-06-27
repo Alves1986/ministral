@@ -15,6 +15,24 @@ const searchCache: Record<string, CifraClubResult[]> = {};
 const vagalumeApi = new Vagalume();
 
 export const searchCifraClub = async (query: string): Promise<CifraClubResult[]> => {
+    if (typeof window !== 'undefined') {
+        try {
+            const res = await fetch('/api/cifraclub/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Erro na API do Vagalume Proxy');
+            }
+            return await res.json();
+        } catch (error: any) {
+            console.error("Error calling Vagalume API proxy", error);
+            return [];
+        }
+    }
+
     const cacheKey = query.toLowerCase().trim();
     if (searchCache[cacheKey]) {
         return searchCache[cacheKey];
@@ -42,9 +60,25 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
 };
 
 export const getVagalumeLyrics = async (artist: string, song: string): Promise<string> => {
+    if (typeof window !== 'undefined') {
+        try {
+            const res = await fetch('/api/cifraclub/lyrics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ artist, song })
+            });
+            if (!res.ok) {
+                return "";
+            }
+            const data = await res.json();
+            return data.lyrics || "";
+        } catch (error: any) {
+            console.error("Error calling Vagalume Lyrics proxy", error);
+            return "";
+        }
+    }
+
     try {
-        // A biblioteca tbm fornece o método para pegar a letra da música:
-        // Porém, o método .lyrics espera { art: '', mus: '' } e por baixo dos panos bate em /search.php
         const data = await vagalumeApi.lyrics({ art: artist, mus: song });
         
         if (data && (data.type === 'exact' || data.type === 'aprox') && data.mus && data.mus.length > 0) {
