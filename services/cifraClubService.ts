@@ -59,13 +59,13 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
     }
 };
 
-export const getVagalumeLyrics = async (artist: string, song: string): Promise<string> => {
+export const getVagalumeLyrics = async (artist: string, song: string, url?: string): Promise<string> => {
     if (typeof window !== 'undefined') {
         try {
             const res = await fetch('/api/cifraclub/lyrics', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ artist, song })
+                body: JSON.stringify({ artist, song, url })
             });
             if (!res.ok) {
                 return "";
@@ -79,8 +79,23 @@ export const getVagalumeLyrics = async (artist: string, song: string): Promise<s
     }
 
     try {
+        if (url && url !== 'https://www.vagalume.com.br/') {
+            try {
+                const htmlRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const html = await htmlRes.text();
+                // Extract from <div id="lyrics"> ... </div>
+                const match = html.match(/<div id="lyrics">([\s\S]*?)<\/div>/i);
+                if (match && match[1]) {
+                    // Convert <br/> to \n and remove other tags
+                    return match[1].replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, '').trim();
+                }
+            } catch (err) {
+                console.error("Vagalume HTML Fetch Error:", err);
+            }
+        }
+
         const data = await vagalumeApi.lyrics({ art: artist, mus: song });
-        
+        console.log("Vagalume Lyrics Response:", JSON.stringify(data));
         if (data && (data.type === 'exact' || data.type === 'aprox') && data.mus && data.mus.length > 0) {
             return data.mus[0].text || "";
         }
