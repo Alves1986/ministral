@@ -204,7 +204,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const handleAddVagalumeToDraft = async (result: any, idx: number) => {
       setAddingToDraftId(`vagalume-${idx}`);
       try {
-          const lyrics = await getVagalumeLyrics(result.artist, result.title);
+          const lyrics = await getVagalumeLyrics(result.artist, result.title, result.url);
           const overrideTitle = result.title + (result.key && result.key !== '-' ? ` (${result.key})` : '');
           handleAddToDraft(overrideTitle, result.url, lyrics);
       } catch (err) {
