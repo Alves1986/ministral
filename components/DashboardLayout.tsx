@@ -1,5 +1,5 @@
 
-import React, { ReactNode, useState, useRef, useEffect } from 'react';
+import React, { ReactNode, useState, useRef, useEffect, useTransition } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, ClipboardCheck, Inbox, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
@@ -61,6 +61,8 @@ export const DashboardLayout: React.FC<Props> = ({
 
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isTabPending, startTabTransition] = useTransition();
+  const contentScrollRef = useRef<HTMLDivElement>(null);
   
   const isEffectivelyCollapsed = isDesktopCollapsed && !isSidebarHovered;
 
@@ -80,6 +82,20 @@ export const DashboardLayout: React.FC<Props> = ({
   useClickOutside(ministryMenuRef, () => {
       if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
+
+  useEffect(() => {
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [currentTab]);
+
+  const handleTabChange = (tab: string) => {
+    if (tab === currentTab) {
+      setSidebarOpen(false);
+      return;
+    }
+
+    startTabTransition(() => onTabChange(tab));
+    setSidebarOpen(false);
+  };
 
   const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
   const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : currentTab === 'super-admin' ? 'Super Admin' : 'Visão Geral');
@@ -111,7 +127,7 @@ export const DashboardLayout: React.FC<Props> = ({
       <button
         type="button"
         key={item.id}
-        onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
+        onClick={() => handleTabChange(item.id)}
         aria-label={item.label}
         aria-current={isActive ? 'page' : undefined}
         title={isEffectivelyCollapsed ? item.label : undefined}
@@ -160,7 +176,7 @@ export const DashboardLayout: React.FC<Props> = ({
           
           <button
             type="button"
-            onClick={() => onTabChange('dashboard')} 
+            onClick={() => handleTabChange('dashboard')}
             aria-label="Página inicial"
             aria-current={isDashboard ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
@@ -173,7 +189,7 @@ export const DashboardLayout: React.FC<Props> = ({
  
           <button
             type="button"
-            onClick={() => onTabChange('my-schedule')}
+            onClick={() => handleTabChange('my-schedule')}
             aria-label="Minha escala"
             aria-current={isMySchedule ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
@@ -187,7 +203,7 @@ export const DashboardLayout: React.FC<Props> = ({
           <div className="relative flex-1 flex flex-col items-center -top-4">
             <button
                 type="button"
-                onClick={() => onTabChange('pending-center')}
+                onClick={() => handleTabChange('pending-center')}
                 aria-label="Central de pendências"
                 aria-current={isPendingCenter ? 'page' : undefined}
                 className={`w-14 h-14 rounded-3xl flex items-center justify-center shadow-2xl shadow-ministral-500/40 transition-all duration-300 active:scale-90 border-4 border-[#f8fafc] dark:border-[#0F172A] ${
@@ -205,7 +221,7 @@ export const DashboardLayout: React.FC<Props> = ({
  
           <button
             type="button"
-            onClick={() => onTabChange('availability')}
+            onClick={() => handleTabChange('availability')}
             aria-label="Minha disponibilidade"
             aria-current={isAvailability ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
@@ -359,7 +375,7 @@ export const DashboardLayout: React.FC<Props> = ({
               </p>
               <button
                 type="button"
-                onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
+                onClick={() => handleTabChange('super-admin')}
                 className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
                   currentTab === 'super-admin'
                     ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
@@ -401,7 +417,7 @@ export const DashboardLayout: React.FC<Props> = ({
                       </p>
                       <button
                         type="button"
-                        onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
+                        onClick={() => handleTabChange('super-admin')}
                         className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
                           currentTab === 'super-admin'
                             ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
@@ -422,7 +438,7 @@ export const DashboardLayout: React.FC<Props> = ({
         <div className={`border-t border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md ${isEffectivelyCollapsed ? 'm-2 p-2 rounded-2xl' : 'm-4 p-4 rounded-[2rem]'}`}>
             <button
                 type="button"
-                onClick={() => onTabChange('profile')}
+                onClick={() => handleTabChange('profile')}
                 className={`flex items-center w-full p-2 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all group ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
                 title={isEffectivelyCollapsed ? "Meu Perfil" : undefined}
             >
@@ -461,7 +477,15 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
       </aside>
 
-      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col min-w-0 max-w-full print:block print:overflow-visible bg-transparent overflow-hidden relative">
+      <main id="main-content" tabIndex={-1} aria-busy={isTabPending} className="flex-1 flex flex-col min-w-0 max-w-full print:block print:overflow-visible bg-transparent overflow-hidden relative">
+        <div className={`pointer-events-none absolute inset-x-0 top-0 z-[80] h-0.5 overflow-hidden transition-opacity duration-150 ${isTabPending ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-secondary" />
+        </div>
+        {isTabPending && (
+          <div className="sr-only" role="status" aria-live="polite">
+            Abrindo {activeLabel}.
+          </div>
+        )}
         
         <header className="lg:hidden print:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/70 dark:bg-ministral-dark/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
             <div className="flex items-center gap-3">
@@ -495,12 +519,12 @@ export const DashboardLayout: React.FC<Props> = ({
                     notifications={notifications} 
                     ministryId={currentUser?.ministryId || null} 
                     onNotificationsUpdate={onNotificationsUpdate} 
-                    onNavigate={(tab) => onTabChange(tab)}
+                    onNavigate={(tab) => handleTabChange(tab)}
                     onSwitchMinistry={onSwitchMinistry}
                 />
                 <button
                     type="button"
-                    onClick={() => onTabChange('profile')}
+                    onClick={() => handleTabChange('profile')}
                     aria-label="Abrir meu perfil"
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-xl focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2"
                 >
@@ -538,7 +562,7 @@ export const DashboardLayout: React.FC<Props> = ({
                         notifications={notifications} 
                         ministryId={currentUser?.ministryId || null} 
                         onNotificationsUpdate={onNotificationsUpdate}
-                        onNavigate={(tab) => onTabChange(tab)}
+                        onNavigate={(tab) => handleTabChange(tab)}
                         onSwitchMinistry={onSwitchMinistry}
                     />
                      <IconButton
@@ -552,7 +576,7 @@ export const DashboardLayout: React.FC<Props> = ({
                      </IconButton>
                  </div>
                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
-                 <button type="button" onClick={() => onTabChange('profile')} aria-label="Abrir meu perfil" className="flex min-h-11 items-center gap-3 rounded-xl px-1 group focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2">
+                 <button type="button" onClick={() => handleTabChange('profile')} aria-label="Abrir meu perfil" className="flex min-h-11 items-center gap-3 rounded-xl px-1 group focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2">
                     <div className="text-right hidden sm:block">
                         <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tighter">{currentUser?.name}</p>
                         <p className="text-[9px] text-secondary dark:text-white font-black uppercase tracking-widest">Perfil Ativo</p>
@@ -562,8 +586,8 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
-            <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
+        <div ref={contentScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
+            <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 transition-opacity duration-150 ${isTabPending ? 'opacity-80' : 'opacity-100'} ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
                 {children}
             </div>
         </div>
