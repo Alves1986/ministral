@@ -7,6 +7,8 @@ import { EventRule } from '../domain/events/types';
 import { useToast } from './Toast';
 import { getLocalDateISOString } from '../utils/dateUtils';
 
+type AgendaView = 'overview' | 'configure' | 'weekly' | 'single';
+
 export const EventsScreen: React.FC = () => {
   const { ministryId, currentUser } = useAppStore();
   const orgId = currentUser?.organizationId;
@@ -23,6 +25,7 @@ export const EventsScreen: React.FC = () => {
   const [weekday, setWeekday] = useState(0); // 0 = Dom
   const [date, setDate] = useState('');
   const [filterMonth, setFilterMonth] = useState(() => getLocalDateISOString().slice(0, 7));
+  const [activeView, setActiveView] = useState<AgendaView>('overview');
 
   const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -153,20 +156,49 @@ export const EventsScreen: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto pb-24">
-        {/* Header */}
-        <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
-            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                <CalendarDays className="text-ministral-500"/> Regras de Agenda
-            </h2>
-            <p className="text-zinc-500 text-sm mt-1">
-                Configure os eventos fixos (semanais) e eventos especiais da escala.
-            </p>
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-6">
+            <div>
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-ministral-500/10 text-ministral-500"><CalendarDays size={24}/></div>
+                    <div>
+                        <h2 className="text-2xl md:text-3xl font-bold text-zinc-800 dark:text-white">Regras de Agenda</h2>
+                        <p className="text-zinc-500 text-sm mt-1">Defina quando os ministérios se reúnem e quais eventos entram na escala.</p>
+                    </div>
+                </div>
+            </div>
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3 text-sm text-zinc-500">
+                <span className="font-bold text-zinc-800 dark:text-white">{rules.length}</span> eventos configurados
+            </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" role="tablist" aria-label="Visões das regras de agenda">
+            {[
+                { id: 'overview' as AgendaView, label: 'Visão geral', description: 'Semanais e especiais', count: rules.length },
+                { id: 'configure' as AgendaView, label: 'Adicionar evento', description: 'Criar uma regra', count: null },
+                { id: 'weekly' as AgendaView, label: 'Eventos semanais', description: 'Padrão recorrente', count: weeklyRules.length },
+                { id: 'single' as AgendaView, label: 'Eventos especiais', description: 'Datas únicas', count: singleRules.length },
+            ].map(view => (
+                <button
+                    key={view.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === view.id}
+                    onClick={() => setActiveView(view.id)}
+                    className={`text-left rounded-xl border p-4 transition-all min-h-[88px] ${activeView === view.id ? 'border-ministral-500 bg-ministral-500/10 shadow-sm' : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-ministral-500/50'}`}
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <span className={`font-bold text-sm ${activeView === view.id ? 'text-ministral-500' : 'text-zinc-800 dark:text-white'}`}>{view.label}</span>
+                        {view.count !== null && <span className="min-w-7 h-7 px-2 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 text-xs font-black inline-flex items-center justify-center">{view.count}</span>}
+                    </div>
+                    <span className="block text-xs text-zinc-500 mt-2">{view.description}</span>
+                </button>
+            ))}
+        </div>
+
+        <div className={`grid grid-cols-1 lg:grid-cols-3 gap-8 ${activeView === 'overview' ? '' : 'lg:grid-cols-1'}`}>
             {/* Form Section */}
-            <div className="lg:col-span-1 space-y-6">
-                <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm sticky top-6">
+            <div className={`${activeView === 'overview' || activeView === 'configure' ? 'lg:col-span-1 space-y-6' : 'hidden'}`}>
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm lg:sticky lg:top-6">
                     <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4">Adicionar Evento</h3>
                     
                     <form onSubmit={handleAdd} className="space-y-4">
@@ -254,8 +286,9 @@ export const EventsScreen: React.FC = () => {
             </div>
 
             {/* List Section */}
-            <div className="lg:col-span-2 space-y-8">
+            <div className={`${activeView === 'overview' ? 'lg:col-span-2' : 'lg:col-span-1'} space-y-8`}>
                 {/* Weekly Rules */}
+                {(activeView === 'overview' || activeView === 'weekly') && (
                 <div className="space-y-4">
                     <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                         <Repeat size={16}/> Eventos Semanais (Padrão)
@@ -293,8 +326,10 @@ export const EventsScreen: React.FC = () => {
                         </div>
                     )}
                 </div>
+                )}
 
                 {/* Single Rules */}
+                {(activeView === 'overview' || activeView === 'single') && (
                 <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
@@ -346,6 +381,7 @@ export const EventsScreen: React.FC = () => {
                         </div>
                     )}
                 </div>
+                )}
             </div>
         </div>
     </div>

@@ -151,7 +151,6 @@ export const ALL_TABS = [
   "sa-support",
   "sa-audit",
   "sa-quotas",
-  "support-admin",
 ];
 
 export const DEFAULT_TABS = [...ALL_TABS];

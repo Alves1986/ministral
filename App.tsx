@@ -699,7 +699,7 @@ const InnerApp = () => {
       { id: "advanced-ai", label: "IA Avançada", icon: <Sparkles size={20} /> },
       {
         id: "support-admin",
-        label: "Ajuda / Suporte",
+        label: "Suporte da organização",
         icon: <Headset size={20} />,
       },
     ],
@@ -767,6 +767,8 @@ const InnerApp = () => {
     ),
   );
 
+  const isPro = activeUser?.isPro ?? false;
+
   const safeEnabledTabs = useMemo(() => {
     const configuredTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
     const tabs = [...configuredTabs].filter(
@@ -775,16 +777,25 @@ const InnerApp = () => {
     ["history", "my-schedule", "pending-center"].forEach((tab) => {
       if (!tabs.includes(tab)) tabs.push(tab);
     });
+
+    // Mantém o menu e o guard sincronizados para as áreas administrativas.
+    // Configurações antigas podem não conter as abas novas; elas são adicionadas
+    // somente para administradores com escopo de organização.
+    if (canManageOrganization(activeUser)) {
+      ORGANIZATION_ADMIN_TABS.forEach((tab) => {
+        if (!tabs.includes(tab)) tabs.push(tab);
+      });
+    }
+
     return tabs.filter((tab) => {
+      if (tab === "advanced-ai" && !isPro) return false;
       if (canAccessOrganizationTab(activeUser, tab, tabs)) return true;
       return (
         isMinistryContentLead &&
         ["repertoire-manager", "send-announcements"].includes(tab)
       );
     });
-  }, [activeUser, isMinistryContentLead, ministryConfig.enabledTabs]);
-
-  const isPro = activeUser?.isPro ?? false;
+  }, [activeUser, isMinistryContentLead, isPro, ministryConfig.enabledTabs]);
 
   const MAIN_NAV = useMemo(
     () => RAW_MAIN_NAV.filter((item) => safeEnabledTabs.includes(item.id)),
@@ -1914,6 +1925,7 @@ const InnerApp = () => {
               )}
               {currentTab === "support-admin" &&
                 isAdmin &&
+                safeEnabledTabs.includes("support-admin") &&
                 status === "ready" && (
                   <SupportAdminScreen
                     orgId={orgId || ""}
@@ -1924,6 +1936,7 @@ const InnerApp = () => {
               {currentTab === "advanced-ai" &&
                 isAdmin &&
                 isPro &&
+                safeEnabledTabs.includes("advanced-ai") &&
                 status === "ready" &&
                 ministryId.length === 36 && (
                   <AdvancedAIScreen

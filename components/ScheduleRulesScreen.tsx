@@ -6,6 +6,8 @@ import { TeamMemberProfile } from '../types';
 import { logAuditAction } from '../services/supabase/audit';
 
 
+type RuleSectionId = 'event-exclusions' | 'member-rules' | 'block-groups' | 'exceptions';
+
 interface ScheduleRulesScreenProps {
     ministryId: string;
     orgId: string;
@@ -26,6 +28,7 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
     const [selectedEventId, setSelectedEventId] = useState('');
     const [localEvents, setLocalEvents] = useState<{ id: string; title: string }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeSection, setActiveSection] = useState<RuleSectionId>('event-exclusions');
     const { addToast } = useToast();
 
     // Form states for new exception
@@ -428,24 +431,53 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
 
     const getMemberName = (id: string) => members.find(m => m.id === id)?.name || 'Membro desconhecido';
 
+    const ruleSections: { id: RuleSectionId; label: string; description: string; count: number }[] = [
+        { id: 'event-exclusions', label: 'Por evento', description: 'Funções que não devem ser preenchidas em eventos específicos.', count: eventExcludeRules.length },
+        { id: 'member-rules', label: 'Entre membros', description: 'Preferências e bloqueios entre pessoas.', count: memberRules.length },
+        { id: 'block-groups', label: 'Grupos de bloqueio', description: 'Funções que não podem acumular na mesma escala.', count: blockGroups.length },
+        { id: 'exceptions', label: 'Exceções', description: 'Combinações liberadas mesmo com bloqueios ativos.', count: allowExceptions.length },
+    ];
+
     return (
-        <div className="space-y-8 animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+        <div className="space-y-6 animate-fade-in pb-20">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                 <div>
-                    <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
-                        <ShieldCheck className="text-secondary" size={32} /> Regras de Escala
-                    </h2>
-                    <p className="text-zinc-500 dark:text-zinc-400 mt-2">
-                        Configure bloqueios entre funções, exceções e preferências entre membros.
-                    </p>
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-secondary/10 text-secondary"><ShieldCheck size={24} /></div>
+                        <div>
+                            <h2 className="text-2xl md:text-3xl font-bold text-zinc-800 dark:text-white">Regras de Escala</h2>
+                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Organize bloqueios, preferências e exceções que orientam a montagem das escalas.</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <span className="font-bold text-zinc-800 dark:text-zinc-100">{rules.length}</span> regras configuradas
                 </div>
             </div>
 
-            {/* SEÇÃO: FUNÇÕES OPCIONAIS POR EVENTO */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" role="tablist" aria-label="Categorias de regras de escala">
+                {ruleSections.map(section => (
+                    <button
+                        key={section.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeSection === section.id}
+                        onClick={() => setActiveSection(section.id)}
+                        className={`text-left rounded-xl border p-4 transition-all min-h-[92px] ${activeSection === section.id ? 'border-secondary bg-secondary/10 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-secondary/50'}`}
+                    >
+                        <div className="flex items-center justify-between gap-3">
+                            <span className={`font-bold text-sm ${activeSection === section.id ? 'text-secondary' : 'text-zinc-800 dark:text-zinc-100'}`}>{section.label}</span>
+                            <span className="min-w-7 h-7 px-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-black inline-flex items-center justify-center">{section.count}</span>
+                        </div>
+                        <span className="block text-xs leading-5 text-zinc-500 dark:text-zinc-400 mt-2">{section.description}</span>
+                    </button>
+                ))}
+            </div>
+            {activeSection === 'event-exclusions' && (
+                <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
                     <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                        <CalendarX size={20} className="text-amber-500" /> Funções Opcionais por Evento
+                        <CalendarX size={20} className="text-amber-500" /> Exclusões por evento
                     </h3>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
                         Defina quais funções a IA <strong>não deve preencher</strong> em eventos específicos (ex: não há câmera no Culto de Oração).
@@ -534,10 +566,11 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         </div>
                     )}
                 </div>
-            </section>
+                </section>
+            )}
 
-            {/* SEÇÃO 1: REGRAS ENTRE MEMBROS (NOVO) */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+            {activeSection === 'member-rules' && (
+                <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
                     <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                         Regras entre Membros (Casais / Bloqueios)
@@ -631,10 +664,11 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         </div>
                     )}
                 </div>
-            </section>
+                </section>
+            )}
 
-            {/* SEÇÃO 2: GRUPOS BLOQUEADOS */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+            {activeSection === 'block-groups' && (
+                <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/30">
                     <div>
                         <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -716,10 +750,11 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         ))
                     )}
                 </div>
-            </section>
+                </section>
+            )}
 
-            {/* SEÇÃO 3: EXCEÇÕES PERMITIDAS */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+            {activeSection === 'exceptions' && (
+                <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
                     <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                         Exceções Permitidas
@@ -791,7 +826,8 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         </div>
                     )}
                 </div>
-            </section>
+                </section>
+            )}
         </div>
     );
 };
