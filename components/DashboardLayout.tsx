@@ -7,6 +7,7 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { useSession } from '../context/SessionContext';
 import { getSystemLogo, getPublicUrl } from '../utils/branding';
+import { IconButton } from './ui';
 
 export interface NavItem {
   id: string;
@@ -481,15 +482,15 @@ export const DashboardLayout: React.FC<Props> = ({
                 <h1 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tighter truncate max-w-[120px]">{activeLabel}</h1>
             </div>
             <div className="flex items-center gap-2">
-                <button
+                <IconButton
                     type="button"
-                    onClick={handleHardReload} 
-                    aria-label="Sincronizar dados"
+                    label="Sincronizar dados"
+                    onClick={handleHardReload}
                     aria-busy={isUpdating}
-                    className="p-2 text-slate-400 hover:text-ministral-500 rounded-xl transition-all"
+                    className="text-slate-400 hover:bg-ministral-50 hover:text-ministral-500 dark:hover:bg-ministral-900/20"
                 >
                     <RefreshCw size={18} className={isUpdating ? "animate-spin" : ""} />
-                </button>
+                </IconButton>
                 <NotificationCenter 
                     notifications={notifications} 
                     ministryId={currentUser?.ministryId || null} 
@@ -497,24 +498,28 @@ export const DashboardLayout: React.FC<Props> = ({
                     onNavigate={(tab) => onTabChange(tab)}
                     onSwitchMinistry={onSwitchMinistry}
                 />
-                <button type="button" onClick={() => onTabChange('profile')} aria-label="Abrir meu perfil">
-                    {renderUserAvatar("w-9 h-9")}
+                <button
+                    type="button"
+                    onClick={() => onTabChange('profile')}
+                    aria-label="Abrir meu perfil"
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-xl focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2"
+                >
+                    {renderUserAvatar("h-9 w-9")}
                 </button>
             </div>
         </header>
 
         <header className="hidden lg:flex print:hidden h-20 px-10 items-center justify-between sticky top-0 z-30 bg-slate-50/50 dark:bg-ministral-dark/50 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
              <div className="flex items-center gap-4">
-                 <button
+                 <IconButton
                      type="button"
-                     onClick={() => setIsDesktopCollapsed(prev => !prev)}
-                     aria-label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
+                     label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
                      aria-expanded={!isDesktopCollapsed}
-                     className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-2 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800/50 mr-2"
-                     title={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
+                     onClick={() => setIsDesktopCollapsed(prev => !prev)}
+                     className="mr-2 text-slate-400 hover:bg-slate-200/50 hover:text-slate-600 dark:hover:bg-slate-800/50 dark:hover:text-slate-300"
                  >
                      <Menu size={20} />
-                 </button>
+                 </IconButton>
                  <div className="text-slate-400 p-2.5 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                     {ActiveIcon}
                  </div>
@@ -536,16 +541,18 @@ export const DashboardLayout: React.FC<Props> = ({
                         onNavigate={(tab) => onTabChange(tab)}
                         onSwitchMinistry={onSwitchMinistry}
                     />
-                    <button 
-                        onClick={handleHardReload} 
-                        className="p-3 text-slate-400 hover:text-ministral-500 hover:bg-white dark:hover:bg-slate-900 rounded-2xl transition-all shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-800"
-                        title="Sincronizar Dados"
-                    >
-                        <RefreshCw size={20} className={isUpdating ? "animate-spin" : ""} />
-                    </button>
+                     <IconButton
+                         type="button"
+                         label="Sincronizar dados"
+                         onClick={handleHardReload}
+                         aria-busy={isUpdating}
+                         className="border border-transparent text-slate-400 shadow-sm hover:border-slate-200 hover:bg-white hover:text-ministral-500 dark:hover:border-slate-800 dark:hover:bg-slate-900"
+                     >
+                         <RefreshCw size={20} className={isUpdating ? "animate-spin" : ""} />
+                     </IconButton>
                  </div>
                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
-                 <button type="button" onClick={() => onTabChange('profile')} aria-label="Abrir meu perfil" className="flex items-center gap-3 group">
+                 <button type="button" onClick={() => onTabChange('profile')} aria-label="Abrir meu perfil" className="flex min-h-11 items-center gap-3 rounded-xl px-1 group focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2">
                     <div className="text-right hidden sm:block">
                         <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tighter">{currentUser?.name}</p>
                         <p className="text-[9px] text-secondary dark:text-white font-black uppercase tracking-widest">Perfil Ativo</p>

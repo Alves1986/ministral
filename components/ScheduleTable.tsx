@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile, AvailabilityNotesMap } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, Settings, FileText } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { IconButton } from './ui';
 
 interface Props {
   events: { id: string; iso: string; dateDisplay: string; title: string }[];
@@ -126,7 +127,7 @@ const SelectorDropdown = ({
                 {isMobile && (
                     <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                         <span className="font-bold text-zinc-700 dark:text-zinc-200">{label || 'Selecionar Membro'}</span>
-                        <button type="button" onClick={onClose} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full text-zinc-500"><X size={16} /></button>
+                        <IconButton type="button" label="Fechar seleção de membro" size="sm" onClick={onClose} className="bg-zinc-200 text-zinc-500 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600"><X size={16} /></IconButton>
                     </div>
                 )}
                 <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
@@ -241,13 +242,16 @@ const MemberSelector = ({
 
     return (
         <div className="relative w-full" ref={triggerRef}>
-            <div 
+            <button
+                type="button"
                 onClick={(e) => { 
                     e.stopPropagation(); 
                     e.preventDefault();
                     setIsOpen(!isOpen); 
                 }}
-                className={`schedule-cell button flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200 hover:scale-[1.02] bg-white dark:bg-zinc-900 shadow-sm ${
+                aria-haspopup="dialog"
+                aria-expanded={isOpen}
+                className={`schedule-cell button flex min-h-11 w-full items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200 hover:scale-[1.02] bg-white dark:bg-zinc-900 shadow-sm ${
                     hasError 
                     ? 'border-red-300 bg-red-50 dark:bg-red-900/10' 
                     : hasWarning
@@ -272,7 +276,7 @@ const MemberSelector = ({
                     <span className="text-xs text-zinc-400 italic pl-1 pointer-events-none">Vazio</span>
                 )}
                 <ChevronDown size={12} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </div>
+            </button>
 
             <div className="absolute -top-1.5 -right-1.5 flex gap-1 pointer-events-none">
                 {hasWarning && <div className="bg-amber-500 text-white p-0.5 rounded-full shadow-md"><AlertTriangle size={8} fill="currentColor" /></div>}
@@ -315,9 +319,9 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                         </div>
                     </div>
                     {!readOnly && (
-                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button type="button" onClick={() => onEditEvent(event)} className="text-zinc-400 hover:text-secondary p-1"><Edit size={14} /></button>
-                            <button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                        <div className="flex flex-col gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                            <IconButton type="button" label={`Editar ${event.title}`} size="sm" onClick={() => onEditEvent(event)} className="h-10 min-h-10 min-w-10 text-zinc-400 hover:text-secondary"><Edit size={14} /></IconButton>
+                            <IconButton type="button" label={`Excluir ${event.title}`} size="sm" onClick={() => onDeleteEvent(event.iso, event.title)} className="h-10 min-h-10 min-w-10 text-zinc-400 hover:text-red-500"><Trash2 size={14} /></IconButton>
                         </div>
                     )}
                 </div>
@@ -383,9 +387,15 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                 </div>
                             )}
                             {currentValue && (
-                                <button type="button" onClick={() => onAttendanceToggle(uniqueKey)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-secondary dark:text-white bg-secondary/10' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
+                                <IconButton
+                                    type="button"
+                                    label={isConfirmed ? `Desmarcar confirmação de ${currentValue}` : `Confirmar presença de ${currentValue}`}
+                                    size="sm"
+                                    onClick={() => onAttendanceToggle(uniqueKey)}
+                                    className={`rounded-md ${isConfirmed ? 'text-secondary dark:text-white bg-secondary/10' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`}
+                                >
                                     <CheckCircle2 size={16} />
-                                </button>
+                                </IconButton>
                             )}
                         </div>
                     </td>

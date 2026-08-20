@@ -76,3 +76,31 @@ O aviso desta tarefa está ativo como execução única, com o título `Retomar 
 ## Consolidação remota
 
 As alterações foram consolidadas na branch `upgrade/ui-ux-global-2026-08-20` do repositório [Alves1986/ministral](https://github.com/Alves1986/ministral), no commit `99c407b6082a733081676775eeb45627221778d9`. A branch principal não foi alterada e a branch de upgrade está disponível para revisão ou abertura de pull request.
+
+## Etapa de tipografia, botões e first mobile — 20/08/2026
+
+Foi criada uma fundação reutilizável em `components/ui/Button.tsx`, com `Button` e `IconButton`, variantes `primary`, `secondary`, `ghost`, `danger` e `link`, tamanhos com altura mínima de toque, estado de carregamento e labels acessíveis. A tela de login passou a usar essa fundação nos fluxos de entrada, Google, recuperação de senha, visibilidade da senha e documentos legais.
+
+O `DashboardLayout` recebeu `IconButton` nos controles de sincronização e recolhimento do menu, com alvos de toque de pelo menos 40–44px e foco visível. Na `ScheduleTable`, a seleção de membro foi convertida de `div` clicável para `button` com `aria-haspopup` e `aria-expanded`; editar, excluir, fechar seleção e confirmar presença agora têm labels e áreas de toque maiores, além de permanecerem visíveis no mobile.
+
+O CSS global passou a aplicar `font-sans`/Inter ao corpo, `text-rendering: optimizeLegibility`, `touch-action: manipulation`, tokens tipográficos semânticos e estilos consistentes para estados de botão. Cores, logotipo e tokens de marca não foram alterados.
+
+Validação: `npm run build` passou após cada bloco de alterações e na validação final. O build continua emitindo apenas o aviso preexistente de chunk acima de 500 kB (`index` aproximadamente 796 kB minificado), que deve ser tratado em uma etapa específica de code splitting e carregamento sob demanda.
+
+
+## Inspeção visual mobile da etapa atual
+
+A tentativa de abrir a aplicação local em viewport mobile foi bloqueada antes da tela de login pelo estado `Falha Crítica de Conexão`: o cliente Supabase foi inicializado como `null` por ausência das variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_KEY` no processo Vite. O bloqueio é ambiental e não aponta regressão nos componentes de UI; a validação de build e tipos continua passando. A inspeção visual autenticada deverá ser repetida em ambiente com configuração Vite/Supabase válida.
+
+
+## Verificação visual e DOM após correção do IconButton
+
+Com o processo Vite configurado, a tela de login renderizou visualmente com o logotipo `/branding/logo-dark.png`, a paleta azul/dourada existente e a tipografia Inter. A medição no DOM confirmou: botão principal com 338 x 48px, botão Google com 338 x 48px e controle de mostrar senha com 44 x 44px. O problema intermediário em que o botão de senha ficava com 18 x 18px foi corrigido ao substituir a classe dinâmica por um mapa de classes literais reconhecido pelo Tailwind.
+
+
+O `ConfirmationModal` também foi migrado para `Button`, com layout de uma coluna no mobile e duas colunas a partir de telas maiores. As ações de cancelar e confirmar agora usam alturas e estados consistentes com o restante do sistema, sem alteração da lógica ou das cores existentes. `npm run build` passou após essa alteração; permanece somente o aviso de chunk grande já documentado.
+
+
+## Validação final da etapa tipográfica/mobile
+
+`npm run lint` passou com `tsc --noEmit`. `npx vitest run` passou com 4 arquivos e 21 testes aprovados. `git diff --check` também passou sem apontar whitespace inválido. Os testes exibiram somente avisos já existentes sobre opções deprecated do plugin Vite e a ausência de credenciais Supabase no ambiente de teste; não houve falha funcional.
