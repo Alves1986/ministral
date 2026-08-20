@@ -7,13 +7,31 @@
     --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
   }
 
-  body { 
-    @apply text-zinc-900 bg-ministral-50 antialiased selection:bg-ministral-500/30 selection:text-ministral-text dark:selection:text-ministral-50;
+  body {
+    @apply font-sans text-zinc-900 bg-ministral-50 antialiased selection:bg-ministral-500/30 selection:text-ministral-text dark:selection:text-ministral-50;
     /* Equivalent background in tailwind: dark:bg-ministral-dark (moved from index.html) */
+    text-rendering: optimizeLegibility;
   }
 
   .dark body {
     @apply bg-ministral-dark text-zinc-100;
+  }
+
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 3px solid rgb(30 58 95 / 0.55);
+    outline-offset: 3px;
+  }
+
+  :where(button, a, input, select, textarea):disabled {
+    cursor: not-allowed;
+  }
+
+  :where(button, a) {
+    touch-action: manipulation;
+  }
+
+  :target {
+    scroll-margin-top: 5rem;
   }
 
   body::before {
@@ -41,6 +59,9 @@
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
+  .text-balance { text-wrap: balance; }
 }
 
 @layer components {
@@ -65,7 +86,94 @@
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.3);
     outline: none;
   }
+
+  .ui-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-semibold leading-none transition-[background-color,border-color,color,box-shadow,transform] duration-200;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ui-button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .ui-button:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .ui-button-sm {
+    @apply min-h-10 px-3 text-xs;
+  }
+
+  .ui-button-md {
+    @apply min-h-11 px-4 text-sm;
+  }
+
+  .ui-button-lg {
+    @apply min-h-12 px-5 text-sm;
+  }
+
+  .ui-button-primary {
+    @apply bg-ministral-500 text-white shadow-md shadow-ministral-500/20 hover:bg-ministral-600 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2;
+  }
+
+  .ui-button-secondary {
+    @apply border border-zinc-200 bg-white text-zinc-800 shadow-sm hover:border-ministral-300 hover:bg-ministral-50 focus-visible:ring-2 focus-visible:ring-ministral-500/40 focus-visible:ring-offset-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-ministral-500 dark:hover:bg-ministral-900/30;
+  }
+
+  .ui-button-ghost {
+    @apply bg-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-ministral-500/40 focus-visible:ring-offset-2 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white;
+  }
+
+  .ui-button-danger {
+    @apply bg-red-600 text-white shadow-md shadow-red-600/20 hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500/50 focus-visible:ring-offset-2;
+  }
+
+  .ui-button-link {
+    @apply min-h-8 rounded-lg px-1.5 text-ministral-600 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ministral-500/40 focus-visible:ring-offset-2 dark:text-ministral-300;
+  }
+
+  .ui-icon-button {
+    @apply inline-flex items-center justify-center rounded-xl text-zinc-500 transition-colors duration-200 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ui-icon-button-sm {
+    @apply min-h-10 min-w-10;
+  }
+
+  .ui-icon-button-md {
+    @apply min-h-11 min-w-11;
+  }
+
+  .ui-icon-button-lg {
+    @apply min-h-12 min-w-12;
+  }
+
+  .ui-button-spinner {
+    @apply h-4 w-4 animate-spin;
+  }
+
+  .ui-page-title {
+    @apply text-2xl font-bold leading-tight tracking-tight text-zinc-900 dark:text-white sm:text-3xl;
+  }
+
+  .ui-section-title {
+    @apply text-base font-bold leading-snug tracking-tight text-zinc-900 dark:text-white sm:text-lg;
+  }
+
+  .ui-label {
+    @apply text-xs font-semibold leading-tight text-zinc-600 dark:text-zinc-300;
+  }
+
+  .ui-caption {
+    @apply text-[0.6875rem] font-medium leading-snug text-zinc-500 dark:text-zinc-400;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 }
+
 
 /* Respect prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {

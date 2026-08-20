@@ -120,6 +120,8 @@ export interface ScheduleAnalysis {
 
 export const ALL_TABS = [
   "dashboard",
+  "my-schedule",
+  "pending-center",
   "announcements",
   "calendar",
   "availability",

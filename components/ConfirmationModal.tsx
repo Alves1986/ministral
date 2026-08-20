@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
-import { CheckCircle2, X } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import { Button } from './ui';
 
 interface Props {
   isOpen: boolean;
@@ -94,21 +95,27 @@ export const ConfirmationModal: React.FC<Props> = ({ isOpen, onClose, onConfirm,
             Você confirma que estará presente neste evento?
           </p>
 
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <button 
+          <div className="grid grid-cols-1 gap-3 mt-4 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="secondary"
+              fullWidth
               onClick={onClose}
               aria-label="Cancelar confirmação"
-              className="py-3 px-4 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 font-medium rounded-xl transition-colors"
+              className="rounded-xl"
             >
               Cancelar
-            </button>
-            <button 
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              fullWidth
               onClick={onConfirm}
               aria-label="Confirmar presença"
-              className="py-3 px-4 bg-ministral-500 hover:bg-ministral-600 text-white font-bold rounded-xl shadow-lg shadow-ministral-500/20 transition-transform active:scale-95"
+              className="rounded-xl"
             >
               SIM, Confirmar
-            </button>
+            </Button>
           </div>
         </div>
       </div>

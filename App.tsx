@@ -67,6 +67,8 @@ import {
   Crown,
   Sparkles,
   Headset,
+  ClipboardCheck,
+  Inbox,
 } from "lucide-react";
 
 import { LoadingScreen } from "./components/LoadingScreen";
@@ -98,6 +100,8 @@ import {
 import { StatsModal } from "./components/StatsModal";
 import { ConfirmationModal } from "./components/ConfirmationModal";
 import { EventDetailsModal } from "./components/EventDetailsModal";
+import { MyScheduleScreen } from "./components/MyScheduleScreen";
+import { PendingCenterScreen } from "./components/PendingCenterScreen";
 
 const ScheduleEditorV2 = lazy(() =>
   import("./components/ScheduleEditorV2").then((m) => ({
@@ -630,6 +634,8 @@ const InnerApp = () => {
   const RAW_MAIN_NAV = useMemo(
     () => [
       { id: "dashboard", label: "Início", icon: <LayoutDashboard size={20} /> },
+      { id: "my-schedule", label: "Minha escala", icon: <ClipboardCheck size={20} /> },
+      { id: "pending-center", label: "Pendências", icon: <Inbox size={20} /> },
       { id: "announcements", label: "Avisos", icon: <Megaphone size={20} /> },
       { id: "calendar", label: "Calendário", icon: <CalendarIcon size={20} /> },
       {
@@ -693,6 +699,20 @@ const InnerApp = () => {
   const RAW_QUICK_ACTIONS = useMemo(
     () => [
       {
+        id: "my-schedule",
+        label: "Minha escala",
+        icon: <ClipboardCheck size={24} />,
+        color: "bg-secondary",
+        hover: "hover:bg-secondaryHover",
+      },
+      {
+        id: "pending-center",
+        label: "Pendências",
+        icon: <Inbox size={24} />,
+        color: "bg-ministral-gold",
+        hover: "hover:bg-ministral-gold/80",
+      },
+      {
         id: "calendar",
         label: "Ver Escala",
         icon: <CalendarIcon size={24} />,
@@ -732,8 +752,12 @@ const InnerApp = () => {
   );
 
   const safeEnabledTabs = useMemo(() => {
-    const tabs = ministryConfig.enabledTabs || DEFAULT_TABS;
-    return tabs.includes("history") ? tabs : [...tabs, "history"];
+    const configuredTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
+    const tabs = [...configuredTabs];
+    ["history", "my-schedule", "pending-center"].forEach((tab) => {
+      if (!tabs.includes(tab)) tabs.push(tab);
+    });
+    return tabs;
   }, [ministryConfig.enabledTabs]);
 
   const isPro = activeUser?.isPro ?? false;
@@ -797,11 +821,11 @@ const InnerApp = () => {
 
   const dashboardScreen = useMemo(
     () => (
-      <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
+      <section aria-labelledby="dashboard-title" className="space-y-8 animate-fade-in max-w-6xl mx-auto">
         <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0 mt-2 md:mt-0 mb-6">
           <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between md:justify-start gap-4">
             <div>
-              <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3 flex-wrap">
+              <h1 id="dashboard-title" className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3 flex-wrap">
                 <span className="text-secondary dark:text-white truncate max-w-[200px] sm:max-w-none">
                   {activeUser?.name.split(" ")[0]}
                 </span>
@@ -862,24 +886,23 @@ const InnerApp = () => {
           className="hidden lg:block space-y-4 animate-slide-up"
           style={{ animationDelay: "0.3s" }}
         >
-          <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+          <h2 id="quick-actions-title" className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
             <MousePointerClick size={14} /> Acesso Rápido
-          </h3>
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {RAW_QUICK_ACTIONS.filter(
-              (action) =>
-                safeEnabledTabs.includes(action.id) || action.id === "history",
-            ).map((action) => (
+            {QUICK_ACTIONS.map((action) => (
               <button
+                type="button"
                 key={action.id}
                 onClick={() => setCurrentTab(action.id)}
-                className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-zinc-200/50 dark:hover:shadow-black/50 hover:-translate-y-1 active:scale-95 overflow-hidden"
+                aria-label={`Abrir ${action.label}`}
+                className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-200/50 dark:hover:shadow-black/40 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden"
               >
                 <div
                   className={`absolute top-0 left-0 w-full h-1 ${action.color} opacity-80`}
                 ></div>
                 <div
-                  className={`mb-3 p-3 rounded-xl ${action.color} text-white shadow-lg transition-transform group-hover:scale-110`}
+                  className={`mb-3 p-3 rounded-lg ${action.color} text-white shadow-md transition-transform group-hover:scale-105`}
                 >
                   {action.icon}
                 </div>
@@ -900,7 +923,7 @@ const InnerApp = () => {
             currentMonthIso={currentMonth}
           />
         </div>
-      </div>
+      </section>
     ),
     [
       activeUser,
@@ -917,6 +940,73 @@ const InnerApp = () => {
       safeEnabledTabs,
       setCurrentTab,
       currentMonth,
+    ],
+  );
+
+  const openAssignmentConfirmation = useCallback(
+    (key: string) => {
+      const assignmentEvent = events.find((event) =>
+        key.startsWith(`${event.id}|`),
+      );
+      const role = key.split("|").slice(2).join("|") || "";
+      setConfirmModalData({
+        key,
+        memberName: activeUser?.name || "",
+        eventName: assignmentEvent?.title || "Evento",
+        date: assignmentEvent?.date
+          ? assignmentEvent.date.split("-").reverse().slice(0, 2).join("/")
+          : "",
+        role,
+      });
+    },
+    [activeUser?.name, events],
+  );
+
+  const myScheduleScreen = useMemo(
+    () => (
+      <MyScheduleScreen
+        currentUser={activeUser!}
+        events={events}
+        schedule={schedule}
+        attendance={attendance}
+        swapRequests={swapRequests}
+        onConfirm={openAssignmentConfirmation}
+        onOpenTab={setCurrentTab}
+      />
+    ),
+    [
+      activeUser,
+      attendance,
+      events,
+      openAssignmentConfirmation,
+      schedule,
+      swapRequests,
+    ],
+  );
+
+  const pendingCenterScreen = useMemo(
+    () => (
+      <PendingCenterScreen
+        currentUser={activeUser!}
+        events={events}
+        schedule={schedule}
+        attendance={attendance}
+        swapRequests={swapRequests}
+        announcements={announcements}
+        notifications={notifications}
+        onConfirm={openAssignmentConfirmation}
+        onOpenTab={setCurrentTab}
+      />
+    ),
+    [
+      activeUser,
+      announcements,
+      attendance,
+      events,
+      notifications,
+      openAssignmentConfirmation,
+      schedule,
+      swapRequests,
     ],
   );
 
@@ -1160,7 +1250,6 @@ const InnerApp = () => {
             await Supabase.saveMinistrySettings(
               ministryId,
               orgId!,
-              undefined,
               undefined,
               undefined,
               undefined,
@@ -1653,6 +1742,14 @@ const InnerApp = () => {
           <Suspense fallback={<LoadingFallback />}>
             <div className="h-full">
               {currentTab === "dashboard" && dashboardScreen}
+
+              {currentTab === "my-schedule" &&
+                safeEnabledTabs.includes("my-schedule") &&
+                myScheduleScreen}
+
+              {currentTab === "pending-center" &&
+                safeEnabledTabs.includes("pending-center") &&
+                pendingCenterScreen}
 
               {currentTab === "calendar" &&
                 safeEnabledTabs.includes("calendar") &&

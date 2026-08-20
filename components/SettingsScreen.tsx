@@ -23,6 +23,7 @@ import {
   Sparkles,
   Plus,
   Building2,
+  AlertCircle,
 } from "lucide-react";
 import { useToast } from "./Toast";
 import { LegalModal, LegalDocType } from "./LegalDocuments";

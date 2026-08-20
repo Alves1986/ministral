@@ -1,12 +1,13 @@
 
-import React, { ReactNode, useState, useRef } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield, Crown } from 'lucide-react';
+import React, { ReactNode, useState, useRef, useEffect } from 'react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, ClipboardCheck, Inbox, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { useSession } from '../context/SessionContext';
 import { getSystemLogo, getPublicUrl } from '../utils/branding';
+import { IconButton } from './ui';
 
 export interface NavItem {
   id: string;
@@ -65,6 +66,17 @@ export const DashboardLayout: React.FC<Props> = ({
 
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMinistryMenuOpen(false);
+      setSidebarOpen(false);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [setSidebarOpen]);
+
   useClickOutside(ministryMenuRef, () => {
       if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
@@ -97,10 +109,12 @@ export const DashboardLayout: React.FC<Props> = ({
     const isActive = currentTab === item.id;
     return (
       <button
+        type="button"
         key={item.id}
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
         aria-label={item.label}
         aria-current={isActive ? 'page' : undefined}
+        title={isEffectivelyCollapsed ? item.label : undefined}
         className={`w-full flex items-center px-3.5 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 group mb-1 ${
           isActive 
             ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25' 
@@ -137,14 +151,15 @@ export const DashboardLayout: React.FC<Props> = ({
 
   const MobileBottomNav = () => {
     const isDashboard = currentTab === 'dashboard';
-    const isCalendar = currentTab === 'calendar';
+    const isMySchedule = currentTab === 'my-schedule';
+    const isPendingCenter = currentTab === 'pending-center';
     const isAvailability = currentTab === 'availability';
-    const isAnnouncements = currentTab === 'announcements';
     return (
-      <nav aria-label="Navegação principal" className="lg:hidden print:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_30px_rgba(0,0,0,0.1)]">
+      <nav aria-label="Navegação principal" className="lg:hidden print:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 safe-area-pb shadow-[0_-4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-around items-center h-[72px] px-2">
           
-          <button 
+          <button
+            type="button"
             onClick={() => onTabChange('dashboard')} 
             aria-label="Página inicial"
             aria-current={isDashboard ? 'page' : undefined}
@@ -156,51 +171,56 @@ export const DashboardLayout: React.FC<Props> = ({
              <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isDashboard ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Início</span>
           </button>
  
-          <button 
-            onClick={() => onTabChange('calendar')} 
-            aria-label="Escala"
-            aria-current={isCalendar ? 'page' : undefined}
+          <button
+            type="button"
+            onClick={() => onTabChange('my-schedule')}
+            aria-label="Minha escala"
+            aria-current={isMySchedule ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
           >
-             <div className={`p-2 rounded-2xl transition-all duration-400 ${isCalendar ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
-                <Calendar size={22} strokeWidth={isCalendar ? 2.5 : 2} />
+             <div className={`p-2 rounded-2xl transition-all duration-400 ${isMySchedule ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
+                <ClipboardCheck size={22} strokeWidth={isMySchedule ? 2.5 : 2} />
              </div>
-             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isCalendar ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Escala</span>
+             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isMySchedule ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Minha escala</span>
           </button>
  
           <div className="relative flex-1 flex flex-col items-center -top-4">
-            <button 
-                onClick={() => onTabChange('availability')}
-                aria-label="Minha disponibilidade"
-                aria-current={isAvailability ? 'page' : undefined}
+            <button
+                type="button"
+                onClick={() => onTabChange('pending-center')}
+                aria-label="Central de pendências"
+                aria-current={isPendingCenter ? 'page' : undefined}
                 className={`w-14 h-14 rounded-3xl flex items-center justify-center shadow-2xl shadow-ministral-500/40 transition-all duration-300 active:scale-90 border-4 border-[#f8fafc] dark:border-[#0F172A] ${
-                    isAvailability 
-                    ? 'bg-ministral-500 text-white rotate-6' 
+                    isPendingCenter
+                    ? 'bg-ministral-500 text-white rotate-6'
                     : 'bg-slate-800 dark:bg-slate-700 text-slate-400'
                 }`}
             >
-                <CalendarCheck size={28} strokeWidth={2.5} />
+                <Inbox size={28} strokeWidth={2.5} />
             </button>
-            <span className={`text-[10px] uppercase tracking-widest mt-2 font-black transition-colors ${isAvailability ? 'text-ministral-500 dark:text-ministral-100' : 'text-slate-400'}`}>
-                Agenda
+            <span className={`text-[10px] uppercase tracking-widest mt-2 font-black transition-colors ${isPendingCenter ? 'text-ministral-500 dark:text-ministral-100' : 'text-slate-400'}`}>
+                Pendências
             </span>
           </div>
  
-          <button 
-            onClick={() => onTabChange('announcements')} 
-            aria-label="Avisos"
-            aria-current={isAnnouncements ? 'page' : undefined}
+          <button
+            type="button"
+            onClick={() => onTabChange('availability')}
+            aria-label="Minha disponibilidade"
+            aria-current={isAvailability ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
           >
-             <div className={`p-2 rounded-2xl transition-all duration-400 ${isAnnouncements ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
-                <Megaphone size={22} strokeWidth={isAnnouncements ? 2.5 : 2} />
+             <div className={`p-2 rounded-2xl transition-all duration-400 ${isAvailability ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
+                <CalendarCheck size={22} strokeWidth={isAvailability ? 2.5 : 2} />
              </div>
-             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isAnnouncements ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Avisos</span>
+             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isAvailability ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Agenda</span>
           </button>
 
-          <button 
-            onClick={() => setSidebarOpen(true)} 
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
             aria-label="Abrir menu"
+            aria-expanded={sidebarOpen}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
           >
              <div className="p-2 rounded-2xl text-slate-400 transition-colors">
@@ -215,13 +235,25 @@ export const DashboardLayout: React.FC<Props> = ({
   };
 
   return (
-    <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible print:block bg-slate-50 dark:bg-slate-950 font-sans">
+      <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible print:block bg-slate-50 dark:bg-slate-950 font-sans">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[120] focus:rounded-xl focus:bg-white focus:px-4 focus:py-3 focus:text-sm focus:font-bold focus:text-ministral-700 focus:shadow-xl dark:focus:bg-slate-900 dark:focus:text-white"
+        >
+          Pular para o conteúdo principal
+        </a>
       
       {sidebarOpen && (
-        <div className="fixed inset-0 z-[95] bg-slate-950/40 backdrop-blur-sm lg:hidden transition-opacity duration-500" onClick={() => setSidebarOpen(false)} />
+        <button
+          type="button"
+          aria-label="Fechar menu lateral"
+          className="fixed inset-0 z-[95] bg-slate-950/40 backdrop-blur-sm lg:hidden transition-opacity duration-500"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
-      <aside 
+      <aside
+        aria-label="Navegação principal"
         onMouseEnter={() => setIsSidebarHovered(true)}
         onMouseLeave={() => setIsSidebarHovered(false)}
         className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none print:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 lg:w-72'}`}
@@ -245,8 +277,11 @@ export const DashboardLayout: React.FC<Props> = ({
                
                {!isEffectivelyCollapsed && (
                    <div className="flex-1 min-w-0 relative" ref={ministryMenuRef}>
-                     <button 
+                     <button
+                        type="button"
                         onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
+                        aria-haspopup="menu"
+                        aria-expanded={ministryMenuOpen}
                         className="flex flex-col items-start w-full group cursor-pointer transition-all"
                      >
                          <div className="flex items-center gap-1 w-full overflow-hidden">
@@ -261,7 +296,7 @@ export const DashboardLayout: React.FC<Props> = ({
                      </button>
     
                      {ministryMenuOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-4 bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-slate-100 dark:divide-slate-700">
+                        <div role="menu" className="absolute top-full left-0 right-0 mt-4 bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-slate-100 dark:divide-slate-700">
                            <div className="px-5 py-3 bg-slate-50/50 dark:bg-slate-900/50">
                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meus Ministérios</p>
                            </div>
@@ -279,6 +314,8 @@ export const DashboardLayout: React.FC<Props> = ({
                                              if (onSwitchMinistry) onSwitchMinistry(mid);
                                              setMinistryMenuOpen(false);
                                          }}
+                                         role="menuitem"
+                                         type="button"
                                          className={`w-full text-left px-5 py-3.5 text-sm font-bold flex items-center justify-between transition-colors ${isCurrent ? 'bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                      >
                                          <span className="truncate pr-2">{displayLabel}</span>
@@ -294,6 +331,8 @@ export const DashboardLayout: React.FC<Props> = ({
                                        setMinistryMenuOpen(false);
                                        onOpenJoinMinistry();
                                    }}
+                                   role="menuitem"
+                                   type="button"
                                    className="w-full text-left px-5 py-4 text-xs font-black uppercase tracking-wider flex items-center gap-2 text-secondary dark:text-white hover:bg-secondary/10 transition-colors"
                                >
                                    <PlusCircle size={14} /> Novo Ministério
@@ -319,6 +358,7 @@ export const DashboardLayout: React.FC<Props> = ({
                   {isEffectivelyCollapsed ? '...' : 'Global'}
               </p>
               <button
+                type="button"
                 onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
                 className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
                   currentTab === 'super-admin'
@@ -360,6 +400,7 @@ export const DashboardLayout: React.FC<Props> = ({
                           {isEffectivelyCollapsed ? '...' : 'Global'}
                       </p>
                       <button
+                        type="button"
                         onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
                         className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
                           currentTab === 'super-admin'
@@ -379,7 +420,8 @@ export const DashboardLayout: React.FC<Props> = ({
 
 
         <div className={`border-t border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md ${isEffectivelyCollapsed ? 'm-2 p-2 rounded-2xl' : 'm-4 p-4 rounded-[2rem]'}`}>
-            <button 
+            <button
+                type="button"
                 onClick={() => onTabChange('profile')}
                 className={`flex items-center w-full p-2 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all group ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
                 title={isEffectivelyCollapsed ? "Meu Perfil" : undefined}
@@ -399,7 +441,8 @@ export const DashboardLayout: React.FC<Props> = ({
             </button>
             
             <div className={`grid mt-4 ${isEffectivelyCollapsed ? 'grid-cols-1 gap-2' : 'grid-cols-2 gap-2'}`}>
-                <button 
+                <button
+                    type="button"
                     onClick={onLogout} 
                     aria-label="Sair da conta"
                     className={`flex items-center justify-center py-2.5 text-[10px] font-black uppercase tracking-wider text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors ${isEffectivelyCollapsed ? 'gap-0' : 'gap-2'}`}
@@ -407,6 +450,7 @@ export const DashboardLayout: React.FC<Props> = ({
                     <LogOut size={14} /> {!isEffectivelyCollapsed && "Sair"}
                 </button>
                 <button
+                    type="button"
                     onClick={toggleTheme}
                     aria-label={themeMode === 'dark' ? "Mudar para modo claro" : "Mudar para modo escuro"}
                     className={`flex items-center justify-center py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-500/10 hover:bg-slate-500/20 rounded-xl transition-colors ${isEffectivelyCollapsed ? 'gap-0' : 'gap-2'}`}
@@ -417,7 +461,7 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 max-w-full print:block print:overflow-visible bg-transparent overflow-hidden relative">
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col min-w-0 max-w-full print:block print:overflow-visible bg-transparent overflow-hidden relative">
         
         <header className="lg:hidden print:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/70 dark:bg-ministral-dark/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
             <div className="flex items-center gap-3">
@@ -438,14 +482,15 @@ export const DashboardLayout: React.FC<Props> = ({
                 <h1 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tighter truncate max-w-[120px]">{activeLabel}</h1>
             </div>
             <div className="flex items-center gap-2">
-                <button 
-                    onClick={handleHardReload} 
-                    aria-label="Sincronizar dados"
+                <IconButton
+                    type="button"
+                    label="Sincronizar dados"
+                    onClick={handleHardReload}
                     aria-busy={isUpdating}
-                    className="p-2 text-slate-400 hover:text-ministral-500 rounded-xl transition-all"
+                    className="text-slate-400 hover:bg-ministral-50 hover:text-ministral-500 dark:hover:bg-ministral-900/20"
                 >
                     <RefreshCw size={18} className={isUpdating ? "animate-spin" : ""} />
-                </button>
+                </IconButton>
                 <NotificationCenter 
                     notifications={notifications} 
                     ministryId={currentUser?.ministryId || null} 
@@ -453,21 +498,28 @@ export const DashboardLayout: React.FC<Props> = ({
                     onNavigate={(tab) => onTabChange(tab)}
                     onSwitchMinistry={onSwitchMinistry}
                 />
-                <button onClick={() => onTabChange('profile')}>
-                    {renderUserAvatar("w-9 h-9")}
+                <button
+                    type="button"
+                    onClick={() => onTabChange('profile')}
+                    aria-label="Abrir meu perfil"
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-xl focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2"
+                >
+                    {renderUserAvatar("h-9 w-9")}
                 </button>
             </div>
         </header>
 
         <header className="hidden lg:flex print:hidden h-20 px-10 items-center justify-between sticky top-0 z-30 bg-slate-50/50 dark:bg-ministral-dark/50 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
              <div className="flex items-center gap-4">
-                 <button 
+                 <IconButton
+                     type="button"
+                     label={isDesktopCollapsed ? "Expandir menu" : "Recolher menu"}
+                     aria-expanded={!isDesktopCollapsed}
                      onClick={() => setIsDesktopCollapsed(prev => !prev)}
-                     className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-2 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800/50 mr-2"
-                     title={isDesktopCollapsed ? "Expandir Menu" : "Recolher Menu"}
+                     className="mr-2 text-slate-400 hover:bg-slate-200/50 hover:text-slate-600 dark:hover:bg-slate-800/50 dark:hover:text-slate-300"
                  >
                      <Menu size={20} />
-                 </button>
+                 </IconButton>
                  <div className="text-slate-400 p-2.5 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                     {ActiveIcon}
                  </div>
@@ -489,16 +541,18 @@ export const DashboardLayout: React.FC<Props> = ({
                         onNavigate={(tab) => onTabChange(tab)}
                         onSwitchMinistry={onSwitchMinistry}
                     />
-                    <button 
-                        onClick={handleHardReload} 
-                        className="p-3 text-slate-400 hover:text-ministral-500 hover:bg-white dark:hover:bg-slate-900 rounded-2xl transition-all shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-800"
-                        title="Sincronizar Dados"
-                    >
-                        <RefreshCw size={20} className={isUpdating ? "animate-spin" : ""} />
-                    </button>
+                     <IconButton
+                         type="button"
+                         label="Sincronizar dados"
+                         onClick={handleHardReload}
+                         aria-busy={isUpdating}
+                         className="border border-transparent text-slate-400 shadow-sm hover:border-slate-200 hover:bg-white hover:text-ministral-500 dark:hover:border-slate-800 dark:hover:bg-slate-900"
+                     >
+                         <RefreshCw size={20} className={isUpdating ? "animate-spin" : ""} />
+                     </IconButton>
                  </div>
                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
-                 <button onClick={() => onTabChange('profile')} className="flex items-center gap-3 group">
+                 <button type="button" onClick={() => onTabChange('profile')} aria-label="Abrir meu perfil" className="flex min-h-11 items-center gap-3 rounded-xl px-1 group focus-visible:ring-2 focus-visible:ring-ministral-500/50 focus-visible:ring-offset-2">
                     <div className="text-right hidden sm:block">
                         <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tighter">{currentUser?.name}</p>
                         <p className="text-[9px] text-secondary dark:text-white font-black uppercase tracking-widest">Perfil Ativo</p>
