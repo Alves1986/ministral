@@ -20,7 +20,7 @@ A aplicação local foi aberta com as variáveis do Supabase disponíveis e a te
 
 ## Rastreamento
 
-As alterações estão na branch `upgrade/ui-ux-global-2026-08-20` do repositório [Alves1986/ministral](https://github.com/Alves1986/ministral). O último commit remoto é `681f54814667207cf8fcb34cd2d3ef0d70ac97c3`. A branch principal não foi alterada e não foi aberto pull request automaticamente.
+As alterações estão na branch `upgrade/ui-ux-global-2026-08-20` do repositório [Alves1986/ministral](https://github.com/Alves1986/ministral). O último commit remoto é `b8130dce9cd27d838363876cffd22ae409b4ed6c`. A branch principal não foi alterada e não foi aberto pull request automaticamente.
 
 O aviso está configurado como execução única às 08h, no fuso `America/Sao_Paulo`, para entregar este resumo consolidado, as validações e os próximos passos.
 
