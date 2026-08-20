@@ -367,28 +367,6 @@ export const DashboardLayout: React.FC<Props> = ({
 
         <div className={`flex-1 overflow-y-auto py-2 custom-scrollbar space-y-8 ${isEffectivelyCollapsed ? 'px-2' : 'px-4'}`}>
           
-          {/* Super Admin puro: mostra APENAS a seção Global */}
-          {currentUser?.isSuperAdmin && !currentUser?.organizationId ? (
-            <div>
-              <p className={`px-3 text-[10px] font-black text-violet-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
-                  {isEffectivelyCollapsed ? '...' : 'Global'}
-              </p>
-              <button
-                type="button"
-                onClick={() => handleTabChange('super-admin')}
-                className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
-                  currentTab === 'super-admin'
-                    ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
-                } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
-                title={isEffectivelyCollapsed ? "Super Admin" : undefined}
-              >
-                <Shield size={18} className="flex-shrink-0" />
-                {!isEffectivelyCollapsed && <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">Super Admin</span>}
-              </button>
-            </div>
-          ) : (
-            <>
               <div>
                 <p className={`px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
                     {isEffectivelyCollapsed ? '...' : 'Essenciais'}
@@ -408,30 +386,6 @@ export const DashboardLayout: React.FC<Props> = ({
                     </div>
                 </div>
               )}
-
-              {/* Super Admin com org: botão adicional */}
-              {currentUser?.isSuperAdmin && currentUser?.organizationId && (
-                  <div>
-                      <p className={`px-3 text-[10px] font-black text-violet-500 tracking-[0.2em] mb-4 whitespace-nowrap overflow-hidden text-ellipsis ${isEffectivelyCollapsed ? 'text-center uppercase text-[8px]' : 'uppercase'}`}>
-                          {isEffectivelyCollapsed ? '...' : 'Global'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => handleTabChange('super-admin')}
-                        className={`w-full flex items-center px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
-                          currentTab === 'super-admin'
-                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
-                            : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
-                        } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
-                        title={isEffectivelyCollapsed ? "Super Admin" : undefined}
-                      >
-                        <Shield size={18} className="flex-shrink-0" />
-                        {!isEffectivelyCollapsed && <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">Super Admin</span>}
-                      </button>
-                  </div>
-              )}
-            </>
-          )}
         </div>
 
 
@@ -448,7 +402,7 @@ export const DashboardLayout: React.FC<Props> = ({
                         <div className="flex-1 min-w-0 text-left">
                             <p className="text-xs font-black text-slate-800 dark:text-white truncate uppercase tracking-tight">{currentUser?.name.split(' ')[0]}</p>
                             <p className="text-[10px] text-secondary dark:text-white font-bold flex items-center gap-1">
-                                {currentUser?.access_role === 'admin' ? 'Administrador' : 'Membro'}
+                                {currentUser?.isSuperAdmin ? 'Acesso global' : currentUser?.access_role === 'admin' || currentUser?.isOrgAdmin ? 'Administrador' : 'Membro'}
                             </p>
                         </div>
                         <Settings size={16} className="text-slate-400 group-hover:rotate-45 transition-transform flex-shrink-0" />
