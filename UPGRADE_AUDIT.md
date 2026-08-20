@@ -104,3 +104,15 @@ O `ConfirmationModal` também foi migrado para `Button`, com layout de uma colun
 ## Validação final da etapa tipográfica/mobile
 
 `npm run lint` passou com `tsc --noEmit`. `npx vitest run` passou com 4 arquivos e 21 testes aprovados. `git diff --check` também passou sem apontar whitespace inválido. Os testes exibiram somente avisos já existentes sobre opções deprecated do plugin Vite e a ausência de credenciais Supabase no ambiente de teste; não houve falha funcional.
+
+
+## Etapa Minha escala e Central de pendências — validação visual
+
+Em 20/08/2026, a instância local foi aberta em `/?tab=my-schedule` em viewport mobile. A aplicação exibiu corretamente a tela pública de login, preservando o logotipo e a identidade visual; a inspeção das telas autenticadas ficou bloqueada pela ausência de sessão autenticada no navegador local, não por erro de runtime do novo código. O console não apresentou exceções; permaneceu apenas o aviso já conhecido de `VITE_VAPID_PUBLIC_KEY` ausente, que afeta somente notificações push.
+
+A validação estrutural passou após a reorganização da barra inferior: `npm run lint`, `npm run build` e `npx vitest run` foram executados; os 4 arquivos e 21 testes existentes passaram. `git diff --check` também passou após a remoção dos espaços residuais. O build continua emitindo apenas o aviso preexistente de chunks maiores que 500 kB.
+
+
+## Validação final — Minha escala e Central de pendências
+
+A etapa foi validada com `npm run lint`, `npm run build`, `npx vitest run` e `git diff --check`. O lint passou, o build passou, os 4 arquivos de teste e 21 testes passaram, e não há whitespace inválido no diff. Permanecem apenas avisos conhecidos do ecossistema Vite e o aviso de chunks acima de 500 kB; nenhum deles foi introduzido como erro funcional por esta etapa.

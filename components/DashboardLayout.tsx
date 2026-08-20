@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useRef, useEffect } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield, Crown } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, ClipboardCheck, Inbox, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -151,9 +151,9 @@ export const DashboardLayout: React.FC<Props> = ({
 
   const MobileBottomNav = () => {
     const isDashboard = currentTab === 'dashboard';
-    const isCalendar = currentTab === 'calendar';
+    const isMySchedule = currentTab === 'my-schedule';
+    const isPendingCenter = currentTab === 'pending-center';
     const isAvailability = currentTab === 'availability';
-    const isAnnouncements = currentTab === 'announcements';
     return (
       <nav aria-label="Navegação principal" className="lg:hidden print:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/80 dark:bg-ministral-dark/80 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 safe-area-pb shadow-[0_-4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-around items-center h-[72px] px-2">
@@ -173,47 +173,47 @@ export const DashboardLayout: React.FC<Props> = ({
  
           <button
             type="button"
-            onClick={() => onTabChange('calendar')} 
-            aria-label="Escala"
-            aria-current={isCalendar ? 'page' : undefined}
+            onClick={() => onTabChange('my-schedule')}
+            aria-label="Minha escala"
+            aria-current={isMySchedule ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
           >
-             <div className={`p-2 rounded-2xl transition-all duration-400 ${isCalendar ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
-                <Calendar size={22} strokeWidth={isCalendar ? 2.5 : 2} />
+             <div className={`p-2 rounded-2xl transition-all duration-400 ${isMySchedule ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
+                <ClipboardCheck size={22} strokeWidth={isMySchedule ? 2.5 : 2} />
              </div>
-             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isCalendar ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Escala</span>
+             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isMySchedule ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Minha escala</span>
           </button>
  
           <div className="relative flex-1 flex flex-col items-center -top-4">
             <button
                 type="button"
-                onClick={() => onTabChange('availability')}
-                aria-label="Minha disponibilidade"
-                aria-current={isAvailability ? 'page' : undefined}
+                onClick={() => onTabChange('pending-center')}
+                aria-label="Central de pendências"
+                aria-current={isPendingCenter ? 'page' : undefined}
                 className={`w-14 h-14 rounded-3xl flex items-center justify-center shadow-2xl shadow-ministral-500/40 transition-all duration-300 active:scale-90 border-4 border-[#f8fafc] dark:border-[#0F172A] ${
-                    isAvailability 
-                    ? 'bg-ministral-500 text-white rotate-6' 
+                    isPendingCenter
+                    ? 'bg-ministral-500 text-white rotate-6'
                     : 'bg-slate-800 dark:bg-slate-700 text-slate-400'
                 }`}
             >
-                <CalendarCheck size={28} strokeWidth={2.5} />
+                <Inbox size={28} strokeWidth={2.5} />
             </button>
-            <span className={`text-[10px] uppercase tracking-widest mt-2 font-black transition-colors ${isAvailability ? 'text-ministral-500 dark:text-ministral-100' : 'text-slate-400'}`}>
-                Agenda
+            <span className={`text-[10px] uppercase tracking-widest mt-2 font-black transition-colors ${isPendingCenter ? 'text-ministral-500 dark:text-ministral-100' : 'text-slate-400'}`}>
+                Pendências
             </span>
           </div>
  
           <button
             type="button"
-            onClick={() => onTabChange('announcements')} 
-            aria-label="Avisos"
-            aria-current={isAnnouncements ? 'page' : undefined}
+            onClick={() => onTabChange('availability')}
+            aria-label="Minha disponibilidade"
+            aria-current={isAvailability ? 'page' : undefined}
             className="flex flex-col items-center justify-center flex-1 h-full gap-1 group"
           >
-             <div className={`p-2 rounded-2xl transition-all duration-400 ${isAnnouncements ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
-                <Megaphone size={22} strokeWidth={isAnnouncements ? 2.5 : 2} />
+             <div className={`p-2 rounded-2xl transition-all duration-400 ${isAvailability ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/25 -translate-y-1' : 'text-slate-400'}`}>
+                <CalendarCheck size={22} strokeWidth={isAvailability ? 2.5 : 2} />
              </div>
-             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isAnnouncements ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Avisos</span>
+             <span className={`text-[10px] uppercase tracking-widest transition-all duration-300 ${isAvailability ? 'font-black text-ministral-500 dark:text-ministral-100 scale-105' : 'font-bold text-slate-400'}`}>Agenda</span>
           </button>
 
           <button
