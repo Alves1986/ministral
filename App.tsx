@@ -370,6 +370,14 @@ const InnerApp = () => {
   }, []);
 
   const hasInitialSync = React.useRef(false);
+  const isMountedRef = React.useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   if (spotifyAuthSuccess) {
     return (
@@ -431,24 +439,19 @@ const InnerApp = () => {
         hasInitialSync.current = true;
       }
 
-      // Timeout de segurança: desbloqueia o app em no máximo 5s
-      // mesmo que o fetch falhe silenciosamente ou não retorne.
-      const safetyTimer = setTimeout(() => setAppReady(true), 5000);
+      // A sessão essencial já está disponível. Liberamos o shell imediatamente
+      // e carregamos os menus secundários em segundo plano para evitar que o
+      // primeiro acesso fique bloqueado por uma consulta não crítica.
+      setAppReady(true);
 
       if (sessionUser.organizationId) {
         Supabase.fetchOrganizationMinistries(sessionUser.organizationId)
           .then((ministries) => {
-            setAvailableMinistries(ministries);
-            setAppReady(true);
+            if (isMountedRef.current) setAvailableMinistries(ministries);
           })
           .catch((err) => {
             console.warn("Failed to load menus (non-critical)", err);
-            setAppReady(true);
-          })
-          .finally(() => clearTimeout(safetyTimer));
-      } else {
-        clearTimeout(safetyTimer);
-        setAppReady(true);
+          });
       }
     }
   }, [status, sessionUser]);
@@ -1610,7 +1613,7 @@ const InnerApp = () => {
               : ministryTitle || "Carregando..."
           }
           currentTab={isTabValid ? currentTab : "dashboard"}
-          onTabChange={async (tab) => {
+          onTabChange={(tab) => {
             setCurrentTab(tab);
           }}
           mainNavItems={MAIN_NAV}
