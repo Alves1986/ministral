@@ -72,3 +72,7 @@ A validação técnica final também passou com `npm run lint`, `npm run build` 
 ## Comunicação agendada
 
 O aviso desta tarefa está ativo como execução única, com o título `Retomar upgrade do Ministral às 08h`, no fuso `America/Sao_Paulo`. O detalhe do aviso solicita apenas o resumo consolidado do andamento, alterações, validações e próximos passos, preservando cores e logotipo.
+
+## Consolidação remota
+
+As alterações foram consolidadas na branch `upgrade/ui-ux-global-2026-08-20` do repositório [Alves1986/ministral](https://github.com/Alves1986/ministral), no commit `99c407b6082a733081676775eeb45627221778d9`. A branch principal não foi alterada e a branch de upgrade está disponível para revisão ou abertura de pull request.
