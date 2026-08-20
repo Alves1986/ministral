@@ -14,7 +14,7 @@ export interface SupportTicket {
   description: string;
   imageUrl?: string;
   status: 'open' | 'in_progress' | 'resolved';
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  priority: 'low' | 'normal' | 'medium' | 'high' | 'critical';
   createdAt: string;
   replies: {
     id: string;
@@ -40,8 +40,9 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
     const [replyContent, setReplyContent] = useState("");
 
     const refresh = async () => {
-        const all: any = await fetchSupportTickets();
-        setTickets(all.filter((t: any) => t.orgId === orgId).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        const scopedTickets = await fetchSupportTickets({ organizationId: orgId });
+        setTickets(scopedTickets as SupportTicket[]);
+        const all = scopedTickets;
         if (activeTicket) {
             const updated = all.find((t: any) => t.id === activeTicket.id);
             if (updated) setActiveTicket(updated);
@@ -97,7 +98,7 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
         };
         
         const updatedReplies = [...(activeTicket.replies || []), newReply];
-        const success = await updateSupportTicket(activeTicket.id, { replies: updatedReplies });
+        const success = await updateSupportTicket(activeTicket.id, { replies: updatedReplies }, { organizationId: orgId });
         
         if (success) {
             setReplyContent("");
@@ -110,7 +111,7 @@ export const SupportAdminScreen: React.FC<{ orgId: string, user: User, orgName: 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (confirm("Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.")) {
-            const success = await deleteSupportTicket(id);
+            const success = await deleteSupportTicket(id, { organizationId: orgId });
             if (success) {
                 addToast("Chamado excluído.", "success");
                 if (activeTicket?.id === id) setActiveTicket(null);

@@ -18,6 +18,14 @@ import { useSession, SessionProvider } from "./context/SessionContext";
 import { useToast, ToastProvider } from "./components/Toast";
 import * as Supabase from "./services/supabaseService";
 import { DEFAULT_TABS, ALL_TABS, User } from "./types";
+import {
+  GLOBAL_ADMIN_TABS,
+  ORGANIZATION_ADMIN_TABS,
+  canAccessGlobalTab,
+  canAccessOrganizationTab,
+  canManageOrganization,
+  getAppRole,
+} from "./utils/permissions";
 import { useMinistryData } from "./hooks/useMinistryData";
 import { useScreenMemos } from "./hooks/useScreenMemos";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
@@ -102,6 +110,7 @@ import { ConfirmationModal } from "./components/ConfirmationModal";
 import { EventDetailsModal } from "./components/EventDetailsModal";
 import { MyScheduleScreen } from "./components/MyScheduleScreen";
 import { PendingCenterScreen } from "./components/PendingCenterScreen";
+import { OrganizationOperationsPanel } from "./components/OrganizationOperationsPanel";
 
 const ScheduleEditorV2 = lazy(() =>
   import("./components/ScheduleEditorV2").then((m) => ({
@@ -502,10 +511,8 @@ const InnerApp = () => {
 
   const activeUser = currentUser || sessionUser;
   const ministryId = storeMinistryId || activeUser?.ministryId || "";
-  const isAdmin =
-    activeUser?.access_role === "admin" ||
-    activeUser?.isOrgAdmin ||
-    activeUser?.isSuperAdmin;
+  const appRole = getAppRole(activeUser);
+  const isAdmin = canManageOrganization(activeUser);
   const orgId = activeUser?.organizationId;
 
   const ministryConfig = useMemo(() => {
@@ -754,14 +761,28 @@ const InnerApp = () => {
     [],
   );
 
+  const isMinistryContentLead = Boolean(
+    activeUser?.ministry_functions?.some((role) =>
+      role.toLowerCase().includes("ministro"),
+    ),
+  );
+
   const safeEnabledTabs = useMemo(() => {
     const configuredTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
-    const tabs = [...configuredTabs];
+    const tabs = [...configuredTabs].filter(
+      (tab) => !(GLOBAL_ADMIN_TABS as readonly string[]).includes(tab),
+    );
     ["history", "my-schedule", "pending-center"].forEach((tab) => {
       if (!tabs.includes(tab)) tabs.push(tab);
     });
-    return tabs;
-  }, [ministryConfig.enabledTabs]);
+    return tabs.filter((tab) => {
+      if (canAccessOrganizationTab(activeUser, tab, tabs)) return true;
+      return (
+        isMinistryContentLead &&
+        ["repertoire-manager", "send-announcements"].includes(tab)
+      );
+    });
+  }, [activeUser, isMinistryContentLead, ministryConfig.enabledTabs]);
 
   const isPro = activeUser?.isPro ?? false;
 
@@ -771,11 +792,14 @@ const InnerApp = () => {
   );
 
   const MANAGEMENT_NAV = useMemo(
-    () =>
+      () =>
       RAW_MANAGEMENT_NAV.filter(
         (item) =>
-          safeEnabledTabs.includes(item.id) ||
-          ["advanced-ai", "support-admin"].includes(item.id),
+          (canManageOrganization(activeUser) &&
+            (safeEnabledTabs.includes(item.id) ||
+              (ORGANIZATION_ADMIN_TABS as readonly string[]).includes(item.id))) ||
+          (isMinistryContentLead &&
+            ["repertoire-manager", "send-announcements"].includes(item.id)),
       ).filter((item) => {
         if (
           !isPro &&
@@ -789,7 +813,7 @@ const InnerApp = () => {
           return false;
         return true;
       }),
-    [RAW_MANAGEMENT_NAV, safeEnabledTabs, isPro],
+    [RAW_MANAGEMENT_NAV, safeEnabledTabs, isPro, activeUser, isMinistryContentLead],
   );
 
   const QUICK_ACTIONS = useMemo(
@@ -811,16 +835,33 @@ const InnerApp = () => {
   );
 
   const isTabValid =
-    safeEnabledTabs.includes(currentTab) ||
-    [
-      "profile",
-      "super-admin",
-      "dashboard",
-      "plan",
-      "history",
-      "advanced-ai",
-      "support-admin",
-    ].includes(currentTab);
+    canAccessGlobalTab(activeUser, currentTab) ||
+    canAccessOrganizationTab(activeUser, currentTab, safeEnabledTabs) ||
+    currentTab === "profile";
+
+  const guardedTabChange = useCallback(
+    (tab: string) => {
+      if (appRole === "super_admin") {
+        setCurrentTab(
+          canAccessGlobalTab(activeUser, tab) ? tab : "sa-organizations",
+        );
+        return;
+      }
+
+      setCurrentTab(
+        canAccessOrganizationTab(activeUser, tab, safeEnabledTabs) ||
+          tab === "profile"
+          ? tab
+          : "dashboard",
+      );
+    },
+    [activeUser, appRole, safeEnabledTabs],
+  );
+
+  useEffect(() => {
+    if (!activeUser || !isAppReady || isTabValid) return;
+    guardedTabChange(appRole === "super_admin" ? "sa-organizations" : "dashboard");
+  }, [activeUser, appRole, guardedTabChange, isAppReady, isTabValid]);
 
   const dashboardScreen = useMemo(
     () => (
@@ -885,6 +926,19 @@ const InnerApp = () => {
           />
         </div>
 
+        {appRole === "org_admin" && (
+          <div className="animate-slide-up" style={{ animationDelay: "0.25s" }}>
+            <OrganizationOperationsPanel
+              events={events}
+              schedule={schedule}
+              expandedRoles={expandedRoles}
+              publicMembers={publicMembers}
+              swapRequests={swapRequests}
+              onNavigate={guardedTabChange}
+            />
+          </div>
+        )}
+
         <div
           className="hidden lg:block space-y-4 animate-slide-up"
           style={{ animationDelay: "0.3s" }}
@@ -936,6 +990,11 @@ const InnerApp = () => {
       nextEvent,
       schedule,
       attendance,
+      events,
+      expandedRoles,
+      swapRequests,
+      appRole,
+      guardedTabChange,
       roles,
       publicMembers,
       ministryId,
@@ -1566,7 +1625,7 @@ const InnerApp = () => {
         </div>
       )}
 
-      {activeUser?.isSuperAdmin && !activeUser?.organizationId ? (
+      {appRole === "super_admin" ? (
         <SuperAdminLayout
           currentTab={
             [
@@ -1582,7 +1641,7 @@ const InnerApp = () => {
               ? currentTab
               : "sa-organizations"
           }
-          onTabChange={setCurrentTab}
+          onTabChange={guardedTabChange}
           onLogout={handleLogout}
         >
           <Suspense fallback={<LoadingFallback />}>
@@ -1613,22 +1672,10 @@ const InnerApp = () => {
               : ministryTitle || "Carregando..."
           }
           currentTab={isTabValid ? currentTab : "dashboard"}
-          onTabChange={(tab) => {
-            setCurrentTab(tab);
-          }}
+          onTabChange={guardedTabChange}
           mainNavItems={MAIN_NAV}
           managementNavItems={(() => {
-            const isMinister =
-              activeUser?.ministry_functions?.some((r) =>
-                r.toLowerCase().includes("ministro"),
-              ) || false;
-            if (isAdmin) return MANAGEMENT_NAV;
-            if (isMinister)
-              return MANAGEMENT_NAV.filter(
-                (item) =>
-                  item.id === "repertoire-manager" ||
-                  item.id === "send-announcements",
-              );
+            if (isAdmin || isMinistryContentLead) return MANAGEMENT_NAV;
             return [];
           })()}
           notifications={notifications}
@@ -1744,7 +1791,7 @@ const InnerApp = () => {
         >
           <Suspense fallback={<LoadingFallback />}>
             <div className="h-full">
-              {currentTab === "dashboard" && dashboardScreen}
+              {(currentTab === "dashboard" || !isTabValid) && dashboardScreen}
 
               {currentTab === "my-schedule" &&
                 safeEnabledTabs.includes("my-schedule") &&
@@ -1765,7 +1812,7 @@ const InnerApp = () => {
                 ministryId.length === 36 &&
                 scheduleEditorScreen}
 
-              {currentTab === "super-admin" && activeUser?.isSuperAdmin && (
+              {currentTab === "super-admin" && canAccessGlobalTab(activeUser, "super-admin") && (
                 <SuperAdminDashboard />
               )}
 

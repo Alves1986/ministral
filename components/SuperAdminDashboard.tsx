@@ -320,7 +320,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
 
   const loadTickets = async () => {
     try {
-      const t = await fetchSupportTickets();
+      const t = await fetchSupportTickets({ isSuperAdmin: true });
       setGlobalTickets(t);
       if (activeTicket) {
         const updated = t.find((x: any) => x.id === activeTicket.id);
@@ -364,7 +364,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
         updates.status = "in_progress";
       }
 
-      await updateSupportTicket(activeTicket.id, updates);
+      await updateSupportTicket(activeTicket.id, updates, { isSuperAdmin: true });
       setReplyContent("");
       loadTickets();
     } catch {}
@@ -376,7 +376,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
       "Excluir Chamado",
       "Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.",
       async () => {
-        await deleteSupportTicket(id);
+        await deleteSupportTicket(id, { isSuperAdmin: true });
         if (activeTicket?.id === id) setActiveTicket(null);
         loadTickets();
       },

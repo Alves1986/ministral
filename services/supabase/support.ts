@@ -21,12 +21,19 @@ export interface SupportTicket {
   }[];
 }
 
-export const fetchSupportTickets = async (): Promise<SupportTicket[]> => {
+export interface SupportAccessScope {
+    organizationId?: string;
+    isSuperAdmin?: boolean;
+}
+
+const hasSupportScope = (scope?: SupportAccessScope) =>
+    Boolean(scope?.isSuperAdmin || scope?.organizationId);
+
+export const fetchSupportTickets = async (scope?: SupportAccessScope): Promise<SupportTicket[]> => {
     const sb = getSupabase();
-    if (!sb) return [];
+    if (!sb || !hasSupportScope(scope)) return [];
     
-    // As in other fetch calls, we query from the table
-    const { data, error } = await sb.from('support_tickets')
+    let query = sb.from('support_tickets')
         .select(`
             *,
             organizations (
@@ -34,6 +41,12 @@ export const fetchSupportTickets = async (): Promise<SupportTicket[]> => {
             )
         `)
         .order('created_at', { ascending: false });
+
+    if (!scope?.isSuperAdmin) {
+        query = query.eq('organization_id', scope?.organizationId);
+    }
+
+    const { data, error } = await query;
         
     if (error || !data) return [];
     
@@ -99,24 +112,32 @@ export const createSupportTicket = async (orgId: string, orgName: string, author
     };
 };
 
-export const updateSupportTicket = async (id: string, updates: Partial<SupportTicket>) => {
+export const updateSupportTicket = async (id: string, updates: Partial<SupportTicket>, scope?: SupportAccessScope) => {
     const sb = getSupabase();
-    if (!sb) return false;
+    if (!sb || !hasSupportScope(scope)) return false;
     
     const dbUpdates: any = {};
     if (updates.status) dbUpdates.status = updates.status;
     if (updates.priority) dbUpdates.priority = updates.priority;
     if (updates.replies) dbUpdates.replies = updates.replies;
 
-    const { error } = await sb.from('support_tickets').update(dbUpdates).eq('id', id);
+    let query = sb.from('support_tickets').update(dbUpdates).eq('id', id);
+    if (!scope?.isSuperAdmin) {
+        query = query.eq('organization_id', scope?.organizationId);
+    }
+    const { error } = await query;
     return !error;
 };
 
-export const deleteSupportTicket = async (id: string) => {
+export const deleteSupportTicket = async (id: string, scope?: SupportAccessScope) => {
     const sb = getSupabase();
-    if (!sb) return false;
+    if (!sb || !hasSupportScope(scope)) return false;
     
-    const { error } = await sb.from('support_tickets').delete().eq('id', id);
+    let query = sb.from('support_tickets').delete().eq('id', id);
+    if (!scope?.isSuperAdmin) {
+        query = query.eq('organization_id', scope?.organizationId);
+    }
+    const { error } = await query;
     return !error;
 };
 
