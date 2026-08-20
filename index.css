@@ -16,6 +16,19 @@
     @apply bg-ministral-dark text-zinc-100;
   }
 
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 3px solid rgb(30 58 95 / 0.55);
+    outline-offset: 3px;
+  }
+
+  :where(button, a, input, select, textarea):disabled {
+    cursor: not-allowed;
+  }
+
+  :target {
+    scroll-margin-top: 5rem;
+  }
+
   body::before {
     content: "";
     position: fixed;
@@ -41,6 +54,9 @@
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
+  .text-balance { text-wrap: balance; }
 }
 
 @layer components {
