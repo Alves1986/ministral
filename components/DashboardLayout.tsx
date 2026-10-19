@@ -227,12 +227,12 @@ export const DashboardLayout: React.FC<Props> = ({
         className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none print:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 lg:w-72'}`}
       >
         <div className={`py-8 shrink-0 ${isEffectivelyCollapsed ? 'px-4' : 'px-6'}`}>
-           <div className={`flex items-center ${isEffectivelyCollapsed ? 'justify-center' : 'gap-4'}`}>
-               <div className={`flex items-center justify-center shrink-0 group relative overflow-hidden transition-all duration-300 ${isEffectivelyCollapsed ? 'w-10 h-10' : 'w-12 h-12'}`}>
+           <div className={`flex items-center ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3.5'}`}>
+               <div className={`flex items-center justify-center shrink-0 group relative rounded-2xl overflow-hidden transition-all duration-300 shadow-sm border border-slate-200/40 dark:border-white/10 bg-slate-900/80 dark:bg-white/[0.04] backdrop-blur-md p-2 hover:border-secondary/40 ${isEffectivelyCollapsed ? 'w-10 h-10 p-1.5' : 'w-11 h-11'}`}>
                   <img 
                     src={logoSrc} 
                     alt="Logo" 
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain filter drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
                       const fallback = getSystemLogo(theme);
                       if (!e.currentTarget.src.endsWith(fallback)) {
@@ -421,11 +421,11 @@ export const DashboardLayout: React.FC<Props> = ({
         
         <header className="lg:hidden print:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/70 dark:bg-ministral-dark/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
             <div className="flex items-center gap-3">
-                <div className="w-9 h-9 flex items-center justify-center overflow-hidden">
+                <div className="w-9 h-9 flex items-center justify-center overflow-hidden rounded-xl bg-slate-900/80 dark:bg-white/[0.04] border border-slate-200/40 dark:border-white/10 p-1.5 shadow-sm shrink-0">
                     <img 
                         src={logoSrc} 
                         alt="Logo" 
-                        className="w-full h-full object-contain"
+                        className="w-full h-full object-contain filter drop-shadow-sm"
                         onError={(e) => {
                           const fallback = getSystemLogo(theme);
                           if (!e.currentTarget.src.endsWith(fallback)) {

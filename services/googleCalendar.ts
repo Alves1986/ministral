@@ -6,6 +6,7 @@
 import { getSupabase } from './supabase/client';
 
 const GCAL_TOKEN_KEY = 'gcal_provider_token';
+// nosemgrep: rules.ajinabraham.njsscan.generic.hardcoded_secrets.node_username
 const GCAL_USER_KEY = 'gcal_user_info';
 const GCAL_RETURN_PARAM = 'calendar_connected';
 

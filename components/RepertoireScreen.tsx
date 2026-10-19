@@ -25,7 +25,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const queryClient = useQueryClient();
   
   // UI State
-  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('spotify');
+  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('youtube');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [selectedChordItem, setSelectedChordItem] = useState<RepertoireItem | null>(null);
@@ -258,7 +258,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     
     // Optimistic update
     const newItems = draftItems.map(item => ({
-        id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        id: `temp-${Date.now()}-${crypto.randomUUID().split('-')[0]}`,
         title: item.title,
         link: item.link,
         date,
@@ -368,11 +368,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   
                   {/* Full Bleed Mobile Tabs */}
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
-                      <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-secondary dark:text-white border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><Search size={14}/> Spotify</button>
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
-                      <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-accent border-accent bg-accent/10 dark:bg-accent/20' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras/Letras</button>
-                      {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-secondary dark:text-white border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Playlists</button>}
-                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-secondaryHover border-secondaryHover bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><AlignLeft size={14}/> Manual / Cifra</button>
                   </div>
 
                   {activeTab === 'spotify' && (

@@ -109,28 +109,28 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
         case 'success': return { 
             bg: 'bg-secondary/10 dark:bg-secondary/5', 
             border: 'border-secondary/20 dark:border-secondary/30',
-            icon: <CheckCircle className="text-secondary" size={24} />,
+            icon: <CheckCircle className="text-secondary" size={18} />,
             accent: 'text-secondary dark:text-secondary',
             btn: 'bg-secondary hover:bg-secondaryHover'
         };
         case 'warning': return { 
             bg: 'bg-accent/10 dark:bg-accent/5', 
             border: 'border-accent/20 dark:border-accent/30',
-            icon: <AlertTriangle className="text-accent" size={24} />,
+            icon: <AlertTriangle className="text-accent" size={18} />,
             accent: 'text-accent dark:text-accent',
             btn: 'bg-accent hover:bg-accent/80'
         };
         case 'alert': return { 
             bg: 'bg-red-50 dark:bg-red-900/10', 
             border: 'border-red-200 dark:border-red-800/30',
-            icon: <AlertOctagon className="text-red-500" size={24} />,
+            icon: <AlertOctagon className="text-red-500" size={18} />,
             accent: 'text-red-700 dark:text-red-400',
             btn: 'bg-red-600 hover:bg-red-700'
         };
         default: return { 
             bg: 'bg-white dark:bg-zinc-900', 
             border: 'border-zinc-200 dark:border-zinc-800',
-            icon: <Info className="text-secondary" size={24} />,
+            icon: <Info className="text-secondary" size={18} />,
             accent: 'text-zinc-800 dark:text-zinc-100',
             btn: 'bg-secondary hover:bg-secondaryHover'
         };
@@ -140,19 +140,19 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
   const theme = getTheme(announcement.type);
 
   return (
-    <div className={`mb-6 rounded-2xl p-5 border shadow-sm animate-slide-up 
+    <div className={`mb-3.5 rounded-xl p-3.5 sm:p-4 border shadow-sm animate-slide-up 
       ${theme.bg} ${theme.border}
       ${hasRead && !isAdmin ? 'opacity-60 grayscale-[30%]' : ''}
     `}>
-        <div className="flex gap-4 items-start">
-            <div className="shrink-0 mt-1">
+        <div className="flex gap-3 items-start">
+            <div className="shrink-0 mt-0.5">
                 {theme.icon}
             </div>
             <div className="flex-1 min-w-0"> {/* min-w-0 ensures text wrap works inside flex */}
                 {hasRead && !isAdmin && (
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Visualizado
+                    <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-[11px] text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Visualizado
                         </span>
                         <button 
                             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -164,9 +164,9 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                 )}
 
                 <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                        {announcement.isPinned && <Pin size={16} className="text-ministral-500 fill-ministral-500 rotate-45" />}
-                        <h3 className={`font-bold text-lg ${theme.accent}`}>{announcement.title}</h3>
+                    <div className="flex items-center gap-1.5">
+                        {announcement.isPinned && <Pin size={14} className="text-ministral-500 fill-ministral-500 rotate-45" />}
+                        <h3 className={`font-bold text-sm sm:text-base ${theme.accent}`}>{announcement.title}</h3>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-2">
                         {isAdmin && onTogglePin && (

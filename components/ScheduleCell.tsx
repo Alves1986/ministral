@@ -48,27 +48,40 @@ export const getMemberAvailStatus = (
     eventTime: string,
     availability: Record<string, Record<string, string>>
 ): 'available' | 'unavailable' => {
-    const monthKey = `${date.substring(0, 7)}-01`;
-    if (availability[memberId]?.[monthKey] === 'BLK') {
-        return 'unavailable'; // Mês inteiro bloqueado
+    const memberData = availability[memberId];
+    const month = date.substring(0, 7);
+
+    // Sem nenhum registro de disponibilidade para este membro:
+    // No modelo opt-out (novo), isso significa disponível.
+    if (!memberData) return 'available';
+
+    // Verificar marcador BLK de mes inteiro (ambos os formatos)
+    if (memberData[`${month}-01-BLK`] === 'BLK') return 'unavailable'; // novo formato
+    if (memberData[`${month}-01`] === 'BLK') return 'unavailable';     // formato legado
+
+    const memberAvail = memberData[date];
+
+    // Dia não está no mapa:
+    // - Novo formato (opt-out convertido): ausencia do dia = dia ausente (indisponivel)
+    // - Mas se o membro tem dados de outros dias no mes, aplicamos a regra de opt-out
+    if (!memberAvail) {
+        // Se o membro tem algum dia disponível neste mês, o dia não marcado = ausente
+        const hasDaysInMonth = Object.keys(memberData).some(k => k.startsWith(month) && !k.includes('BLK'));
+        if (hasDaysInMonth) return 'unavailable';
+        // Se não tem nenhum dado no mês, disponível por padrão (opt-out)
+        return 'available';
     }
 
-    const memberAvail = availability[memberId]?.[date];
-    // Se não marcou disponibilidade para o dia
-    if (!memberAvail) return 'unavailable'; 
-    
-    // Se marcou que não pode, entao 'unavailable'
     if (memberAvail === 'unavailable') return 'unavailable';
+    if (memberAvail === 'all') return 'available';
 
-    if (memberAvail === 'all') return 'available'; // dia todo: disponivel sempre
-    
-    // Verificar se e domingo (0 = domingo)
+    // Verificar se é domingo
     const weekday = new Date(date + 'T12:00:00').getDay();
-    if (weekday !== 0 && memberAvail !== 'BLK') return 'available'; // nao e domingo: qualquer nota = disponivel
-    
-    // Domingo: cruzar periodo marcado com horario do evento
+    if (weekday !== 0 && memberAvail !== 'BLK') return 'available';
+
+    // Domingo: cruzar período marcado com horário do evento
     const hour = parseInt(eventTime.split(':')[0], 10);
-    const eventPeriod = hour < 12 ? 'M' : 'N'; // manha ou noite
+    const eventPeriod = hour < 12 ? 'M' : 'N';
     return memberAvail === eventPeriod ? 'available' : 'unavailable';
 };
 
@@ -319,7 +332,8 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
             </button>
 
 
-            {/* Check-in Button Outside */}
+            {/* Check-in Button Outside (Oculto a pedido do usuário - mantido no código caso precise reativar) */}
+            {/*
             {currentMember && onConfirm && (
                 <button 
                     type="button"
@@ -349,6 +363,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                     <Check size={16} className={isConfirmed ? "stroke-[3px]" : "stroke-2"} />
                 </button>
             )}
+            */}
 
             {/* Dropdown Menu */}
             {isOpen && (

@@ -1,5 +1,5 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, loadEnv } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateScheduleWithAI } from "./services/aiOrchestrator.ts";
@@ -9,9 +9,12 @@ import { polishAnnouncementAI } from "./services/aiService.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Carregar variáveis de ambiente do .env para o Node (process.env)
+Object.assign(process.env, loadEnv(process.env.NODE_ENV || "development", process.cwd(), ""));
+
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json());
 
@@ -123,8 +126,8 @@ async function startServer() {
       const result = await runAI(taskType, context, payload, preferredModel);
       res.json(result);
     } catch (error: any) {
-      console.error("Error in /api/ai/run:", error);
-      res.status(500).json({ error: "Failed to run AI task" });
+      console.error("Error in /api/ai/run:", error?.message || error);
+      res.status(500).json({ error: error?.message || "Failed to run AI task" });
     }
   });
 

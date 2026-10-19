@@ -16,9 +16,12 @@ export const NotificationPermissionBanner: React.FC = () => {
       return;
     }
 
-    // Se já concedido, não exibe
+    // Se já concedido, garante que o push está sincronizado no Supabase e não exibe o banner
     if (Notification.permission === 'granted') {
       localStorage.setItem(PREF_KEY, 'granted');
+      subscribeUserToPush().catch(err => {
+        console.warn('[NotificationBanner] Sincronização em background falhou:', err);
+      });
       return;
     }
 
@@ -46,13 +49,17 @@ export const NotificationPermissionBanner: React.FC = () => {
       if (sub) {
         localStorage.setItem(PREF_KEY, 'granted');
         setVisible(false);
-      } else {
-        // Permissão negada pelo usuário no popup do OS
+      } else if (Notification.permission === 'denied') {
+        // Permissão explicitamente negada pelo usuário no popup do OS
         localStorage.setItem(PREF_KEY, 'denied');
+        setVisible(false);
+      } else {
+        // Dispensado sem bloquear ou erro temporário
         setVisible(false);
       }
     } catch (e) {
       console.error('[NotificationBanner] Erro ao ativar push:', e);
+      setVisible(false);
     } finally {
       setLoading(false);
     }

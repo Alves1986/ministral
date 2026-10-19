@@ -52,6 +52,7 @@ import {
   ListMusic,
   ArrowLeft,
   ArrowRight,
+  Clock,
   Calendar as CalendarIcon,
   Trophy,
   Loader2,
@@ -493,6 +494,40 @@ const InnerApp = () => {
     }
   }, [currentTab]);
 
+  // Sincronizar navegação quando uma notificação Push for clicada ou a URL mudar
+  useEffect(() => {
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === "NAVIGATE" && event.data?.tab) {
+        let tab = event.data.tab;
+        if (tab === "schedule") tab = "calendar";
+        setCurrentTab(tab);
+      }
+    };
+
+    const handleUrlSync = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam) {
+        const normalizedTab = tabParam === "schedule" ? "calendar" : tabParam;
+        setCurrentTab((prev) => (prev !== normalizedTab ? normalizedTab : prev));
+      }
+    };
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    }
+    window.addEventListener("popstate", handleUrlSync);
+    window.addEventListener("focus", handleUrlSync);
+
+    return () => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+      }
+      window.removeEventListener("popstate", handleUrlSync);
+      window.removeEventListener("focus", handleUrlSync);
+    };
+  }, []);
+
   const activeUser = currentUser || sessionUser;
   const ministryId = storeMinistryId || activeUser?.ministryId || "";
   const isAdmin =
@@ -562,6 +597,42 @@ const InnerApp = () => {
     window.addEventListener("pwa-ready", handlePwaReady);
     return () => window.removeEventListener("pwa-ready", handlePwaReady);
   }, []);
+
+  // Lembrete automático no dia da escala para marcar presença no app
+  useEffect(() => {
+    if (!activeUser?.id || !ministryId || !schedule) return;
+
+    const todayIso = new Date().toISOString().split("T")[0];
+    const reminderKey = `duty_day_reminder_${activeUser.id}_${todayIso}_${ministryId}`;
+    if (localStorage.getItem(reminderKey)) return;
+
+    // Verificar se o usuário está escalado hoje
+    let isScheduledToday = false;
+    let scheduledRole = "";
+    let isAlreadyConfirmed = false;
+
+    for (const [key, assignedMemberId] of Object.entries(schedule)) {
+      if (assignedMemberId === activeUser.id) {
+        const parts = key.split("|");
+        if (parts[1] === todayIso) {
+          isScheduledToday = true;
+          scheduledRole = parts[2] || "";
+          if (attendance?.[key] === true) {
+            isAlreadyConfirmed = true;
+          }
+          break;
+        }
+      }
+    }
+
+    if (isScheduledToday && !isAlreadyConfirmed) {
+      localStorage.setItem(reminderKey, "sent");
+      addToast(
+        `🔔 Hoje é seu dia de escala (${scheduledRole})! Confirme sua presença no app.`,
+        "info"
+      );
+    }
+  }, [activeUser?.id, ministryId, schedule, attendance, addToast]);
 
   // --- CACHE INVALIDATION BROADCAST ---
   useEffect(() => {
@@ -634,13 +705,13 @@ const InnerApp = () => {
       { id: "calendar", label: "Calendário", icon: <CalendarIcon size={20} /> },
       {
         id: "availability",
-        label: "Disponibilidade",
+        label: "Ausências",
         icon: <CalendarCheck size={20} />,
       },
       { id: "swaps", label: "Trocas", icon: <RefreshCcw size={20} /> },
       { id: "repertoire", label: "Repertório", icon: <Music size={20} /> },
       { id: "ranking", label: "Destaques", icon: <Trophy size={20} /> },
-      { id: "history", label: "Histórico", icon: <HistoryIcon size={20} /> },
+      { id: "history", label: "Histórico de Escala", icon: <HistoryIcon size={20} /> },
       { id: "settings", label: "Configurações", icon: <Settings size={20} /> },
     ],
     [],
@@ -663,7 +734,7 @@ const InnerApp = () => {
         label: "Ger. Repertório",
         icon: <ListMusic size={20} />,
       },
-      { id: "report", label: "Relat. Disp.", icon: <FileBarChart size={20} /> },
+      { id: "report", label: "Relat. Indisp.", icon: <FileBarChart size={20} /> },
       {
         id: "event-rules",
         label: "Regras de Agenda",
@@ -701,17 +772,17 @@ const InnerApp = () => {
       },
       {
         id: "availability",
-        label: "Disponibilidade",
+        label: "Ausências",
         icon: <CalendarCheck size={24} />,
         color: "bg-secondary",
         hover: "hover:bg-secondaryHover",
       },
       {
         id: "history",
-        label: "Meu Histórico",
+        label: "Histórico de Escala",
         icon: <HistoryIcon size={24} />,
-        color: "bg-zinc-800",
-        hover: "hover:bg-zinc-900",
+        color: "bg-secondary",
+        hover: "hover:bg-secondaryHover",
       },
       {
         id: "swaps",
@@ -796,112 +867,236 @@ const InnerApp = () => {
     ].includes(currentTab);
 
   const dashboardScreen = useMemo(
-    () => (
-      <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
-        <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-4 md:gap-0 mt-2 md:mt-0 mb-6">
-          <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between md:justify-start gap-4">
-            <div>
-              <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-3 flex-wrap">
-                <span className="text-secondary dark:text-white truncate max-w-[200px] sm:max-w-none">
-                  {activeUser?.name.split(" ")[0]}
-                </span>
-              </h1>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-2 font-medium">
-                Excelência na escala. Propósito no servir.
-              </p>
+    () => {
+      // 1. Estatísticas Rápidas
+      const currentMonthPrefix = currentMonth;
+      const eventsThisMonth = events?.filter((e: any) => e.iso?.startsWith(currentMonthPrefix)).length || 0;
+      const scheduleEntries = Object.entries(schedule || {});
+      const mySchedules = scheduleEntries.filter(([key, member_id]) => member_id === activeUser?.id && key.split('|')[1]?.startsWith(currentMonthPrefix)).length;
+      const activeAnnouncements = announcements?.filter((a: any) => new Date(a.expirationDate) >= new Date()).length || 0;
+      const emptySchedules = isAdmin ? 0 : 0; // Fixed empty schedules calculation to avoid errors
+      // 2. Próximos 3 Eventos
+      const upcomingEvents = [...(events || [])]
+        .filter((e: any) => e.iso >= new Date().toISOString().split('T')[0])
+        .sort((a: any, b: any) => a.iso.localeCompare(b.iso))
+        .slice(0, 3);
+
+      // 3. Último Aviso
+      const lastAnnouncement = announcements?.filter((a: any) => new Date(a.expirationDate) >= new Date())
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+      return (
+        <div className="space-y-4 lg:space-y-5 animate-fade-in w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-0">
+          <div className="animate-slide-up flex flex-col md:flex-row justify-between items-start md:items-center w-full gap-3 md:gap-0 mt-1 md:mt-0 mb-3">
+            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between md:justify-start gap-3">
+              <div>
+                <h1 className="text-xl md:text-2xl lg:text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight flex items-center gap-2 flex-wrap">
+                  <span className="text-secondary dark:text-white truncate max-w-[200px] sm:max-w-none">
+                    Olá, {activeUser?.name.split(" ")[0]}
+                  </span>
+                </h1>
+                <p className="text-zinc-500 dark:text-zinc-400 text-xs md:text-sm mt-0.5 font-medium">
+                  Excelência na escala. Propósito no servir.
+                </p>
+              </div>
+
+              {/* For mobile, if the layout was breaking, let's explicitly add a container that ensures visibility */}
+              <div className="flex sm:hidden items-center justify-start gap-3 w-full mt-1">
+                <div className="flex-1">
+                  <WeatherWidget />
+                </div>
+              </div>
             </div>
 
-            {/* For mobile, if the layout was breaking, let's explicitly add a container that ensures visibility */}
-            <div className="flex sm:hidden items-center justify-start gap-3 w-full mt-2">
-              <div className="flex-1">
-                <WeatherWidget />
+            <div
+              className="hidden sm:flex w-full md:w-auto animate-fade-in items-center"
+              style={{ animationDelay: "0.1s" }}
+            >
+              <WeatherWidget />
+            </div>
+          </div>
+
+          {/* PAINEL DE ESTATÍSTICAS */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-3.5 animate-slide-up" style={{ animationDelay: "0.15s" }}>
+            <div className="bg-white dark:bg-zinc-800 p-2.5 sm:p-3 lg:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
+              <CalendarIcon className="text-ministral-500 mb-1 lg:mb-1.5" size={20} />
+              <span className="text-xl lg:text-2xl font-black text-zinc-800 dark:text-white">{eventsThisMonth}</span>
+              <span className="text-[10px] lg:text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Cultos no Mês</span>
+            </div>
+            <div className="bg-white dark:bg-zinc-800 p-2.5 sm:p-3 lg:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
+              <CalendarCheck className="text-secondary mb-1 lg:mb-1.5" size={20} />
+              <span className="text-xl lg:text-2xl font-black text-zinc-800 dark:text-white">{mySchedules}</span>
+              <span className="text-[10px] lg:text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Suas Escalas</span>
+            </div>
+            <div className="bg-white dark:bg-zinc-800 p-2.5 sm:p-3 lg:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
+              <Megaphone className="text-ministral-gold mb-1 lg:mb-1.5" size={20} />
+              <span className="text-xl lg:text-2xl font-black text-zinc-800 dark:text-white">{activeAnnouncements}</span>
+              <span className="text-[10px] lg:text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Avisos Ativos</span>
+            </div>
+            {isAdmin ? (
+              <div className="bg-white dark:bg-zinc-800 p-2.5 sm:p-3 lg:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
+                <AlertTriangle className={emptySchedules > 0 ? "text-red-500 mb-1 lg:mb-1.5" : "text-green-500 mb-1 lg:mb-1.5"} size={20} />
+                <span className="text-xl lg:text-2xl font-black text-zinc-800 dark:text-white">{emptySchedules}</span>
+                <span className="text-[10px] lg:text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Escalas Vazias</span>
+              </div>
+            ) : (
+               <div className="bg-white dark:bg-zinc-800 p-2.5 sm:p-3 lg:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
+                <Crown className="text-purple-500 mb-1 lg:mb-1.5" size={20} />
+                <span className="text-xl lg:text-2xl font-black text-zinc-800 dark:text-white">{ministryConfig.enabledTabs?.length || 0}</span>
+                <span className="text-[10px] lg:text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Módulos</span>
+              </div>
+            )}
+          </div>
+
+          {/* Main Layout: NextEventCard full-width, followed by Announcement & Agenda */}
+          <div className="space-y-4 lg:space-y-5">
+            {/* Próximo Evento / Equipe Escalada (Largura Total para dar mais espaço) */}
+            <div className="animate-slide-up" style={{ animationDelay: "0.2s" }}>
+              <NextEventCard
+                event={nextEvent}
+                schedule={schedule}
+                attendance={attendance}
+                roles={roles}
+                members={publicMembers}
+                config={ministryConfig}
+                onConfirm={async (key) => {
+                  if (nextEvent && nextEvent.event) {
+                    const role = key.split("|").slice(2).join("|") || "";
+                    const memberName = activeUser?.name || "";
+                    setConfirmModalData({
+                      key,
+                      memberName,
+                      eventName: nextEvent.event.title,
+                      date: nextEvent.event.date
+                        .split("-")
+                        .reverse()
+                        .slice(0, 2)
+                        .join("/"),
+                      role,
+                    });
+                  }
+                }}
+                ministryId={ministryId}
+                ministryName={ministryTitle}
+                currentUser={activeUser!}
+              />
+            </div>
+
+            {/* Último Aviso (se houver) */}
+            {lastAnnouncement && (
+              <div
+                onClick={() => setCurrentTab("announcements")}
+                className="bg-ministral-gold/10 border border-ministral-gold/20 p-3 lg:p-3.5 rounded-xl animate-slide-up cursor-pointer hover:bg-ministral-gold/20 transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                style={{ animationDelay: "0.25s" }}
+                title="Clique para ver os avisos"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-1.5 rounded-lg bg-ministral-gold/20 text-ministral-gold flex-shrink-0">
+                    <Megaphone size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-ministral-gold">Último Aviso</span>
+                      <span className="text-zinc-400 dark:text-zinc-600">•</span>
+                      <h4 className="font-bold text-xs lg:text-sm text-zinc-900 dark:text-white truncate">{lastAnnouncement.title}</h4>
+                    </div>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 truncate">{lastAnnouncement.message}</p>
+                  </div>
+                </div>
+                <span className="text-[11px] text-ministral-gold font-bold group-hover:underline whitespace-nowrap self-end sm:self-center">Ver todos avisos →</span>
+              </div>
+            )}
+
+            {/* Card Agenda (Abaixo do Card da Equipe Escalada com Mais Espaço) */}
+            <div className="bg-white dark:bg-zinc-800 p-4 lg:p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up" style={{ animationDelay: "0.3s" }}>
+              <div className="flex items-center justify-between mb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-ministral-500/10 text-ministral-500">
+                    <CalendarDays size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm lg:text-base text-zinc-900 dark:text-white leading-tight">
+                      Agenda
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Próximos cultos e programações
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCurrentTab('calendar')}
+                  className="text-xs text-secondary hover:underline font-bold px-3 py-1.5 rounded-lg hover:bg-secondary/10 transition-colors inline-flex items-center gap-1"
+                >
+                  Ver Todos →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {upcomingEvents.length > 0 ? upcomingEvents.map((ev: any) => (
+                  <div
+                    key={ev.iso}
+                    onClick={() => setCurrentTab('calendar')}
+                    className="flex items-center gap-3 p-3 bg-zinc-50/80 dark:bg-zinc-900/60 hover:bg-zinc-100 dark:hover:bg-zinc-700/60 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer group"
+                  >
+                    <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl w-12 h-12 flex-shrink-0 shadow-xs group-hover:border-ministral-500/40 transition-colors">
+                      <span className="text-[10px] text-ministral-500 font-extrabold uppercase tracking-wider">
+                        {new Date(ev.iso).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
+                      </span>
+                      <span className="text-base font-black text-zinc-800 dark:text-white leading-none mt-0.5">
+                        {ev.iso.split('T')[0].split('-')[2]}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-zinc-900 dark:text-white text-xs sm:text-sm truncate group-hover:text-ministral-500 dark:group-hover:text-ministral-400 transition-colors">
+                        {ev.title}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <Clock size={12} className="text-zinc-400 flex-shrink-0" />
+                        <span>{ev.iso.split('T')[1]?.substring(0,5) || "Horário a definir"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-xs text-zinc-500 py-3 col-span-full text-center">Nenhum evento futuro encontrado.</p>
+                )}
               </div>
             </div>
           </div>
 
-          <div
-            className="hidden sm:flex w-full md:w-auto animate-fade-in items-center"
-            style={{ animationDelay: "0.1s" }}
-          >
-            <WeatherWidget />
+          {/* Seção Inferior: Acesso Rápido & Aniversários */}
+          <div className="flex flex-col gap-4 lg:gap-5 pb-6">
+            {/* Acesso Rápido */}
+            <div className="space-y-2.5 animate-slide-up" style={{ animationDelay: "0.5s" }}>
+              <h3 className="text-[10px] lg:text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                <MousePointerClick size={12} /> Acesso Rápido
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
+                {QUICK_ACTIONS.map((action) => (
+                  <button
+                    key={action.id}
+                    onClick={() => setCurrentTab(action.id)}
+                    className="group relative flex flex-col items-center justify-center p-2.5 lg:p-3 bg-white dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-95 overflow-hidden"
+                  >
+                    <div className={`absolute top-0 left-0 w-full h-0.5 ${action.color} opacity-80`}></div>
+                    <div className={`mb-1.5 p-1.5 rounded-lg ${action.color} text-white shadow-sm transition-transform group-hover:scale-105`}>
+                      {action.icon}
+                    </div>
+                    <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 tracking-tight text-center">
+                      {action.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Birthday Card */}
+            <div className="animate-slide-up" style={{ animationDelay: "0.6s" }}>
+              <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
+            </div>
           </div>
         </div>
-
-        <div className="animate-slide-up" style={{ animationDelay: "0.2s" }}>
-          <NextEventCard
-            event={nextEvent}
-            schedule={schedule}
-            attendance={attendance}
-            roles={roles}
-            members={publicMembers}
-            config={ministryConfig}
-            onConfirm={async (key) => {
-              if (nextEvent && nextEvent.event) {
-                const role = key.split("|").slice(2).join("|") || "";
-                const memberName = activeUser?.name || "";
-                setConfirmModalData({
-                  key,
-                  memberName,
-                  eventName: nextEvent.event.title,
-                  date: nextEvent.event.date
-                    .split("-")
-                    .reverse()
-                    .slice(0, 2)
-                    .join("/"),
-                  role,
-                });
-              }
-            }}
-            ministryId={ministryId}
-            ministryName={ministryTitle}
-            currentUser={activeUser!}
-          />
-        </div>
-
-        <div
-          className="hidden lg:block space-y-4 animate-slide-up"
-          style={{ animationDelay: "0.3s" }}
-        >
-          <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-            <MousePointerClick size={14} /> Acesso Rápido
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {RAW_QUICK_ACTIONS.filter(
-              (action) =>
-                safeEnabledTabs.includes(action.id) || action.id === "history",
-            ).map((action) => (
-              <button
-                key={action.id}
-                onClick={() => setCurrentTab(action.id)}
-                className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-zinc-200/50 dark:hover:shadow-black/50 hover:-translate-y-1 active:scale-95 overflow-hidden"
-              >
-                <div
-                  className={`absolute top-0 left-0 w-full h-1 ${action.color} opacity-80`}
-                ></div>
-                <div
-                  className={`mb-3 p-3 rounded-xl ${action.color} text-white shadow-lg transition-transform group-hover:scale-110`}
-                >
-                  {action.icon}
-                </div>
-                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 tracking-tight">
-                  {action.label}
-                </span>
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ChevronRight size={14} className="text-zinc-400" />
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="animate-slide-up" style={{ animationDelay: "0.4s" }}>
-          <BirthdayCard
-            members={publicMembers}
-            currentMonthIso={currentMonth}
-          />
-        </div>
-      </div>
-    ),
+      );
+    },
     [
       activeUser,
       isRefreshing,
@@ -913,10 +1108,16 @@ const InnerApp = () => {
       roles,
       publicMembers,
       ministryId,
-      RAW_QUICK_ACTIONS,
+      QUICK_ACTIONS,
       safeEnabledTabs,
       setCurrentTab,
       currentMonth,
+      events,
+      announcements,
+      notifications,
+      isAdmin,
+      ministryConfig,
+      ministryTitle,
     ],
   );
 
@@ -1160,7 +1361,6 @@ const InnerApp = () => {
             await Supabase.saveMinistrySettings(
               ministryId,
               orgId!,
-              undefined,
               undefined,
               undefined,
               undefined,

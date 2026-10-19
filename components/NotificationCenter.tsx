@@ -102,16 +102,15 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
 
       // Logic: 
       // 1. If notification is from another ministry, switch ministry first.
-      // 2. Then navigate to the link if present.
-      
-      const isDifferentMinistry = notification.ministryId && notification.ministryId !== ministryId;
+      const isDifferentMinistry = Boolean(notification.ministryId && notification.ministryId !== ministryId);
 
       if (isDifferentMinistry && onSwitchMinistry && notification.ministryId) {
           onSwitchMinistry(notification.ministryId);
       } 
       
-      if (notification.actionLink && onNavigate && !isDifferentMinistry) {
-          onNavigate(notification.actionLink);
+      if (notification.actionLink && onNavigate) {
+          const targetTab = notification.actionLink === 'schedule' ? 'calendar' : notification.actionLink;
+          onNavigate(targetTab);
       }
       
       setIsOpen(false);

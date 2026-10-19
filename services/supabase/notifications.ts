@@ -8,10 +8,13 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         .select('*, organization_ministries(label)')
         .eq('organization_id', orgId);
     
-    // Se não for admin, filtramos apenas pelos ministérios aos quais o usuário tem acesso ou notificações direcionadas a ele
-    if (!isAdmin) {
-        const ids = ministryIds.length > 0 ? ministryIds.join(',') : 'null';
+    const ids = ministryIds.length > 0 ? ministryIds.join(',') : 'null';
+    if (isAdmin) {
+        // Admin: vê todas as notificações do(s) ministério(s) dele OU as diretamente endereçadas a ele
         query = query.or(`ministry_id.in.(${ids}),target_user_id.eq.${userId}`);
+    } else {
+        // Membro comum: vê apenas as do ministério dele que sejam gerais (target null) OU as diretamente endereçadas a ele
+        query = query.or(`and(ministry_id.in.(${ids}),target_user_id.is.null),target_user_id.eq.${userId}`);
     }
     
     const { data: globalNotifs, error: fetchError } = await query
@@ -23,9 +26,17 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     // Fallback para erro de cache de schema
     if (fetchError && (fetchError.code === 'PGRST204' || fetchError.message?.includes('action_link'))) {
         console.warn("[Notifications] Schema cache error on global fetch, retrying basic.");
-        const { data: retryNotifs } = await sb.from('notifications')
-            .select('id, title, message, type, created_at, ministry_id, organization_id, action_link')
-            .eq('organization_id', orgId)
+        let retryQuery = sb.from('notifications')
+            .select('id, title, message, type, created_at, ministry_id, organization_id, action_link, target_user_id')
+            .eq('organization_id', orgId);
+
+        if (isAdmin) {
+            retryQuery = retryQuery.or(`ministry_id.in.(${ids}),target_user_id.eq.${userId}`);
+        } else {
+            retryQuery = retryQuery.or(`and(ministry_id.in.(${ids}),target_user_id.is.null),target_user_id.eq.${userId}`);
+        }
+
+        const { data: retryNotifs } = await retryQuery
             .order('created_at', { ascending: false })
             .limit(30);
         
@@ -113,7 +124,8 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
                 title: notification.title,
                 message: cleanMessage,
                 type: notification.type,
-                actionLink: notification.actionLink
+                actionLink: notification.actionLink,
+                ...(notification.targetUserId ? { userIds: [notification.targetUserId] } : {})
             }
         }).then(({ error }) => {
             if (error) console.warn("[Push Notification] Edge function error:", error);
@@ -128,7 +140,8 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
         title: notification.title,
         message: cleanMessage,
         type: notification.type,
-        action_link: notification.actionLink
+        action_link: notification.actionLink,
+        target_user_id: notification.targetUserId || null
     };
 
     const { error } = await sb.from('notifications').insert(payload);

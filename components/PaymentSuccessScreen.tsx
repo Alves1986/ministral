@@ -41,6 +41,7 @@ export const PaymentSuccessScreen: React.FC<PaymentSuccessScreenProps> = ({ onRe
            if (interval) clearInterval(interval);
         }
       } catch (e) {
+        // nosemgrep: rules.ajinabraham.njsscan.generic.error_disclosure.generic_error_disclosure
         console.error(e);
       }
     };

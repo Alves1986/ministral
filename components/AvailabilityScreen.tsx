@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile, CustomEvent } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert, AlertTriangle, Clock } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -40,6 +40,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState("");
   const [dayModalOpen, setDayModalOpen] = useState<number | null>(null);
   
+  // Modal de justificativa obrigatória
+  const [isJustificationModalOpen, setIsJustificationModalOpen] = useState(false);
+  const [justificationInput, setJustificationInput] = useState("");
+  const [justificationError, setJustificationError] = useState("");
+  
   // Flag para impedir que o Realtime do Supabase sobrescreva um optimistic update em andamento
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   
@@ -51,7 +56,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
   
   const isAdmin = currentUser?.access_role === 'admin';
   const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
-
+  const isFreeMonth = tempDates.includes(`${currentMonth}-FREE`);
+  const hasAbsentDays = isBlockedMonth || tempDates.some(d => d.startsWith(currentMonth) && !d.includes('-FREE'));
   // Calendar Props
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -72,6 +78,25 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (availabilityWindow.end) end = new Date(availabilityWindow.end);
       
       return now >= start && now <= end;
+  }, [availabilityWindow]);
+
+  const deadlineInfo = React.useMemo(() => {
+      if (!availabilityWindow?.end || availabilityWindow.start?.includes('1970')) return null;
+      const end = new Date(availabilityWindow.end);
+      const now = new Date();
+      const diffMs = end.getTime() - now.getTime();
+      if (diffMs <= 0) return { expired: true, isUrgent: false, text: 'Prazo encerrado' };
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      const isUrgent = diffHours <= 48;
+      const formattedEnd = end.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' + end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return {
+          expired: false,
+          isUrgent,
+          text: diffHours < 24 
+              ? `Atenção: o prazo encerra hoje às ${end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}!`
+              : `Prazo para envio: encerra em ${formattedEnd} (${diffDays}d ${diffHours % 24}h restantes)`
+      };
   }, [availabilityWindow]);
 
   const canEdit = isAdmin || isWindowOpenForMembers;
@@ -160,6 +185,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
   };
 
+  const handleToggleFreeMonth = () => {
+      if (!canEdit) return;
+      if (isSaveLocked) return; // Bloqueio visual
+
+      setIsSyncing(true);
+      setSaveState('dirty');
+
+      if (isFreeMonth) {
+          setTempDates([]); 
+      } else {
+          setTempDates([`${currentMonth}-FREE`]);
+      }
+  };
+
   const handleToggleDate = (day: number) => {
       if (!canEdit) {
           addToast("O período de envio está fechado.", "warning");
@@ -179,7 +218,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const morning = `${dateBase}_M`;
       const night = `${dateBase}_N`;
 
-      let newDates = isBlockedMonth ? [] : [...tempDates];
+      let newDates = (isBlockedMonth || isFreeMonth) ? [] : [...tempDates];
       
       const hadFull = newDates.includes(full);
       const hadMorning = newDates.includes(morning);
@@ -215,6 +254,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       setTempDates(prev => {
           let updated = [...prev];
+
+          if (updated.includes(`${currentMonth}-BLK`)) {
+              updated = updated.filter(d => d !== `${currentMonth}-BLK`);
+          }
+          if (updated.includes(`${currentMonth}-FREE`)) {
+              updated = updated.filter(d => d !== `${currentMonth}-FREE`);
+          }
           
           if (updated.includes(dateBase) && isSunday) {
              // If they had full day, and now they toggle one event, ideally we break down the full day into chunks.
@@ -268,13 +314,15 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setSaveState('dirty');
   };
 
-  const handleSave = async () => {
+  const executeSave = async (noteToSave?: string) => {
       if (!selectedMemberId) return;
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
       setIsSyncing(true);
       setSaveState('saving');
+
+      const finalNote = typeof noteToSave === 'string' ? noteToSave : generalNote;
 
       try {
           // --- 1. MERGE DE DATAS ---
@@ -298,8 +346,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
               }
           });
 
-          if (generalNote.trim()) {
-              consolidatedNotes[currentNoteKey] = generalNote.trim();
+          if (finalNote.trim()) {
+              consolidatedNotes[currentNoteKey] = finalNote.trim();
           }
 
           // 4. Envia payload consolidado (USANDO ID)
@@ -323,8 +371,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
-          // Mantemos isSyncing = true para que o useEffect de verificação
-          // aguarde a chegada das props atualizadas do backend.
+          addToast("Indisponibilidade salva com sucesso!", "success");
           
       } catch (error: unknown) {
           console.error(error);
@@ -333,6 +380,33 @@ export const AvailabilityScreen: React.FC<Props> = ({
           const msg = error instanceof Error ? error.message : "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
       }
+  };
+
+  const handleTriggerSave = () => {
+      if (!selectedMemberId) return;
+      if (isSaveLocked) return;
+
+      // Se houver dias ausentes (ou mês bloqueado), solicita justificativa antes de salvar
+      if (hasAbsentDays) {
+          setJustificationInput(generalNote || "");
+          setJustificationError("");
+          setIsJustificationModalOpen(true);
+          return;
+      }
+
+      // Se não há ausências (disponível todo o mês), salva diretamente
+      executeSave();
+  };
+
+  const handleConfirmJustificationAndSave = () => {
+      const trimmed = justificationInput.trim();
+      if (!trimmed || trimmed.length < 3) {
+          setJustificationError("Por favor, preencha o motivo/justificativa da sua ausência para prosseguir.");
+          return;
+      }
+      setGeneralNote(trimmed);
+      setIsJustificationModalOpen(false);
+      executeSave(trimmed);
   };
 
   const getDayStatus = (day: number) => {
@@ -369,10 +443,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
             <div>
                 <h2 className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                    <CheckCircle2 className="text-secondary dark:text-white"/> Minha Disponibilidade
+                    <CheckCircle2 className="text-secondary dark:text-white"/> Minha Indisponibilidade
                 </h2>
                 <p className="text-zinc-500 text-xs md:text-sm mt-1">
-                    Toque nos dias para marcar (Dom: Dia/Manhã/Noite).
+                    Toque nos dias que você NÃO poderá participar (Dom: Dia/Manhã/Noite).
                 </p>
             </div>
             
@@ -440,7 +514,17 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 <Lock size={20} className="shrink-0" />
                 <div>
                     <p className="font-bold text-xs md:text-sm">Edição Encerrada</p>
-                    <p className="text-[10px] md:text-xs opacity-80">O prazo para envio de disponibilidade já terminou. Contate a liderança.</p>
+                    <p className="text-[10px] md:text-xs opacity-80">O prazo para envio de ausências já terminou. Contate a liderança.</p>
+                </div>
+            </div>
+        )}
+
+        {isWindowOpenForMembers && deadlineInfo?.isUrgent && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center gap-3 text-amber-800 dark:text-amber-200 animate-slide-up">
+                <Clock size={20} className="shrink-0 text-amber-600 dark:text-amber-400 animate-pulse" />
+                <div>
+                    <p className="font-bold text-xs md:text-sm">Atenção ao Prazo de Apontamento de Ausências!</p>
+                    <p className="text-[10px] md:text-xs opacity-90">{deadlineInfo.text}</p>
                 </div>
             </div>
         )}
@@ -448,38 +532,62 @@ export const AvailabilityScreen: React.FC<Props> = ({
         {/* Calendar Area */}
         <div className={`transition-opacity duration-300 ${!canEdit ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
             
-            {/* Block Month Toggle */}
-            <button 
-                onClick={handleToggleBlockMonth}
-                className={`w-full mb-4 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                    isBlockedMonth 
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-600 dark:text-red-400'
-                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700'
-                }`}
-            >
-                <Ban size={16} />
-                <span className="text-xs md:text-sm font-bold">
-                    {isBlockedMonth ? 'MÊS BLOQUEADO (Toque para liberar)' : 'Marcar mês inteiro como indisponível'}
-                </span>
-            </button>
+            {/* Block Month and Free Month Toggles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <button 
+                    onClick={handleToggleBlockMonth}
+                    className={`w-full py-2 px-3 rounded-lg border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                        isBlockedMonth 
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-600 dark:text-red-400'
+                        : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    }`}
+                >
+                    <Ban size={15} />
+                    <span className="text-xs sm:text-sm font-bold">
+                        {isBlockedMonth ? 'MÊS INDISPONÍVEL' : 'Marcar mês indisponível'}
+                    </span>
+                </button>
 
-            <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
+                <button 
+                    onClick={handleToggleFreeMonth}
+                    className={`w-full py-2 px-3 rounded-lg border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                        isFreeMonth 
+                        ? 'bg-secondary/10 dark:bg-secondary/20 border-secondary text-secondary dark:text-secondary'
+                        : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    }`}
+                >
+                    <CheckCircle2 size={15} />
+                    <span className="text-xs sm:text-sm font-bold">
+                        {isFreeMonth ? 'MÊS 100% DISPONÍVEL' : 'Marcar mês disponível'}
+                    </span>
+                </button>
+            </div>
+
+            <div className={`bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-4 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
                 
                 {isBlockedMonth && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-4 rounded-2xl border border-red-200 dark:border-red-900 shadow-xl">
-                            <p className="text-red-500 font-bold text-sm flex items-center gap-2"><Ban size={16}/> Indisponível este mês</p>
+                        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-3 rounded-xl border border-red-200 dark:border-red-900 shadow-xl">
+                            <p className="text-red-500 font-bold text-xs sm:text-sm flex items-center gap-2"><Ban size={15}/> Indisponível este mês</p>
+                        </div>
+                    </div>
+                )}
+                
+                {isFreeMonth && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-3 rounded-xl border border-secondary/20 dark:border-secondary/30 shadow-xl">
+                            <p className="text-secondary font-bold text-xs sm:text-sm flex items-center gap-2"><CheckCircle2 size={15}/> 100% Disponível este mês</p>
                         </div>
                     </div>
                 )}
 
-                <div className="grid grid-cols-7 gap-1 mb-2">
+                <div className="grid grid-cols-7 gap-1 mb-1.5">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
-                        <div key={`${d}-${i}`} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-1">{d}</div>
+                        <div key={`${d}-${i}`} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-0.5">{d}</div>
                     ))}
                 </div>
                 
-                <div className="grid grid-cols-7 gap-1 md:gap-3">
+                <div className="grid grid-cols-7 gap-1 md:gap-2">
                     {blanks.map((_, i) => <div key={`blank-${i}`} />)}
                     {days.map(day => {
                         const status = getDayStatus(day);
@@ -500,26 +608,26 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         let content = <span className="text-xs md:text-sm font-bold">{day}</span>;
 
                         if (status === 'full') {
-                            btnClass = "bg-secondary text-white border-secondaryHover shadow-sm";
+                            btnClass = "bg-red-500 text-white border-red-600 shadow-sm";
                             content = (
                                 <>
-                                    <CheckCircle2 size={12} className="mb-0.5 md:mb-1" />
+                                    <Ban size={12} className="mb-0.5" />
                                     <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
                                 </>
                             );
                         } else if (status === 'morning') {
-                            btnClass = "bg-ministral-gold text-white border-ministral-gold shadow-sm";
+                            btnClass = "bg-amber-600 text-white border-amber-600 shadow-sm";
                             content = (
                                 <>
-                                    <Sun size={12} className="mb-0.5 md:mb-1" />
-                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                    <Ban size={12} className="mb-0.5" />
+                                    <span className="text-[10px] md:text-xs font-bold leading-none">M</span>
                                 </>
                             );
                         } else if (status === 'night') {
-                            btnClass = "bg-ministral-600 text-white border-ministral-600 shadow-sm";
+                            btnClass = "bg-rose-600 text-white border-rose-600 shadow-sm";
                             content = (
                                 <>
-                                    <Moon size={12} className="mb-0.5 md:mb-1" />
+                                    <Moon size={12} className="mb-0.5" />
                                     <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
                                 </>
                             );
@@ -527,7 +635,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             btnClass = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
                             content = (
                                 <>
-                                    <CheckCircle2 size={12} className="mb-0.5 md:mb-1" />
+                                    <CheckCircle2 size={12} className="mb-0.5" />
                                     <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
                                 </>
                             );
@@ -536,7 +644,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         let dots = null;
                         if (dayEvents.length > 0) {
                             dots = (
-                                <div className="flex gap-1 mt-1 flex-wrap justify-center max-w-[80%]">
+                                <div className="flex gap-1 mt-0.5 flex-wrap justify-center max-w-[80%]">
                                     {dayEvents.map(e => <div key={e.id} className={`w-1.5 h-1.5 rounded-full ${getEventColor(e.title)} ${status !== 'none' ? 'ring-1 ring-white/50' : ''}`} title={e.title} />)}
                                 </div>
                             );
@@ -565,30 +673,36 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     })}
                 </div>
 
-                <div className="flex flex-wrap gap-2 md:gap-4 mt-6 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2 md:p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                <div className="flex flex-wrap gap-2 md:gap-3 mt-4 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800">
                     <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-secondary shadow-sm"></div> Livre
+                        <div className="w-2.5 h-2.5 rounded-full bg-secondary shadow-sm"></div> Indisponível (Dia)
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-gold shadow-sm"></div> Manhã
+                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-gold shadow-sm"></div> Indisponível (Manhã)
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-600 shadow-sm"></div> Noite
+                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-600 shadow-sm"></div> Indisponível (Noite)
                     </div>
                 </div>
             </div>
 
-            {/* Notes */}
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 mt-4">
-                <div className="flex items-center gap-2 mb-2">
-                    <FileText size={16} className="text-zinc-400" />
-                    <h3 className="text-xs md:text-sm font-bold text-zinc-700 dark:text-zinc-300">Observações (Opcional)</h3>
+            {/* Notes / Justificativa */}
+            <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 sm:p-3.5 mt-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                    <FileText size={15} className={hasAbsentDays ? "text-amber-500" : "text-zinc-400"} />
+                    <h3 className="text-xs md:text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                        Justificativa da Ausência {hasAbsentDays ? <span className="text-amber-600 dark:text-amber-400 text-[11px] font-normal">(Obrigatório ao marcar ausências)</span> : <span className="text-zinc-400 text-[11px] font-normal">(Opcional)</span>}
+                    </h3>
                 </div>
                 <textarea 
                     value={generalNote}
                     onChange={handleNoteChange}
-                    placeholder="Ex: Chego atrasado no dia 15..."
-                    className="w-full h-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-xs md:text-sm focus:ring-2 focus:ring-secondary outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
+                    placeholder={hasAbsentDays ? "Informe a justificativa da sua ausência para a liderança..." : "Observações gerais (opcional)..."}
+                    className={`w-full h-14 bg-zinc-50 dark:bg-zinc-900 border rounded-lg p-2.5 text-xs md:text-sm focus:ring-2 focus:ring-secondary outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200 ${
+                        hasAbsentDays && !generalNote.trim() 
+                            ? 'border-amber-300 dark:border-amber-700/60' 
+                            : 'border-zinc-200 dark:border-zinc-700'
+                    }`}
                     disabled={!canEdit}
                 />
             </div>
@@ -607,7 +721,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-1">
                         Dia {String(dayModalOpen).padStart(2, '0')}
                     </h3>
-                    <p className="text-sm text-zinc-500 mb-6">Confirme sua disponibilidade para os eventos listados.</p>
+                    <p className="text-sm text-zinc-500 mb-6">Confirme sua ausência para os eventos listados.</p>
                     
                     <div className="space-y-3">
                         {events.filter(e => e.iso.startsWith(`${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`)).map(ev => {
@@ -648,18 +762,48 @@ export const AvailabilityScreen: React.FC<Props> = ({
                                         }}
                                         className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
                                             isAvailable 
-                                            ? 'bg-secondary text-white' 
+                                            ? 'bg-red-500 text-white' 
                                             : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-300 dark:hover:bg-zinc-600'
                                         }`}
                                     >
-                                        {isAvailable ? '✔ Selecionado' : 'Marcar'}
+                                        {isAvailable ? '❌ Ausente' : 'Marcar Ausência'}
                                     </button>
                                 </div>
                             );
                         })}
                     </div>
 
-                    <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                    <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => {
+                                    if (isSaveLocked) return;
+                                    const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                                    setIsSyncing(true);
+                                    setSaveState('dirty');
+                                    setTempDates(prev => {
+                                        let updated = prev.filter(d => !d.startsWith(dateBase));
+                                        updated.push(dateBase);
+                                        return updated;
+                                    });
+                                }}
+                                className="py-2.5 rounded-xl text-secondary dark:text-white font-bold text-sm bg-secondary/10 dark:bg-secondary/5 hover:bg-secondary/20 dark:hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2 border border-secondary/20 dark:border-secondary/30"
+                            >
+                                <Check size={14} /> Marcar todos
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (isSaveLocked) return;
+                                    const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                                    setIsSyncing(true);
+                                    setSaveState('dirty');
+                                    setTempDates(prev => prev.filter(d => !d.startsWith(dateBase)));
+                                }}
+                                className="py-2.5 rounded-xl text-red-500 dark:text-red-400 font-bold text-sm bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2 border border-red-200 dark:border-red-800/30"
+                            >
+                                <Ban size={14} /> Limpar dia
+                            </button>
+                        </div>
                         <button 
                             onClick={() => {
                                 handleToggleDate(dayModalOpen);
@@ -676,6 +820,73 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     >
                         OK
                     </button>
+                </div>
+            </div>
+        )}
+
+        {/* Modal de Justificativa de Ausência Obrigatória */}
+        {isJustificationModalOpen && (
+            <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border border-zinc-200 dark:border-zinc-800 animate-scale-up">
+                    <div className="flex items-start gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-500">
+                            <AlertTriangle size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-zinc-900 dark:text-white leading-tight">
+                                Justificativa da Ausência
+                            </h3>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                                {isBlockedMonth 
+                                    ? "Você marcou o mês inteiro como bloqueado." 
+                                    : "Você marcou dias de ausência neste mês."}
+                                {" "}Por favor, informe o motivo para que a coordenação da escala possa se organizar:
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
+                            Motivo / Justificativa <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            autoFocus
+                            value={justificationInput}
+                            onChange={(e) => {
+                                setJustificationInput(e.target.value);
+                                if (justificationError) setJustificationError("");
+                            }}
+                            placeholder="Ex: Viagem a trabalho, consulta médica, compromisso inadiável..."
+                            rows={3}
+                            className={`w-full bg-zinc-50 dark:bg-zinc-950 border rounded-2xl p-3.5 text-sm outline-none transition-all placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-100 ${
+                                justificationError 
+                                    ? "border-red-500 focus:ring-2 focus:ring-red-500/20" 
+                                    : "border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-secondary"
+                            }`}
+                        />
+                        {justificationError && (
+                            <p className="text-xs text-red-500 font-medium">
+                                {justificationError}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2.5 mt-5">
+                        <button
+                            type="button"
+                            onClick={() => setIsJustificationModalOpen(false)}
+                            className="flex-1 py-3 rounded-xl font-bold text-xs bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors"
+                        >
+                            Voltar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirmJustificationAndSave}
+                            className="flex-1 py-3 rounded-xl font-bold text-xs bg-secondary hover:bg-secondaryHover text-white shadow-lg shadow-secondary/20 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                        >
+                            <Save size={14} /> Confirmar e Salvar
+                        </button>
+                    </div>
                 </div>
             </div>
         )}
@@ -702,7 +913,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 
                 {saveState !== 'saved' && (
                     <button 
-                        onClick={handleSave}
+                        onClick={handleTriggerSave}
                         disabled={saveState === 'saving'}
                         className="bg-secondary hover:bg-secondaryHover text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-secondary/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed group"
                     >

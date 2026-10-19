@@ -399,12 +399,12 @@ export function useMinistryData(
   }, [mid, currentMonth, queryClient, orgId]);
 
   const events = useMemo(() => {
-    const schedule = assignmentsQuery.data?.schedule || {};
+    const rawSchedule = assignmentsQuery.data?.schedule || {};
     return generatedEvents
       .filter((gen) => {
         // Chave de exclusão: ruleId|date|role
         const exclusionKey = `${gen.ruleId}|${gen.date}|__EVENT_EXCLUDED__`;
-        return !schedule[exclusionKey];
+        return !rawSchedule[exclusionKey];
       })
       .map((gen) => ({
         id: gen.id,
@@ -427,8 +427,23 @@ export function useMinistryData(
       roles: cleanRoles,
       rawRoles,
       expandedRoles,
-      schedule: assignmentsQuery.data?.schedule || {},
-      attendance: assignmentsQuery.data?.attendance || {},
+      schedule: (() => {
+        const rawSchedule = assignmentsQuery.data?.schedule || {};
+        const isMonthPublished = rawSchedule[`PUBLISHED_FLAG|${currentMonth}-01|__PUBLISHED__`] === "__PUBLISHED__";
+        if (isAdminFlag || isMonthPublished) return rawSchedule;
+        
+        // Mantém apenas os eventos excluídos para que não apareçam no calendário
+        const filtered: Record<string, string> = {};
+        for (const [key, value] of Object.entries(rawSchedule)) {
+            if (value === '__EXCLUDED__') filtered[key] = value;
+        }
+        return filtered;
+      })(),
+      attendance: (() => {
+        const rawSchedule = assignmentsQuery.data?.schedule || {};
+        const isMonthPublished = rawSchedule[`PUBLISHED_FLAG|${currentMonth}-01|__PUBLISHED__`] === "__PUBLISHED__";
+        return (isAdminFlag || isMonthPublished) ? (assignmentsQuery.data?.attendance || {}) : {};
+      })(),
       membersMap: membersQuery.data?.memberMap || {},
       publicMembers: membersQuery.data?.publicList || [],
       availability: availabilityV2.availability, // ID-Based

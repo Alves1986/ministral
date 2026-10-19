@@ -429,31 +429,31 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
     const getMemberName = (id: string) => members.find(m => m.id === id)?.name || 'Membro desconhecido';
 
     return (
-        <div className="space-y-8 animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+        <div className="space-y-4 sm:space-y-5 animate-fade-in pb-16">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-3">
                 <div>
-                    <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
-                        <ShieldCheck className="text-secondary" size={32} /> Regras de Escala
+                    <h2 className="text-xl sm:text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                        <ShieldCheck className="text-secondary" size={24} /> Regras de Escala
                     </h2>
-                    <p className="text-zinc-500 dark:text-zinc-400 mt-2">
+                    <p className="text-zinc-500 dark:text-zinc-400 text-xs sm:text-sm mt-0.5">
                         Configure bloqueios entre funções, exceções e preferências entre membros.
                     </p>
                 </div>
             </div>
 
             {/* SEÇÃO: FUNÇÕES OPCIONAIS POR EVENTO */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
-                    <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                        <CalendarX size={20} className="text-amber-500" /> Funções Opcionais por Evento
+            <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="p-3.5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
+                    <h3 className="text-base font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                        <CalendarX size={18} className="text-amber-500" /> Funções Opcionais por Evento
                     </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         Defina quais funções a IA <strong>não deve preencher</strong> em eventos específicos (ex: não há câmera no Culto de Oração).
                     </p>
                 </div>
 
-                <div className="p-6 space-y-6">
-                    <div className="flex flex-col lg:flex-row items-end gap-3 bg-zinc-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <div className="p-3.5 sm:p-4 space-y-4">
+                    <div className="flex flex-col lg:flex-row items-end gap-2.5 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                         <div className="flex-1 w-full">
                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Evento / Tipo de Culto</label>
                             <select
@@ -537,24 +537,24 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
             </section>
 
             {/* SEÇÃO 1: REGRAS ENTRE MEMBROS (NOVO) */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
-                    <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+            <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="p-3.5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
+                    <h3 className="text-base font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                         Regras entre Membros (Casais / Bloqueios)
                     </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         Defina membros que devem ser escalados juntos (preferência) ou que não podem estar na mesma escala.
                     </p>
                 </div>
 
-                <div className="p-6 space-y-6">
-                    <div className="flex flex-col lg:flex-row items-end gap-3 bg-zinc-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <div className="p-3.5 sm:p-4 space-y-4">
+                    <div className="flex flex-col lg:flex-row items-end gap-2.5 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                         <div className="w-full lg:w-48">
                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Tipo de Regra</label>
                             <select
                                 value={newMemberRuleType}
                                 onChange={(e) => setNewMemberRuleType(e.target.value as any)}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                             >
                                 <option value="block_members">Bloquear Juntos</option>
                                 <option value="prefer_together">Escalar Juntos (Casal)</option>
@@ -565,7 +565,7 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                             <select
                                 value={selectedMemberA}
                                 onChange={(e) => setSelectedMemberA(e.target.value)}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                             >
                                 <option value="">Selecione...</option>
                                 {members.map(m => (
@@ -573,13 +573,13 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                                 ))}
                             </select>
                         </div>
-                        <div className="pb-3 text-zinc-400 font-bold hidden lg:block">+</div>
+                        <div className="pb-2 text-zinc-400 font-bold hidden lg:block">+</div>
                         <div className="flex-1 w-full">
                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Membro B</label>
                             <select
                                 value={selectedMemberB}
                                 onChange={(e) => setSelectedMemberB(e.target.value)}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                             >
                                 <option value="">Selecione...</option>
                                 {members.map(m => (
@@ -589,112 +589,112 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         </div>
                         <button
                             onClick={handleCreateMemberRule}
-                            className="w-full lg:w-auto px-6 py-2.5 bg-secondary hover:bg-secondaryHover text-white rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
+                            className="w-full lg:w-auto px-4 py-2 bg-secondary hover:bg-secondaryHover text-white rounded-lg font-bold text-xs sm:text-sm transition-colors shadow-sm whitespace-nowrap"
                         >
                             Salvar Regra
                         </button>
                     </div>
 
                     {memberRules.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">
                             {memberRules.map(rule => (
-                                <div key={rule.id} className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-lg ${rule.rule_type === 'prefer_together' ? 'bg-pink-50 dark:bg-pink-900/20 text-pink-600' : 'bg-red-50 dark:bg-red-900/20 text-red-600'}`}>
-                                            {rule.rule_type === 'prefer_together' ? <Heart size={18} /> : <UserMinus size={18} />}
+                                <div key={rule.id} className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 shadow-sm">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={`p-1.5 rounded-lg ${rule.rule_type === 'prefer_together' ? 'bg-pink-50 dark:bg-pink-900/20 text-pink-600' : 'bg-red-50 dark:bg-red-900/20 text-red-600'}`}>
+                                            {rule.rule_type === 'prefer_together' ? <Heart size={16} /> : <UserMinus size={16} />}
                                         </div>
                                         <div>
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{getMemberName(rule.functions[0])}</span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-bold text-xs sm:text-sm text-zinc-800 dark:text-zinc-200">{getMemberName(rule.functions[0])}</span>
                                                 <span className="text-zinc-400 text-xs font-bold">&</span>
-                                                <span className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{getMemberName(rule.functions[1])}</span>
+                                                <span className="font-bold text-xs sm:text-sm text-zinc-800 dark:text-zinc-200">{getMemberName(rule.functions[1])}</span>
                                             </div>
-                                            <p className="text-[10px] uppercase font-black tracking-widest mt-1 opacity-60">
+                                            <p className="text-[9px] uppercase font-black tracking-widest mt-0.5 opacity-60">
                                                 {rule.rule_type === 'prefer_together' ? 'Preferência (Juntos)' : 'Bloqueio (Separados)'}
                                             </p>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => handleDeleteRule(rule.id)}
-                                        className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 p-2 rounded-lg transition-colors ml-2 shrink-0"
+                                        className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 p-1.5 rounded-lg transition-colors ml-2 shrink-0"
                                         title="Remover regra"
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={15} />
                                     </button>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 flex flex-col items-center gap-3">
-                            <Users size={48} className="opacity-20" />
-                            <p>Nenhuma regra entre membros configurada.</p>
+                        <div className="text-center py-6 text-zinc-500 dark:text-zinc-400 flex flex-col items-center gap-2">
+                            <Users size={36} className="opacity-20" />
+                            <p className="text-xs sm:text-sm">Nenhuma regra entre membros configurada.</p>
                         </div>
                     )}
                 </div>
             </section>
 
             {/* SEÇÃO 2: GRUPOS BLOQUEADOS */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/30">
+            <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="p-3.5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/30">
                     <div>
-                        <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                        <h3 className="text-base font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                             Grupos de Bloqueio
                         </h3>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                             Membros não poderão ser escalados em mais de uma função do mesmo grupo.
                         </p>
                     </div>
                     <button
                         onClick={handleCreateBlockGroup}
-                        className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondaryHover text-white rounded-xl font-bold text-sm transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondaryHover text-white rounded-lg font-bold text-xs sm:text-sm transition-colors shadow-sm"
                     >
-                        <Plus size={16} /> Novo Grupo
+                        <Plus size={15} /> Novo Grupo
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-3.5 sm:p-4 space-y-4">
                     {blockGroups.length === 0 ? (
-                        <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 flex flex-col items-center gap-3">
-                            <ShieldCheck size={48} className="opacity-20" />
-                            <p>Nenhum grupo de bloqueio configurado.</p>
+                        <div className="text-center py-6 text-zinc-500 dark:text-zinc-400 flex flex-col items-center gap-2">
+                            <ShieldCheck size={36} className="opacity-20" />
+                            <p className="text-xs sm:text-sm">Nenhum grupo de bloqueio configurado.</p>
                         </div>
                     ) : (
                         blockGroups.map(group => (
-                            <div key={group.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 bg-zinc-50/30 dark:bg-zinc-800/10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <h4 className="font-bold text-zinc-700 dark:text-zinc-300">
+                            <div key={group.id} className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 sm:p-3.5 bg-zinc-50/30 dark:bg-zinc-800/10">
+                                <div className="flex justify-between items-start mb-2.5">
+                                    <h4 className="font-bold text-xs sm:text-sm text-zinc-700 dark:text-zinc-300">
                                         {group.label || 'Grupo de Bloqueio'}
                                     </h4>
                                     <button
                                         onClick={() => handleDeleteRule(group.id)}
-                                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 p-1.5 rounded-lg transition-colors"
+                                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 p-1 rounded-md transition-colors"
                                         title="Excluir grupo"
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={15} />
                                     </button>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2 mb-4">
+                                <div className="flex flex-wrap gap-1.5 mb-2.5">
                                     {group.functions && group.functions.length > 0 ? (
                                         group.functions.map(func => (
-                                            <div key={func} className="flex items-center gap-1.5 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-lg text-sm font-medium">
+                                            <div key={func} className="flex items-center gap-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2.5 py-1 rounded-md text-xs font-medium">
                                                 {func}
                                                 <button
                                                     onClick={() => handleRemoveFunctionFromGroup(group.id, group.functions, func)}
-                                                    className="text-zinc-400 hover:text-red-500 transition-colors ml-1"
+                                                    className="text-zinc-400 hover:text-red-500 transition-colors ml-0.5"
                                                 >
-                                                    <X size={14} />
+                                                    <X size={13} />
                                                 </button>
                                             </div>
                                         ))
                                     ) : (
-                                        <span className="text-sm text-zinc-400 italic">Nenhuma função neste grupo.</span>
+                                        <span className="text-xs text-zinc-400 italic">Nenhuma função neste grupo.</span>
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                                <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-zinc-200 dark:border-zinc-800">
                                     <select
-                                        className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                        className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                                         onChange={(e) => {
                                             if (e.target.value) {
                                                 handleAddFunctionToGroup(group.id, group.functions || [], e.target.value);
@@ -719,24 +719,24 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
             </section>
 
             {/* SEÇÃO 3: EXCEÇÕES PERMITIDAS */}
-            <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
-                    <h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+            <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="p-3.5 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
+                    <h3 className="text-base font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                         Exceções Permitidas
                     </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         Combinações específicas de funções que são permitidas, mesmo se estiverem no mesmo grupo de bloqueio.
                     </p>
                 </div>
 
-                <div className="p-6 space-y-6">
-                    <div className="flex flex-col sm:flex-row items-end gap-3 bg-zinc-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <div className="p-3.5 sm:p-4 space-y-4">
+                    <div className="flex flex-col sm:flex-row items-end gap-2.5 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                         <div className="flex-1 w-full">
                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Função A</label>
                             <select
                                 value={newExceptionRoleA}
                                 onChange={(e) => setNewExceptionRoleA(e.target.value)}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                             >
                                 <option value="">Selecione...</option>
                                 {availableRoles.map(role => (
@@ -744,13 +744,13 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                                 ))}
                             </select>
                         </div>
-                        <div className="pb-3 text-zinc-400 font-bold hidden sm:block">+</div>
+                        <div className="pb-2 text-zinc-400 font-bold hidden sm:block">+</div>
                         <div className="flex-1 w-full">
                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Função B</label>
                             <select
                                 value={newExceptionRoleB}
                                 onChange={(e) => setNewExceptionRoleB(e.target.value)}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 focus:ring-2 focus:ring-secondary outline-none"
                             >
                                 <option value="">Selecione...</option>
                                 {availableRoles.map(role => (
@@ -760,31 +760,31 @@ export const ScheduleRulesScreen: React.FC<ScheduleRulesScreenProps> = ({ minist
                         </div>
                         <button
                             onClick={handleCreateException}
-                            className="w-full sm:w-auto px-6 py-2.5 bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
+                            className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white rounded-lg font-bold text-xs sm:text-sm transition-colors shadow-sm whitespace-nowrap"
                         >
                             Salvar Exceção
                         </button>
                     </div>
 
                     {allowExceptions.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">
                             {allowExceptions.map(exc => (
-                                <div key={exc.id} className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-sm">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="bg-secondary/10 dark:bg-secondary/5 text-secondary px-2.5 py-1 rounded-md text-xs font-bold border border-secondary/20">
+                                <div key={exc.id} className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="bg-secondary/10 dark:bg-secondary/5 text-secondary px-2 py-0.5 rounded text-xs font-bold border border-secondary/20">
                                             {exc.functions[0]}
                                         </span>
                                         <span className="text-zinc-400 text-xs font-bold">+</span>
-                                        <span className="bg-secondary/10 dark:bg-secondary/5 text-secondary px-2.5 py-1 rounded-md text-xs font-bold border border-secondary/20">
+                                        <span className="bg-secondary/10 dark:bg-secondary/5 text-secondary px-2 py-0.5 rounded text-xs font-bold border border-secondary/20">
                                             {exc.functions[1]}
                                         </span>
                                     </div>
                                     <button
                                         onClick={() => handleDeleteRule(exc.id)}
-                                        className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 p-1.5 rounded-lg transition-colors ml-2 shrink-0"
+                                        className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 p-1 rounded-md transition-colors ml-2 shrink-0"
                                         title="Remover exceção"
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={15} />
                                     </button>
                                 </div>
                             ))}

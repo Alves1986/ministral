@@ -197,14 +197,14 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   return (
     <div className="animate-fade-in max-w-4xl mx-auto pb-12 overflow-hidden">
       
-      <div className="relative bg-white dark:bg-zinc-800 rounded-3xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-6">
-          <div className="h-28 md:h-32 bg-gradient-to-r from-ministral-600 via-ministral-500 to-ministral-dark relative">
+      <div className="relative bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-4">
+          <div className="h-20 md:h-24 bg-gradient-to-r from-ministral-600 via-ministral-500 to-ministral-dark relative">
               <div className="absolute inset-0 bg-black/10"></div>
-              <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-black/20 to-transparent"></div>
+              <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-black/20 to-transparent"></div>
           </div>
 
-          <div className="px-6 pb-6 relative">
-              <div className="flex flex-col md:flex-row items-center md:items-end gap-4 -mt-10 md:-mt-12 mb-4">
+          <div className="px-4 pb-4 relative">
+              <div className="flex flex-col md:flex-row items-center md:items-end gap-3 -mt-8 md:-mt-10 mb-2">
                   <div 
                     role="button"
                     tabIndex={0}
@@ -218,18 +218,18 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                     }}
                     className="relative group cursor-pointer shrink-0"
                   >
-                      <div className="w-20 h-20 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-3 border-white dark:border-zinc-800 shadow-lg bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
                         {avatar ? (
                           <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
-                            <UserIcon size={40} />
+                            <UserIcon size={28} />
                           </div>
                         )}
                       </div>
                       
                       <div className="absolute inset-0 z-20 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity backdrop-blur-[2px]">
-                        <Camera className="text-white drop-shadow-md" size={28} />
+                        <Camera className="text-white drop-shadow-md" size={20} />
                       </div>
                   </div>
                   <input 
@@ -241,12 +241,12 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                     className="hidden" 
                   />
 
-                  <div className="flex-1 text-center md:text-left mb-2 w-full">
-                      <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2 truncate">
+                  <div className="flex-1 text-center md:text-left mb-1 w-full">
+                      <h1 className="text-lg md:text-xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2 truncate">
                           {user.name} 
-                          {user.access_role === 'admin' && <Shield size={16} className="text-ministral-500 dark:text-white fill-ministral-500/20"/>}
+                          {user.access_role === 'admin' && <Shield size={15} className="text-ministral-500 dark:text-white fill-ministral-500/20"/>}
                       </h1>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-xs md:text-sm font-medium">
+                      <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
                           {user.access_role === 'admin' ? 'Administrador do Sistema' : 'Membro da Equipe'}
                       </p>
                   </div>
@@ -254,20 +254,20 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-5 flex items-center gap-2">
-                      <UserIcon size={16}/> Dados Pessoais
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 space-y-4">
+              <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                  <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <UserIcon size={15}/> Dados Pessoais
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-0.5">
                               Nome Completo <span className="text-red-500">*</span>
                           </label>
                           <div className="relative group">
-                              <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${fieldErrors.name ? 'text-red-500' : 'text-zinc-400 group-focus-within:text-ministral-500'}`} size={18} />
+                              <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${fieldErrors.name ? 'text-red-500' : 'text-zinc-400 group-focus-within:text-ministral-500'}`} size={16} />
                               <input 
                                   type="text" 
                                   value={name} 
@@ -275,7 +275,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                   onBlur={() => validateField('name', name)}
                                   aria-invalid={!!fieldErrors.name}
                                   aria-describedby={fieldErrors.name ? 'error-name' : undefined}
-                                  className={`w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border rounded-xl focus:ring-2 focus:ring-ministral-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400 ${
+                                  className={`w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-900/50 border rounded-lg focus:ring-2 focus:ring-ministral-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-medium placeholder:text-zinc-400 ${
                                       fieldErrors.name ? 'border-red-500 dark:border-red-500' : 'border-zinc-200 dark:border-zinc-700/50'
                                   }`}
                               />
@@ -283,12 +283,12 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                           {fieldErrors.name && <p id="error-name" className="text-xs text-red-500 mt-1" role="alert">{fieldErrors.name}</p>}
                       </div>
 
-                      <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1 flex items-center justify-between">
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-0.5 flex items-center justify-between">
                               WhatsApp
                           </label>
                           <div className="relative group">
-                              <MessageCircle className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${fieldErrors.whatsapp ? 'text-red-500' : 'text-zinc-400 group-focus-within:text-emerald-500'}`} size={18} />
+                              <MessageCircle className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${fieldErrors.whatsapp ? 'text-red-500' : 'text-zinc-400 group-focus-within:text-emerald-500'}`} size={16} />
                               <input 
                                   type="text" 
                                   value={whatsapp} 
@@ -305,7 +305,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                   onBlur={() => validateField('whatsapp', whatsapp)}
                                   aria-invalid={!!fieldErrors.whatsapp}
                                   aria-describedby={fieldErrors.whatsapp ? 'error-whatsapp' : undefined}
-                                  className={`w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400 ${
+                                  className={`w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-900/50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-medium placeholder:text-zinc-400 ${
                                       fieldErrors.whatsapp ? 'border-red-500 dark:border-red-500' : 'border-zinc-200 dark:border-zinc-700/50'
                                   }`}
                               />
@@ -313,27 +313,27 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                           {fieldErrors.whatsapp && <p id="error-whatsapp" className="text-xs text-red-500 mt-1" role="alert">{fieldErrors.whatsapp}</p>}
                       </div>
 
-                      <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1">Data de Nascimento</label>
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-0.5">Data de Nascimento</label>
                           <div className="relative group">
                               <input 
                                   type="date" 
                                   value={birthDate} 
                                   onChange={e => setBirthDate(e.target.value)}
-                                  className="w-full pl-4 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-ministral-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
+                                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-lg focus:ring-2 focus:ring-ministral-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-medium placeholder:text-zinc-400"
                               />
                           </div>
                       </div>
 
-                      <div className="space-y-1.5 opacity-70">
-                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1 flex items-center gap-1">E-mail (Login) <Key size={10}/></label>
+                      <div className="space-y-1 opacity-70">
+                          <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-0.5 flex items-center gap-1">E-mail (Login) <Key size={10}/></label>
                           <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
                               <input 
                                   type="email" 
                                   value={user.email || ''} 
                                   disabled
-                                  className="w-full pl-10 pr-4 py-3 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-500 cursor-not-allowed text-sm"
+                                  className="w-full pl-9 pr-3 py-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-500 cursor-not-allowed text-xs sm:text-sm"
                               />
                           </div>
                       </div>
@@ -343,16 +343,16 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               <button 
                   type="submit" 
                   disabled={loading}
-                  className="hidden lg:flex w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-ministral-500/20 items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="hidden lg:flex w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-2.5 rounded-lg shadow-md shadow-ministral-500/20 items-center justify-center gap-2 text-xs sm:text-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                  {loading ? 'Salvando Alterações...' : <><Save size={20}/> Salvar Perfil</>}
+                  {loading ? 'Salvando Alterações...' : <><Save size={16}/> Salvar Perfil</>}
               </button>
           </div>
 
-          <div className="space-y-6">
-              <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col">
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <Briefcase size={16}/> Minhas Funções
+          <div className="space-y-4">
+              <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col">
+                  <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                      <Briefcase size={15}/> Minhas Funções
                   </h3>
                   <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
                       Selecione as funções que você exerce na equipe. Algumas funções requerem aprovação.

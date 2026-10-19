@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarSearch, Search, Filter, CalendarX, RefreshCw, AlertOctagon, Sun, Moon } from 'lucide-react';
+import { CalendarSearch, Search, Filter, CalendarX, RefreshCw, AlertOctagon, Sun, Moon, Ban, Check, FileText } from 'lucide-react';
 
 interface Props {
   availability: AvailabilityMap;
@@ -116,10 +116,10 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-            <CalendarSearch className="text-ministral-500"/> Relatório de Disponibilidade
+            <CalendarSearch className="text-ministral-500"/> Relatório de Indisponibilidade
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            Visualize os apontamentos da equipe para o mês selecionado.
+            Visualize as datas de ausência e indisponibilidade informadas pela equipe para o mês selecionado.
           </p>
         </div>
         
@@ -152,89 +152,114 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
          </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Legenda de Cores igual à aba de ausência */}
+      <div className="flex flex-wrap gap-2 md:gap-4 justify-center bg-zinc-50 dark:bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[11px] font-medium">
+         <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+             <div className="w-3 h-3 rounded bg-red-500 shadow-sm"></div> Indisponível (Dia Inteiro)
+         </div>
+         <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+             <div className="w-3 h-3 rounded bg-amber-600 shadow-sm"></div> Indisponível (Manhã)
+         </div>
+         <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+             <div className="w-3 h-3 rounded bg-rose-600 shadow-sm"></div> Indisponível (Noite)
+         </div>
+         <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+             <div className="w-3 h-3 rounded bg-emerald-500 shadow-sm"></div> Disponível
+         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {reportData.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-zinc-400">
-             <CalendarX size={48} className="mx-auto mb-3 opacity-20"/>
-             <p>Nenhum membro encontrado.</p>
+          <div className="col-span-full py-10 text-center text-zinc-400">
+             <CalendarX size={40} className="mx-auto mb-2 opacity-20"/>
+             <p className="text-xs sm:text-sm">Nenhum membro encontrado.</p>
           </div>
         ) : (
           reportData.map((item) => (
-            <div key={item.id} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col ${item.isBlocked ? 'border-red-200 dark:border-red-900/50 bg-red-50/10' : 'border-zinc-200 dark:border-zinc-700'}`}>
-               <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
+            <div key={item.id} className={`bg-white dark:bg-zinc-800 rounded-xl border p-3 sm:p-3.5 shadow-sm hover:shadow-md transition-shadow flex flex-col ${item.isBlocked ? 'border-red-300 dark:border-red-900/60 bg-red-50/15' : 'border-zinc-200 dark:border-zinc-700'}`}>
+               <div className="flex items-start justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
                      {item.avatar_url ? (
-                        <img src={item.avatar_url} alt={item.name} className="w-10 h-10 rounded-full object-cover" />
+                        <img src={item.avatar_url} alt={item.name} className="w-8 h-8 rounded-full object-cover" />
                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-ministral-500 to-ministral-600 flex items-center justify-center text-white font-bold text-sm">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-ministral-500 to-ministral-600 flex items-center justify-center text-white font-bold text-xs">
                            {item.name.charAt(0).toUpperCase()}
                         </div>
                      )}
                      <div>
-                        <h3 className="font-bold text-zinc-800 dark:text-white leading-tight">{item.name}</h3>
-                        <div className="flex flex-wrap gap-1 mt-1">
+                        <h3 className="font-bold text-xs sm:text-sm text-zinc-800 dark:text-white leading-tight">{item.name}</h3>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
                            {item.ministry_functions.length > 0 ? item.ministry_functions.map(r => (
-                              <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">{r}</span>
+                              <span key={r} className="text-[9px] px-1 py-0.2 bg-zinc-100 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">{r}</span>
                            )) : (
-                             <span className="text-[10px] text-zinc-400 italic">Sem função</span>
+                             <span className="text-[9px] text-zinc-400 italic">Sem função</span>
                            )}
                         </div>
                      </div>
                   </div>
                   
                   {item.isBlocked ? (
-                      <div className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 flex items-center gap-1">
-                          <AlertOctagon size={12} /> BLOQUEADO
+                      <div className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 flex items-center gap-1">
+                          <AlertOctagon size={10} /> BLOQUEADO
                       </div>
                   ) : (
-                      <div className={`px-2 py-1 rounded text-xs font-bold ${item.count > 0 ? 'bg-ministral-50 text-ministral-500 dark:bg-ministral-600/10 dark:text-ministral-100' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}>
-                         {item.count > 0 ? `${item.count} dias` : 'Pendente'}
+                      <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          item.count > 0 
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800' 
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                         {item.count > 0 ? `${item.count} ${item.count === 1 ? 'dia ausente' : 'dias ausentes'}` : 'Disponível'}
                       </div>
                   )}
                </div>
 
-               <div className="flex-1 pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
+               <div className="flex-1 pt-2.5 border-t border-zinc-100 dark:border-zinc-700/50">
                   {item.isBlocked ? (
-                      <div className="text-center py-2 text-red-400 text-xs italic flex items-center justify-center gap-2 font-medium">
-                          Membro solicitou não ser escalado este mês.
+                      <div className="text-center py-1.5 text-red-500 text-[11px] italic flex items-center justify-center gap-1.5 font-medium">
+                          Mês inteiro indisponível.
                       </div>
                   ) : item.days.length > 0 ? (
-                     <div className="flex flex-wrap gap-1.5">
+                     <div className="flex flex-wrap gap-1">
                         {item.days.map(({day, type}) => {
-                           const dateStr = `${currentMonth}-${day.toString().padStart(2, '0')}`;
-                           const isSunday = new Date(dateStr + 'T12:00:00').getDay() === 0;
-                           
-                           let bgClass = "bg-secondary text-white"; // Default Green para FULL e outros dias
-                           
-                           if (isSunday) {
-                               if (type === 'M') {
-                                   bgClass = "bg-ministral-gold text-white"; 
-                               } else if (type === 'N') {
-                                   bgClass = "bg-ministral-600 text-white"; // Azul escuro (Secondary Blue)
-                               }
+                           // Cores sincronizadas com a aba de ausência (AvailabilityScreen)
+                           let bgClass = "bg-red-500 text-white border border-red-600 shadow-sm"; // Dia inteiro indisponível
+                           let periodLabel = "Dia inteiro";
+
+                           if (type === 'M') {
+                               bgClass = "bg-amber-600 text-white border border-amber-600 shadow-sm"; // Manhã indisponível
+                               periodLabel = "Manhã";
+                           } else if (type === 'N') {
+                               bgClass = "bg-rose-600 text-white border border-rose-600 shadow-sm"; // Noite indisponível
+                               periodLabel = "Noite";
                            }
                            
                            return (
-                              <div key={`${day}_${type}`} className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg shadow-sm ${bgClass}`}>
-                                 <span className="text-xs font-bold">{day}</span>
-                                 {type === 'M' && <span className="text-[8px] leading-none opacity-80"><Sun size={8} fill="currentColor"/></span>}
-                                 {type === 'N' && <span className="text-[8px] leading-none opacity-80"><Moon size={8} fill="currentColor"/></span>}
+                              <div 
+                                key={`${day}_${type}`} 
+                                className={`w-7 h-7 flex flex-col items-center justify-center rounded-md ${bgClass} transition-transform hover:scale-105`}
+                                title={`Dia ${day}: Indisponível (${periodLabel})`}
+                              >
+                                 <span className="text-[11px] font-bold leading-none">{day}</span>
+                                 {type === 'M' && <span className="text-[7px] leading-none opacity-90 mt-0.5"><Sun size={7} fill="currentColor"/></span>}
+                                 {type === 'N' && <span className="text-[7px] leading-none opacity-90 mt-0.5"><Moon size={7} fill="currentColor"/></span>}
                               </div>
-                           )
+                           );
                         })}
                      </div>
                   ) : (
-                     <div className="text-center py-2 text-zinc-400 text-xs italic flex items-center justify-center gap-2">
-                        <CalendarX size={14}/> Aguardando resposta
+                     <div className="text-center py-2 text-emerald-600 dark:text-emerald-400 text-xs flex items-center justify-center gap-2 font-medium">
+                        <Check size={14}/> Disponível para todas as escalas
                      </div>
                   )}
                </div>
 
-               {/* General Observation */}
+               {/* Justificativa / Observação */}
                {item.note && (
-                   <div className="mt-4 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                       <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Observação:</p>
-                       <p className="text-xs text-zinc-600 dark:text-zinc-300 italic">"{item.note}"</p>
+                   <div className="mt-4 p-3 bg-red-50/40 dark:bg-red-950/20 rounded-lg border border-red-200/50 dark:border-red-900/30">
+                       <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase mb-1 flex items-center gap-1">
+                           <FileText size={11} /> Justificativa da Ausência:
+                       </p>
+                       <p className="text-xs text-zinc-700 dark:text-zinc-200 italic">"{item.note}"</p>
                    </div>
                )}
             </div>

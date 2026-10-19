@@ -33,6 +33,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
             if (a.role === '__EVENT_EXCLUDED__') {
                 schedule[key] = '__EXCLUDED__';
+            } else if (a.role === '__PUBLISHED__') {
+                schedule[key] = '__PUBLISHED__';
             } else if (name) {
                 schedule[key] = name;
             }

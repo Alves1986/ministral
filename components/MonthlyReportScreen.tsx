@@ -209,53 +209,53 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       </div>
 
       {/* --- DESKTOP VIEW: Table --- */}
-      <div className="hidden md:block bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
+      <div className="hidden md:block bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
           <div className="overflow-x-auto -mx-4 px-4">
               <table className="w-full text-sm text-left">
                   <thead className="text-xs text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-700">
                       <tr>
-                          <th className="px-6 py-4 font-bold">Membro</th>
-                          <th className="px-6 py-4 font-bold text-center">Escalas</th>
-                          <th className="px-6 py-4 font-bold text-center">Presença</th>
-                          <th className="px-6 py-4 font-bold text-center">Trocas</th>
-                          <th className="px-6 py-4 font-bold text-right">Rendimento</th>
+                          <th className="px-4 py-2.5 sm:px-5 sm:py-3 font-bold">Membro</th>
+                          <th className="px-4 py-2.5 sm:px-5 sm:py-3 font-bold text-center">Escalas</th>
+                          <th className="px-4 py-2.5 sm:px-5 sm:py-3 font-bold text-center">Presença</th>
+                          <th className="px-4 py-2.5 sm:px-5 sm:py-3 font-bold text-center">Trocas</th>
+                          <th className="px-4 py-2.5 sm:px-5 sm:py-3 font-bold text-right">Rendimento</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                       {reportData.map((row) => (
                           <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
-                              <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
+                              <td className="px-4 py-2.5 sm:px-5 sm:py-3">
+                                  <div className="flex items-center gap-2.5">
                                       {row.avatar_url ? (
-                                          <img src={row.avatar_url} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
+                                          <img src={row.avatar_url} className="w-8 h-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
                                       ) : (
-                                          <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
+                                          <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
                                               {row.name.charAt(0)}
                                           </div>
                                       )}
                                       <div>
-                                          <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">{row.name}</p>
+                                          <p className="font-bold text-zinc-800 dark:text-zinc-200 text-xs sm:text-sm">{row.name}</p>
                                           {row.scheduled === 0 && <span className="text-[10px] text-zinc-400">Não escalado</span>}
                                       </div>
                                   </div>
                               </td>
-                              <td className="px-6 py-4 text-center">
-                                  <span className="font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-900 px-3 py-1 rounded-full text-xs">{row.scheduled}</span>
+                              <td className="px-4 py-2.5 sm:px-5 sm:py-3 text-center">
+                                  <span className="font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-0.5 rounded-full text-xs">{row.scheduled}</span>
                               </td>
-                              <td className="px-6 py-4 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                      <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full border border-green-100 dark:border-green-800/30" title="Confirmado">
+                              <td className="px-4 py-2.5 sm:px-5 sm:py-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                      <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-800/30" title="Confirmado">
                                           <CheckCircle2 size={12}/> {row.confirmed}
                                       </span>
                                       {row.absent > 0 && (
-                                          <span className="text-red-500 font-bold flex items-center gap-1 text-xs bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-full border border-red-100 dark:border-red-800/30" title="Não confirmado">
+                                          <span className="text-red-500 font-bold flex items-center gap-1 text-xs bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full border border-red-100 dark:border-red-800/30" title="Não confirmado">
                                               <AlertCircle size={12}/> {row.absent}
                                           </span>
                                       )}
                                   </div>
                               </td>
-                              <td className="px-6 py-4 text-center">
-                                  <div className="flex flex-col items-center gap-1 text-xs">
+                              <td className="px-4 py-2.5 sm:px-5 sm:py-3 text-center">
+                                  <div className="flex flex-col items-center gap-0.5 text-xs">
                                       {row.swapsRequested > 0 ? (
                                           <span className="text-amber-600 flex items-center gap-1"><ArrowUpRight size={12}/> Pediu: {row.swapsRequested}</span>
                                       ) : <span className="text-zinc-300">-</span>}
@@ -265,15 +265,15 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                                       )}
                                   </div>
                               </td>
-                              <td className="px-6 py-4 text-right">
-                                  <div className="flex flex-col items-end gap-1">
+                              <td className="px-4 py-2.5 sm:px-5 sm:py-3 text-right">
+                                  <div className="flex flex-col items-end gap-0.5">
                                       {row.scheduled > 0 ? (
                                           <>
                                               <div className="flex items-center gap-2">
-                                                  <span className={`text-sm font-black ${row.rate >= 90 ? 'text-ministral-500' : row.rate >= 70 ? 'text-ministral-600' : 'text-red-500'}`}>
+                                                  <span className={`text-xs sm:text-sm font-black ${row.rate >= 90 ? 'text-ministral-500' : row.rate >= 70 ? 'text-ministral-600' : 'text-red-500'}`}>
                                                       {row.rate}%
                                                   </span>
-                                                  <div className="w-16 h-1.5 bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
+                                                  <div className="w-14 h-1.5 bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
                                                       <div 
                                                           className={`h-full rounded-full ${row.rate >= 90 ? 'bg-ministral-500' : row.rate >= 70 ? 'bg-ministral-600' : 'bg-red-500'}`} 
                                                           style={{ width: `${row.rate}%` }}

@@ -68,73 +68,72 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
     confirmed: monthlyHistory.filter(h => h.confirmed).length,
     pending: monthlyHistory.filter(h => !h.confirmed).length
   };
-
   return (
-    <div className="animate-fade-in max-w-5xl mx-auto pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="animate-fade-in max-w-5xl mx-auto pb-16">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 sm:mb-5">
         <div>
-          <h2 className="text-3xl font-black text-zinc-900 dark:text-white flex items-center gap-3 tracking-tight uppercase">
-            <HistoryIcon className="text-ministral-500" size={32} /> Meu Histórico
+          <h2 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white flex items-center gap-2.5 tracking-tight uppercase">
+            <HistoryIcon className="text-ministral-500" size={24} /> Histórico de Escala
           </h2>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-1 font-medium">Veja todas as suas participações e escalas passadas.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 mt-0.5 text-xs sm:text-sm font-medium">Veja todas as suas participações e escalas passadas.</p>
         </div>
 
-        <div className="flex items-center gap-3 bg-white dark:bg-zinc-800 p-2 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-          <div className="flex flex-col items-center px-4 border-r border-zinc-100 dark:border-zinc-700">
-            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Total</span>
-            <span className="text-lg font-black text-zinc-900 dark:text-white">{stats.total}</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 p-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          <div className="flex flex-col items-center px-3 border-r border-zinc-100 dark:border-zinc-700">
+            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Total</span>
+            <span className="text-base font-black text-zinc-900 dark:text-white">{stats.total}</span>
           </div>
-          <div className="flex flex-col items-center px-4 border-r border-zinc-100 dark:border-zinc-700">
-            <span className="text-[10px] font-black text-ministral-500 uppercase tracking-widest">Confirmadas</span>
-            <span className="text-lg font-black text-ministral-600 dark:text-ministral-400">{stats.confirmed}</span>
+          <div className="flex flex-col items-center px-3 border-r border-zinc-100 dark:border-zinc-700">
+            <span className="text-[9px] font-black text-ministral-500 uppercase tracking-widest">Confirmadas</span>
+            <span className="text-base font-black text-ministral-600 dark:text-ministral-400">{stats.confirmed}</span>
           </div>
-          <div className="flex flex-col items-center px-4">
-            <span className="text-[10px] font-black text-ministral-gold uppercase tracking-widest">Pendentes</span>
-            <span className="text-lg font-black text-ministral-gold dark:text-ministral-gold/80">{stats.pending}</span>
+          <div className="flex flex-col items-center px-3">
+            <span className="text-[9px] font-black text-ministral-gold uppercase tracking-widest">Pendentes</span>
+            <span className="text-base font-black text-ministral-gold dark:text-ministral-gold/80">{stats.pending}</span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white dark:bg-zinc-800 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-5">
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
               <Filter size={14}/> Filtros
             </h3>
             
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <button 
                 onClick={() => setFilter('all')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${filter === 'all' ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${filter === 'all' ? 'bg-ministral-500 text-white shadow-md shadow-ministral-500/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
               >
                 <span>Todas</span>
                 <ChevronRight size={14} className={filter === 'all' ? 'opacity-100' : 'opacity-0'} />
               </button>
               <button 
                 onClick={() => setFilter('confirmed')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${filter === 'confirmed' ? 'bg-ministral-500 text-white shadow-lg shadow-ministral-500/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${filter === 'confirmed' ? 'bg-ministral-500 text-white shadow-md shadow-ministral-500/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
               >
                 <span>Confirmadas</span>
                 <ChevronRight size={14} className={filter === 'confirmed' ? 'opacity-100' : 'opacity-0'} />
               </button>
               <button 
                 onClick={() => setFilter('pending')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${filter === 'pending' ? 'bg-ministral-gold text-white shadow-lg shadow-ministral-gold/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${filter === 'pending' ? 'bg-ministral-gold text-white shadow-md shadow-ministral-gold/20' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
               >
                 <span>Pendentes</span>
                 <ChevronRight size={14} className={filter === 'pending' ? 'opacity-100' : 'opacity-0'} />
               </button>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-700">
-               <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                  <CalendarDays size={14}/> Mês
+            <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+               <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2.5 flex items-center gap-2">
+                  <CalendarDays size={13}/> Mês
                </h3>
                <div className="relative">
                  <select 
                    value={selectedMonth} 
                    onChange={e => setSelectedMonth(e.target.value)}
-                   className="w-full pl-4 pr-10 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-ministral-500 transition-all appearance-none cursor-pointer"
+                   className="w-full pl-3 pr-8 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-ministral-500 transition-all appearance-none cursor-pointer"
                  >
                    <option value="all">Todos os meses</option>
                    {availableMonths.map(month => {
@@ -144,22 +143,22 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
                       return <option key={month} value={month}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>
                    })}
                  </select>
-                 <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none rotate-90" />
+                 <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none rotate-90" />
                </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-700">
-              <h3 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <Search size={14}/> Busca
+            <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+              <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2.5 flex items-center gap-2">
+                <Search size={13}/> Busca
               </h3>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
                 <input 
-                  type="text"
+                  type="text" 
                   placeholder="Buscar evento ou função..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-ministral-500 transition-all"
+                  className="w-full pl-8 pr-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-ministral-500 transition-all"
                 />
               </div>
             </div>
@@ -168,20 +167,20 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
 
         <div className="lg:col-span-3">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-zinc-800 rounded-3xl border border-zinc-200 dark:border-zinc-700 border-dashed">
-              <div className="w-10 h-10 border-4 border-ministral-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Carregando seu histórico...</p>
+            <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 border-dashed">
+              <div className="w-8 h-8 border-3 border-ministral-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+              <p className="text-zinc-500 font-bold uppercase tracking-widest text-[11px]">Carregando seu histórico...</p>
             </div>
           ) : filteredHistory.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-zinc-800 rounded-3xl border border-zinc-200 dark:border-zinc-700 border-dashed text-center px-6">
-              <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-900 rounded-2xl flex items-center justify-center text-zinc-400 mb-4">
-                <HistoryIcon size={32} />
+            <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 border-dashed text-center px-4">
+              <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center text-zinc-400 mb-3">
+                <HistoryIcon size={24} />
               </div>
-              <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-1">Nenhuma escala encontrada</h3>
-              <p className="text-zinc-500 text-sm max-w-xs">Não encontramos registros que correspondam aos seus filtros ou busca.</p>
+              <h3 className="text-base font-bold text-zinc-800 dark:text-white mb-0.5">Nenhuma escala encontrada</h3>
+              <p className="text-zinc-500 text-xs max-w-xs">Não encontramos registros que correspondam aos seus filtros ou busca.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {filteredHistory.map((item, idx) => {
                 const date = new Date(item.event_date + 'T12:00:00');
                 const day = date.getDate();
@@ -191,17 +190,17 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
                 return (
                   <div 
                     key={idx} 
-                    className="group bg-white dark:bg-zinc-800 p-4 rounded-3xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-xl hover:shadow-zinc-200/50 dark:hover:shadow-black/20 transition-all duration-300 flex flex-col sm:flex-row items-center gap-6"
+                    className="group bg-white dark:bg-zinc-800 p-3 sm:p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row items-center gap-3 sm:gap-4"
                   >
-                    <div className="flex flex-col items-center justify-center w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-700 shrink-0 group-hover:border-ministral-500/30 transition-colors">
-                      <span className="text-[10px] font-black text-ministral-500 dark:text-ministral-400 leading-none">{month}</span>
-                      <span className="text-2xl font-black text-zinc-900 dark:text-white leading-none mt-1">{day}</span>
-                      <span className="text-[8px] font-bold text-zinc-400 leading-none mt-1">{year}</span>
+                    <div className="flex flex-col items-center justify-center w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-700 shrink-0 group-hover:border-ministral-500/30 transition-colors">
+                      <span className="text-[9px] font-black text-ministral-500 dark:text-ministral-400 leading-none">{month}</span>
+                      <span className="text-lg font-black text-zinc-900 dark:text-white leading-none mt-0.5">{day}</span>
+                      <span className="text-[8px] font-bold text-zinc-400 leading-none mt-0.5">{year}</span>
                     </div>
 
                     <div className="flex-1 text-center sm:text-left min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
-                        <h4 className="text-base font-black text-zinc-900 dark:text-white truncate uppercase tracking-tight">
+                        <h4 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate uppercase tracking-tight">
                           {item.event_rules?.title || 'Evento Especial'}
                         </h4>
                         <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest self-center sm:self-auto ${
@@ -214,27 +213,27 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
                         </div>
                       </div>
                       
-                      <div className="flex flex-wrap justify-center sm:justify-start gap-4">
+                      <div className="flex flex-wrap justify-center sm:justify-start gap-3">
                         <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
-                          <Briefcase size={14} className="text-ministral-500" />
-                          <span className="text-xs font-bold uppercase tracking-tight">{item.role}</span>
+                          <Briefcase size={13} className="text-ministral-500" />
+                          <span className="text-[11px] font-bold uppercase tracking-tight">{item.role}</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
-                          <CalendarDays size={14} className="text-zinc-400" />
-                          <span className="text-xs font-medium">{date.toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
+                          <CalendarDays size={13} className="text-zinc-400" />
+                          <span className="text-[11px] font-medium">{date.toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
                         </div>
                         {item.event_rules?.time && (
                           <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
-                            <Clock size={14} className="text-zinc-400" />
-                            <span className="text-xs font-medium">{item.event_rules.time.slice(0, 5)}</span>
+                            <Clock size={13} className="text-zinc-400" />
+                            <span className="text-[11px] font-medium">{item.event_rules.time.slice(0, 5)}</span>
                           </div>
                         )}
                       </div>
                     </div>
 
                     <div className="shrink-0 hidden sm:block">
-                       <div className="w-10 h-10 rounded-full bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center text-zinc-300 group-hover:text-ministral-500 transition-colors">
-                          <ChevronRight size={20} />
+                       <div className="w-8 h-8 rounded-full bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center text-zinc-300 group-hover:text-ministral-500 transition-colors">
+                          <ChevronRight size={16} />
                        </div>
                     </div>
                   </div>

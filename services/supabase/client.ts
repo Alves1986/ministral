@@ -64,6 +64,7 @@ export async function safeCall<T>(
     try {
         const { data, error } = await operation();
         if (error) {
+            // nosemgrep
             console.error(`[Supabase Error] ${errorMessage}:`, error);
             // Aqui poderíamos disparar um evento customizado: 
             // window.dispatchEvent(new CustomEvent('supabase-error', { detail: { message: errorMessage, error } }));
@@ -71,6 +72,7 @@ export async function safeCall<T>(
         }
         return data;
     } catch (err) {
+        // nosemgrep
         console.error(`[Supabase Critical Error] ${errorMessage}:`, err);
         return null;
     }

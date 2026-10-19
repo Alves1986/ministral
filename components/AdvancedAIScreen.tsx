@@ -28,8 +28,9 @@ import {
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
+import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL } from '../services/aiOrchestrator';
 import { generateAISchedule } from '../services/aiScheduleService';
+import { FeedbackState } from './ui';
 
 interface Props {
   ministryId: string;
@@ -66,6 +67,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<any[]>([]);
+  const [provider, setProvider] = useState<'gemini' | 'openrouter'>('gemini');
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const { addToast } = useToast();
 
@@ -79,11 +81,21 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
   // Aba ativa da tela
   const [activeTab, setActiveTab] = useState<'health' | 'analysis' | 'conflicts' | 'generator' | 'messages' | 'schedule'>('health');
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`ai_model_preference_${ministryId}`);
-    if (saved) setSelectedModel(saved);
+    const savedProvider = localStorage.getItem(`ai_provider_preference_${ministryId}`);
+    if (savedProvider === 'openrouter' || savedProvider === 'gemini') {
+      setProvider(savedProvider);
+    }
+    const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
+    if (savedModel) setSelectedModel(savedModel);
   }, [ministryId]);
+
+  const handleProviderChange = (newProvider: 'gemini' | 'openrouter') => {
+    setProvider(newProvider);
+    setSelectedModel(newProvider === 'gemini' ? DEFAULT_MODEL : DEFAULT_OPENROUTER_MODEL);
+  };
 
   // Recurso 1: Analise de saude
   const [healthInsights, setHealthInsights] = useState<any>(null);
@@ -123,24 +135,17 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       if (!isActuallyAvailable) return 'unavailable';
     }
 
-    if (memberAvail.includes(date)) return 'available';
+    if (memberAvail.includes(date)) return 'unavailable';
 
     const timePart = eventTime.slice(0, 5);
-    if (memberAvail.includes(`${date}_${timePart}`)) return 'available';
+    if (memberAvail.includes(`${date}_${timePart}`)) return 'unavailable';
 
     const hour = parseInt(timePart.split(':')[0], 10);
     const isMorning = hour < 12;
-    if (isMorning && memberAvail.includes(`${date}_M`)) return 'available';
-    if (!isMorning && memberAvail.includes(`${date}_N`)) return 'available';
+    if (isMorning && memberAvail.includes(`${date}_M`)) return 'unavailable';
+    if (!isMorning && memberAvail.includes(`${date}_N`)) return 'unavailable';
 
-    const weekday = new Date(date + 'T12:00:00').getDay();
-    if (weekday !== 0 && !memberAvail.includes(`${date}_BLK`)) {
-      return 'available';
-    }
-
-    if (memberAvail.includes(`${date}_BLK`)) return 'unavailable';
-
-    return 'unavailable';
+    return 'available';
   };
 
   // Helper local para validar atribuições contra as regras de conflito (schedule_conflict_rules)
@@ -385,6 +390,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       setSelectedSuggestionIdxs(newAssignments.map((_, i) => i));
       addToast(`${newAssignments.length} sugestões de escala geradas pela IA! Analise a lista para validar.`, "success");
     } catch (e: any) {
+      setAiError(e.message || "Falha ao gerar sugestões de escala. Tente novamente.");
       addToast("Erro ao gerar proposta: " + e.message, "error");
     } finally {
       setIsGeneratingSuggestions(false);
@@ -438,9 +444,11 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     fetchRules();
   }, [ministryId, orgId]);
 
+  // Salvar modelo selecionado
   const handleSaveAIPreference = () => {
+    localStorage.setItem(`ai_provider_preference_${ministryId}`, provider);
     localStorage.setItem(`ai_model_preference_${ministryId}`, selectedModel);
-    addToast('Preferência de IA salva com sucesso!', 'success');
+    addToast('Preferências de IA salvas com sucesso!', 'success');
   };
 
   const handleAnalyzeHealth = async () => {
@@ -504,8 +512,10 @@ export const AdvancedAIScreen: React.FC<Props> = ({
         pendingSwaps,
         totalEvents,
       });
-    } catch (e: any) {
-      addToast('Erro ao analisar saude do ministerio: ' + e.message, 'error');
+    } catch (error: any) {
+      console.error(error);
+      setAiError(error.message || "Não foi possível realizar o checkup.");
+      addToast('Erro na análise de saúde da escala', 'error');
     } finally {
       setHealthLoading(false);
     }
@@ -561,8 +571,10 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   
       const result = await runAI(AI_TASKS.GENERATE_NOTICE, getAIContext(), payload, selectedModel);
       setMessages(result);
-    } catch (e: any) {
-      addToast('Erro ao gerar mensagens: ' + e.message, 'error');
+    } catch (error: any) {
+      console.error(error);
+      setAiError(error.message || "Erro ao gerar mensagens.");
+      addToast("Erro ao gerar mensagens", "error");
     } finally {
       setMessagesLoading(false);
     }
@@ -603,7 +615,9 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       const text = await runAI(AI_TASKS.PREVENTIVE_ALERT, getAIContext(), payload, selectedModel);
       setPreventiveAlerts(text);
     } catch (e: any) {
-      addToast('Erro ao obter alertas: ' + e.message, 'error');
+      console.error(e);
+      setAiError(e.message || "Não foi possível gerar análise de conflitos.");
+      addToast('Falha na predição', 'error');
     } finally {
       setPredictiveLoading(false);
     }
@@ -668,6 +682,17 @@ export const AdvancedAIScreen: React.FC<Props> = ({
           </button>
         ))}
       </div>
+
+      {aiError && (
+        <div className="mb-6 animate-fade-in">
+          <FeedbackState 
+            type="error" 
+            title="Falha na Execução de IA" 
+            message={aiError} 
+            action={{ label: "Dispensar erro e tentar novamente", onClick: () => setAiError(null) }} 
+          />
+        </div>
+      )}
   
       {/* ABA: SAUDE DO MINISTERIO */}
       {activeTab === 'health' && (
@@ -778,10 +803,20 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                 </div>
               </div>
               <div className="mb-6">
+                <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Selecione o Provedor</label>
+                <div className="flex gap-2 mb-4">
+                  <button onClick={() => handleProviderChange('gemini')} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'gemini' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'}`}>
+                    Google Gemini
+                  </button>
+                  <button onClick={() => handleProviderChange('openrouter')} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'openrouter' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'}`}>
+                    OpenRouter
+                  </button>
+                </div>
+                
                 <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Selecione o Modelo de IA</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {AI_MODELS.map(model => (
-                    <button key={model.id} onClick={() => setSelectedModel(model.id)} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
+                  {(provider === 'gemini' ? AI_MODELS : OPENROUTER_MODELS).map(model => (
+                    <button key={model.id} onClick={() => setSelectedModel(model.id)} aria-pressed={selectedModel === model.id} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
                       <p className={`font-bold text-sm truncate ${selectedModel === model.id ? 'text-ministral-500 dark:text-ministral-400' : 'text-zinc-800 dark:text-zinc-200'}`}>{model.name}</p>
                       <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 break-words">{model.description}</p>
                     </button>

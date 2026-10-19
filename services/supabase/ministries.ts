@@ -52,11 +52,21 @@ export const saveEnabledTabs = async (
 ) => {
   const sb = getSupabase();
   if (!sb) return;
+
+  // Buscar abas atuais para preservar itens com prefixo qa:
+  const { data: min } = await sb
+    .from("organization_ministries")
+    .select("enabled_tabs")
+    .eq("id", ministryId)
+    .single();
+
+  const currentTabs = min?.enabled_tabs || [];
+  const qaTabs = currentTabs.filter((t: string) => t.startsWith("qa:"));
+
   // Sempre incluir abas de admin e essenciais na lista salva para nao perder acesso
   const ALWAYS_ENABLED = [
     "settings",
     "profile",
-    "history",
     "schedule-editor",
     "monthly-report",
     "report",
@@ -66,7 +76,7 @@ export const saveEnabledTabs = async (
     "members",
     "repertoire-manager",
   ];
-  const fullTabs = [...new Set([...tabs, ...ALWAYS_ENABLED])];
+  const fullTabs = [...new Set([...tabs, ...ALWAYS_ENABLED, ...qaTabs])];
   await sb
     .from("organization_ministries")
     .update({ enabled_tabs: fullTabs })

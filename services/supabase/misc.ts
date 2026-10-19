@@ -71,9 +71,18 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
             title: 'Pedido de Troca Enviado',
             message: `Seu pedido de troca para "${request.eventTitle}" foi enviado. Aguardando voluntário.`,
             type: 'info',
-            actionLink: 'swaps'
+            actionLink: 'swaps',
+            targetUserId: request.requesterId
         }).catch(() => {});
     }
+
+    // Notificar os membros do ministério que há um pedido de troca disponível
+    sendNotificationSQL(ministryId, orgId, {
+        title: '🔄 Novo Pedido de Troca de Escala',
+        message: `${request.requesterName} solicitou troca na função "${request.role}" para "${request.eventTitle}". Clique para ver ou assumir a vaga.`,
+        type: 'warning',
+        actionLink: 'swaps'
+    }).catch(() => {});
 
     // Notifica admins no app
     await notifySuperAdmins(
@@ -250,7 +259,8 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
             title: 'Troca Aceita!',
             message: `${takenByName} assumiu sua escala de "${req.event_title}" no dia ${datePart.split('-').reverse().join('/')}.`,
             type: 'success',
-            actionLink: 'swaps'
+            actionLink: 'swaps',
+            targetUserId: req.requester_id
         }).catch(() => {});
 
         // Notificar admins que a troca foi concluída

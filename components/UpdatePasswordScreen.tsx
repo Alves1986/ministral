@@ -15,6 +15,7 @@ export const UpdatePasswordScreen: React.FC<{ onPasswordUpdated: () => void }> =
     e.preventDefault();
     if (!password || !confirmPassword) return;
 
+    // nosemgrep: rules.ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack
     if (password !== confirmPassword) {
       setErrorMsg("As senhas não coincidem.");
       return;

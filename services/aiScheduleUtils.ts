@@ -36,20 +36,25 @@ export interface ScheduleInput {
   mode?: "fill" | "rebalance";
 }
 
-/** Normaliza disponibilidade para { memberId: string[] } de datas disponíveis. */
+/**
+ * Normaliza disponibilidade para { memberId: string[] } de datas indisponiveis.
+ * No novo modelo opt-out, o array contém AUSENCIAS (datas que o membro NAO pode).
+ * Para o formato legado objeto (presenca = disponivel), inverte para extrair ausencias.
+ */
 function normalizeAvailability(input: ScheduleInput): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const m of input.members || []) {
     const raw = input.availability?.[m.id];
-    let dates: string[] = [];
+    let absences: string[] = [];
     if (Array.isArray(raw)) {
-      dates = raw.map((d) => String(d));
+      // Formato array: ja sao ausencias
+      absences = raw.map((d) => String(d));
     } else if (raw && typeof raw === "object") {
-      dates = Object.entries(raw as Record<string, unknown>)
-        .filter(([, v]) => String(v).toLowerCase() !== "unavailable")
-        .map(([d]) => d);
+      // Formato objeto legado (convertido por fetchAvailabilityForEditor):
+      // chaves = dias disponiveis. Nao extraimos ausencias aqui — o motor ja sabe lidar.
+      absences = [];
     }
-    out[m.id] = dates;
+    out[m.id] = absences;
   }
   return out;
 }
@@ -174,4 +179,186 @@ export function extractAssignments(text: string): Array<{
       role: String(a.role),
       member_id: String(a.member_id),
     }));
+}
+
+// ─── Validador compartilhado de atribuições ────────────────────────────
+
+export type ValidationError = {
+  type:
+    | "UNKNOWN_EVENT"
+    | "INVALID_ROLE"
+    | "INELIGIBLE_MEMBER"
+    | "UNAVAILABLE"
+    | "ROLE_EXCLUDED"
+    | "DUPLICATE"
+    | "SLOT_FILLED";
+  message: string;
+};
+
+/**
+ * Valida uma única atribuição contra o contexto da escala.
+ * Retorna null se válida, ou um ValidationError se inválida.
+ */
+export function validateAssignment(
+  assignment: {
+    event_rule_id: string;
+    event_date: string;
+    role: string;
+    member_id: string;
+  },
+  input: ScheduleInput,
+): ValidationError | null {
+  const { event_rule_id, event_date, role, member_id } = assignment;
+
+  // 1. Evento inexistente
+  const occurrenceExists = (input.occurrences || []).some(
+    (o) => o.ruleId === event_rule_id && o.date === event_date,
+  );
+  if (!occurrenceExists) {
+    return {
+      type: "UNKNOWN_EVENT",
+      message: `Evento não encontrado: regra ${event_rule_id} em ${event_date}.`,
+    };
+  }
+
+  // 2. Função inválida (não existe no ministério)
+  if (!(input.roles || []).includes(role)) {
+    return {
+      type: "INVALID_ROLE",
+      message: `Função "${role}" não existe no ministério.`,
+    };
+  }
+
+  // 3. Membro inelegível (não encontrado na lista)
+  const member = (input.members || []).find((m) => m.id === member_id);
+  if (!member) {
+    return {
+      type: "INELIGIBLE_MEMBER",
+      message: `Membro ${member_id} não encontrado na lista de membros.`,
+    };
+  }
+
+  // 4. Membro não tem a função atribuída
+  if (member.functions && member.functions.length > 0 && !member.functions.includes(role)) {
+    return {
+      type: "INELIGIBLE_MEMBER",
+      message: `${member.name} não possui a função "${role}".`,
+    };
+  }
+
+  // 5. Indisponibilidade — suporta ambos os formatos:
+  //    - Array (opt-out): marcadores de ausencia. Ausencia na data = indisponivel.
+  //    - Objeto legado: chaves sao dias disponiveis. Ausencia da chave = indisponivel.
+  const avail = input.availability?.[member_id];
+  const occ = (input.occurrences || []).find(
+    (o) => o.ruleId === event_rule_id && o.date === event_date
+  );
+  if (avail !== undefined && occ) {
+    if (Array.isArray(avail)) {
+      // Formato array de ausencias
+      const month = event_date.substring(0, 7);
+      if (avail.includes(`${month}-BLK`)) {
+        return { type: "UNAVAILABLE", message: `${member.name} marcou o mês inteiro como indisponível.` };
+      }
+      // FREE ou sem dados = disponivel
+      if (!avail.includes(`${month}-FREE`) && avail.length > 0) {
+        if (avail.includes(event_date)) {
+          return { type: "UNAVAILABLE", message: `${member.name} não está disponível em ${event_date}.` };
+        }
+        const hour = parseInt((occ.time || '00:00').split(':')[0], 10);
+        const isMorning = hour < 12;
+        if (isMorning && avail.includes(`${event_date}_M`)) {
+          return { type: "UNAVAILABLE", message: `${member.name} não está disponível pela manhã em ${event_date}.` };
+        }
+        if (!isMorning && avail.includes(`${event_date}_N`)) {
+          return { type: "UNAVAILABLE", message: `${member.name} não está disponível à noite em ${event_date}.` };
+        }
+      }
+    } else if (typeof avail === 'object') {
+      // Formato objeto legado: presenca de chave = disponivel
+      const availObj = avail as Record<string, string>;
+      const month = event_date.substring(0, 7);
+      // Checar BLK
+      if (availObj[`${month}-01-BLK`] === 'BLK' || availObj[`${month}-01`] === 'BLK') {
+        return { type: "UNAVAILABLE", message: `${member.name} marcou o mês inteiro como indisponível.` };
+      }
+      const dayVal = availObj[event_date];
+      // Tem dados do mes mas o dia nao esta no mapa = ausencia
+      const hasDaysInMonth = Object.keys(availObj).some(k => k.startsWith(month) && !k.includes('BLK'));
+      if (hasDaysInMonth && !dayVal) {
+        return { type: "UNAVAILABLE", message: `${member.name} não está disponível em ${event_date}.` };
+      }
+      if (dayVal && dayVal !== 'all' && dayVal !== 'unavailable') {
+        const hour = parseInt((occ.time || '00:00').split(':')[0], 10);
+        const eventPeriod = hour < 12 ? 'M' : 'N';
+        const weekday = new Date(event_date + 'T12:00:00').getDay();
+        if (weekday === 0 && dayVal !== eventPeriod) {
+          return { type: "UNAVAILABLE", message: `${member.name} não está disponível no período deste evento (${event_date}).` };
+        }
+      }
+    }
+  }
+
+  // 6. Exclusão de função por evento
+  if (input.eventRoleExcludes?.[event_rule_id]?.includes(role)) {
+    return {
+      type: "ROLE_EXCLUDED",
+      message: `Função "${role}" está excluída para o evento (regra ${event_rule_id}).`,
+    };
+  }
+
+  // 7. Duplicidade (mesmo membro, mesma data, mesma função, mesmo evento)
+  const isDuplicate = (input.existingAssignments || []).some(
+    (a) =>
+      a.event_rule_id === event_rule_id &&
+      a.event_date === event_date &&
+      a.role === role &&
+      a.member_id === member_id,
+  );
+  if (isDuplicate) {
+    return {
+      type: "DUPLICATE",
+      message: `${member.name} já está escalado para "${role}" neste evento.`,
+    };
+  }
+
+  // 8. Vaga já preenchida (outro membro já ocupa essa posição)
+  const slotFilled = (input.existingAssignments || []).some(
+    (a) =>
+      a.event_rule_id === event_rule_id &&
+      a.event_date === event_date &&
+      a.role === role &&
+      a.member_id &&
+      a.member_id !== member_id,
+  );
+  if (slotFilled) {
+    return {
+      type: "SLOT_FILLED",
+      message: `A vaga "${role}" em ${event_date} já está preenchida por outro membro.`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Valida um array de atribuições e retorna os resultados.
+ * Cada resultado contém a atribuição original e, se inválida, o erro.
+ */
+export function validateAssignments(
+  assignments: Array<{
+    event_rule_id: string;
+    event_date: string;
+    role: string;
+    member_id: string;
+  }>,
+  input: ScheduleInput,
+): Array<{
+  assignment: (typeof assignments)[0];
+  error: ValidationError | null;
+}> {
+  return assignments.map((assignment) => ({
+    assignment,
+    error: validateAssignment(assignment, input),
+  }));
 }

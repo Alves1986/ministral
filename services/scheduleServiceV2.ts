@@ -37,48 +37,119 @@ export interface MemberV2 {
 export const fetchAvailabilityForEditor = async (ministryId: string, orgId: string): Promise<{
   availability: Record<string, Record<string, string>>;
   memberNotes: Record<string, string>;
+  availabilityRaw: Record<string, string[]>;
 }> => {
   const sb = getSupabase();
-  if (!sb || ministryId.length !== 36 || orgId.length !== 36) return { availability: {}, memberNotes: {} };
+  if (!sb || ministryId.length !== 36 || orgId.length !== 36) return { availability: {}, memberNotes: {}, availabilityRaw: {} };
   const { data } = await sb.from('member_availability')
     .select('user_id, available_date, note')
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
-  // availability: { userId: { 'YYYY-MM-DD': 'M'|'T'|'N'|'all'|'BLK' } }
-  // memberNotes: { 'userId_YYYY-MM': 'texto da observação' }
-  const map: Record<string, Record<string, string>> = {};
+
+  // Novo modelo: registros representam AUSENCIAS (opt-out).
+  // note='BLK' -> mes todo indisponivel
+  // note='FREE' -> mes todo disponivel (sem ausencias)
+  // note='M'|'N' -> apenas manha ou noite indisponivel
+  // note=null -> dia todo indisponivel
+  // note='NOTE:...' -> observacao geral
+  const rawMap: Record<string, string[]> = {};
   const memberNotes: Record<string, string> = {};
 
   data?.forEach((row: any) => {
-    if (!map[row.user_id]) map[row.user_id] = {};
+    if (!rawMap[row.user_id]) rawMap[row.user_id] = [];
 
     if (row.note === 'BLK') {
-        const monthKey = `${row.available_date.substring(0, 7)}-01`;
-        map[row.user_id][monthKey] = 'BLK';
-        return;
+      rawMap[row.user_id].push(`${row.available_date.substring(0, 7)}-BLK`);
+      return;
     }
-
+    if (row.note === 'FREE') {
+      rawMap[row.user_id].push(`${row.available_date.substring(0, 7)}-FREE`);
+      return;
+    }
     if (row.note && row.note.startsWith('NOTE:')) {
-        const actualNote = row.note.substring(5).trim();
-        // Ignorar horários salvos acidentalmente como observação
-        if (!/^\d{2}:\d{2}(:\d{2})?$/.test(actualNote)) {
-            const noteKey = `${row.user_id}_${row.available_date.substring(0, 7)}`;
-            memberNotes[noteKey] = actualNote;
-        }
-        return;
+      const actualNote = row.note.substring(5).trim();
+      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(actualNote)) {
+        const noteKey = `${row.user_id}_${row.available_date.substring(0, 7)}`;
+        memberNotes[noteKey] = actualNote;
+      }
+      return;
     }
-
-    const existing = map[row.user_id][row.available_date];
-    const newNote = ['M', 'N', 'T'].includes(row.note) ? row.note : 'all';
-
-    if (!existing || existing === 'unavailable') {
-        map[row.user_id][row.available_date] = newNote;
-    } else if (existing !== 'all' && newNote !== existing) {
-        map[row.user_id][row.available_date] = 'all';
+    const baseDate = row.available_date;
+    if (row.note && ['M', 'N'].includes(row.note)) {
+      rawMap[row.user_id].push(`${baseDate}_${row.note}`);
+    } else {
+      rawMap[row.user_id].push(baseDate);
     }
   });
-  return { availability: map, memberNotes };
+
+  Object.keys(rawMap).forEach(uid => { rawMap[uid] = [...new Set(rawMap[uid])]; });
+
+  // Converte o array de ausencias para o formato legado do motor de escala:
+  // { userId: { 'YYYY-MM-DD': 'all' | 'M' | 'N' } }
+  // Presenca de uma data = disponivel; ausencia da chave = indisponivel.
+  // BLK = mapa vazio para aquele mes.
+  // FREE ou sem dados = todos os dias do mes marcados como 'all'.
+  const legacyMap: Record<string, Record<string, string>> = {};
+
+  // Descobre todos os usuarios com algum registro
+  const allUserIds = [...new Set([...Object.keys(rawMap)])];
+
+  for (const userId of allUserIds) {
+    const absences = rawMap[userId] || [];
+    legacyMap[userId] = {};
+
+    // Descobre todos os meses mencionados
+    const months = [...new Set(
+      absences
+        .map(d => d.substring(0, 7))
+        .filter(m => /^\d{4}-\d{2}$/.test(m))
+    )];
+
+    for (const month of months) {
+      const isBlocked = absences.includes(`${month}-BLK`);
+      if (isBlocked) {
+        // Mes inteiro indisponivel: marca especial no legado
+        legacyMap[userId][`${month}-01-BLK`] = 'BLK';
+        continue;
+      }
+
+      // Preenche todos os dias do mes como disponivel ('all')
+      const [yearStr, monthStr] = month.split('-');
+      const yr = parseInt(yearStr);
+      const mo = parseInt(monthStr);
+      const daysInMonth = new Date(yr, mo, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = `${month}-${String(d).padStart(2, '0')}`;
+        legacyMap[userId][dateKey] = 'all';
+      }
+
+      // Remove/ajusta as ausencias especificas
+      for (const absence of absences) {
+        if (!absence.startsWith(month) || absence.endsWith('-BLK') || absence.endsWith('-FREE')) continue;
+        if (absence.endsWith('_M')) {
+          const dateKey = absence.slice(0, 10);
+          if (legacyMap[userId][dateKey] === 'all') {
+            legacyMap[userId][dateKey] = 'N'; // So noite disponivel
+          } else if (legacyMap[userId][dateKey] === 'M') {
+            delete legacyMap[userId][dateKey]; // M e N ausentes = dia todo ausente
+          }
+        } else if (absence.endsWith('_N')) {
+          const dateKey = absence.slice(0, 10);
+          if (legacyMap[userId][dateKey] === 'all') {
+            legacyMap[userId][dateKey] = 'M'; // So manha disponivel
+          } else if (legacyMap[userId][dateKey] === 'N') {
+            delete legacyMap[userId][dateKey]; // N e M ausentes = dia todo ausente
+          }
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(absence)) {
+          delete legacyMap[userId][absence]; // Dia inteiro ausente
+        }
+      }
+    }
+  }
+
+  return { availability: legacyMap, memberNotes, availabilityRaw: rawMap };
 };
+
 
 export const fetchGlobalConflictsV2 = async (ministryId: string, orgId: string, month: string) => {
   const sb = getSupabase();
@@ -299,6 +370,40 @@ export const confirmAssignmentV2 = async (
 
   if (error) throw error;
   return data;
+};
+
+export const togglePublishScheduleV2 = async (
+  ministryId: string,
+  orgId: string,
+  monthStr: string,
+  isPublished: boolean
+) => {
+  const sb = getSupabase();
+  if (!sb) throw new Error("NO_SUPABASE");
+
+  if (isPublished) {
+    const { error } = await sb.from("schedule_assignments").upsert(
+      {
+        organization_id: orgId,
+        ministry_id: ministryId,
+        event_rule_id: "PUBLISHED_FLAG",
+        event_date: `${monthStr}-01`,
+        role: "__PUBLISHED__",
+        member_id: null,
+        confirmed: false
+      },
+      { onConflict: "ministry_id, event_rule_id, event_date, role" }
+    );
+    if (error) throw error;
+  } else {
+    const { error } = await sb.from("schedule_assignments")
+      .delete()
+      .eq("ministry_id", ministryId)
+      .eq("event_rule_id", "PUBLISHED_FLAG")
+      .eq("event_date", `${monthStr}-01`)
+      .eq("role", "__PUBLISHED__");
+    if (error) throw error;
+  }
 };
 
 export const saveAssignmentV2 = async (

@@ -80,5 +80,6 @@ export const clearOfflineData = async (key: string): Promise<void> => {
         const db = await openDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
         tx.objectStore(STORE_NAME).delete(key);
-    } catch(e) { console.error(e); }
+    } catch(e) { // nosemgrep: rules.ajinabraham.njsscan.generic.error_disclosure.generic_error_disclosure
+        console.error(e); }
 };

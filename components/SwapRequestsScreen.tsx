@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2 } from 'lucide-react';
-import { SwapRequest, User as UserType, ScheduleMap } from '../types';
+import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2, ShieldCheck } from 'lucide-react';
+import { SwapRequest, User as UserType, ScheduleMap, AttendanceMap } from '../types';
 import { useToast } from './Toast';
 
 interface Props {
@@ -13,10 +13,11 @@ interface Props {
   onCreateRequest: (role: string, iso: string, title: string) => Promise<void>;
   onAcceptRequest: (reqId: string) => void;
   onCancelRequest?: (reqId: string) => void;
+  attendance?: AttendanceMap;
 }
 
 export const SwapRequestsScreen: React.FC<Props> = ({ 
-    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest 
+    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest, attendance = {} 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
   const { confirmAction } = useToast();
@@ -112,40 +113,49 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                         <p>Você não está escalado em nenhum evento neste mês.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
                         {mySchedules.map((item, idx) => (
-                            <div key={idx} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
-                                <div className="flex justify-between items-start mb-3">
+                            <div key={idx} className="bg-white dark:bg-zinc-800 p-3.5 sm:p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
+                                <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h3 className="font-bold text-zinc-800 dark:text-white">{item.event.title}</h3>
-                                        <p className="text-sm text-zinc-500">{item.event.dateDisplay} • {item.event.iso.split('T')[1]?.substring(0, 5)}</p>
+                                        <h3 className="font-bold text-sm sm:text-base text-zinc-800 dark:text-white">{item.event.title}</h3>
+                                        <p className="text-xs text-zinc-500">{item.event.dateDisplay} • {item.event.iso.split('T')[1]?.substring(0, 5)}</p>
                                     </div>
-                                    <div className="p-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-zinc-500">
-                                        <Clock size={20}/>
+                                    <div className="p-1.5 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-zinc-500">
+                                        <Clock size={16}/>
                                     </div>
                                 </div>
                                 
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     {item.roles.map(role => {
+                                        const attendanceKey = `${item.event.id}|${item.event.iso}|${role}`;
+                                        const hasAttendance = attendance[attendanceKey] === true;
                                         return (
-                                            <div key={role} className="flex flex-col gap-2 p-3 rounded-xl border transition-all bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-700/50">
+                                            <div key={role} className="flex flex-col gap-1.5 p-2.5 rounded-lg border transition-all bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-700/50">
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200">{role}</span>
+                                                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{role}</span>
                                                 </div>
                                                 
-                                                <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            await onCreateRequest(role, item.event.iso, item.event.title);
-                                                            setActiveTab('wall');
-                                                        } catch (e) {
-                                                            // Error is handled in App.tsx
-                                                        }
-                                                    }}
-                                                    className="w-full text-xs font-bold text-white bg-secondary hover:bg-secondaryHover py-2 rounded-lg transition-colors shadow-sm shadow-secondary/20 active:scale-95"
-                                                >
-                                                    Solicitar Troca
-                                                </button>
+                                                {hasAttendance ? (
+                                                    <div className="flex items-center gap-1.5 py-1.5 px-2 bg-secondary/10 dark:bg-secondary/5 rounded-lg border border-secondary/20 dark:border-secondary/30">
+                                                        <ShieldCheck size={13} className="text-secondary dark:text-white shrink-0" />
+                                                        <span className="text-[11px] font-bold text-secondary dark:text-white">Presença registrada pela liderança</span>
+                                                    </div>
+                                                ) : (
+                                                    <button 
+                                                        onClick={async () => {
+                                                            try {
+                                                                await onCreateRequest(role, item.event.iso, item.event.title);
+                                                                setActiveTab('wall');
+                                                            } catch (e) {
+                                                                // Error is handled in App.tsx
+                                                            }
+                                                        }}
+                                                        className="w-full text-xs font-bold text-white bg-secondary hover:bg-secondaryHover py-1.5 rounded-lg transition-colors shadow-sm shadow-secondary/20 active:scale-95"
+                                                    >
+                                                        Solicitar Troca
+                                                    </button>
+                                                )}
                                             </div>
                                         )
                                     })}
@@ -159,52 +169,52 @@ export const SwapRequestsScreen: React.FC<Props> = ({
 
         {activeTab === 'wall' && (
             <div className="space-y-4">
-                 <div className="bg-secondary/10 dark:bg-secondary/5 p-4 rounded-xl border border-secondary/20 dark:border-secondary/30 flex items-start gap-3">
-                    <CheckCircle2 className="text-secondary dark:text-white shrink-0 mt-0.5" size={18} />
-                    <p className="text-sm text-secondary dark:text-white">
+                 <div className="bg-secondary/10 dark:bg-secondary/5 p-3 rounded-xl border border-secondary/20 dark:border-secondary/30 flex items-start gap-2.5">
+                    <CheckCircle2 className="text-secondary dark:text-white shrink-0 mt-0.5" size={16} />
+                    <p className="text-xs sm:text-sm text-secondary dark:text-white">
                         Aqui aparecem pedidos de troca <strong>compatíveis com suas funções</strong>. Se você estiver disponível, clique em "Assumir Escala" para realizar a troca automaticamente.
                     </p>
                 </div>
 
                 {visibleRequests.length === 0 ? (
-                    <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                        <FilterX className="mx-auto mb-3 opacity-20" size={48}/>
-                        <p className="font-medium text-zinc-500">Nenhum pedido compatível.</p>
-                        <p className="text-xs text-zinc-400 mt-1">Não há trocas pendentes para suas funções no momento.</p>
+                    <div className="text-center py-10 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                        <FilterX className="mx-auto mb-2 opacity-20" size={36}/>
+                        <p className="font-medium text-xs sm:text-sm text-zinc-500">Nenhum pedido compatível.</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">Não há trocas pendentes para suas funções no momento.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
                         {visibleRequests.map(req => {
                             const evtIso = req.eventIso.split('|')[0];
                             const dateDisplay = evtIso.split('T')[0].split('-').reverse().join('/');
                             const timeDisplay = evtIso.split('T')[1]?.substring(0, 5) || '';
 
                             return (
-                                <div key={req.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden animate-slide-up">
+                                <div key={req.id} className="bg-white dark:bg-zinc-800 p-3.5 sm:p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden animate-slide-up">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-secondary"></div>
                                     
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="w-10 h-10 rounded-full bg-secondary/10 dark:bg-secondary/20 flex items-center justify-center text-secondary dark:text-white font-bold">
-                                            <User size={18}/>
+                                    <div className="flex items-center gap-2.5 mb-2.5">
+                                        <div className="w-8 h-8 rounded-full bg-secondary/10 dark:bg-secondary/20 flex items-center justify-center text-secondary dark:text-white font-bold">
+                                            <User size={15}/>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-zinc-500 uppercase font-bold">Solicitante</p>
-                                            <p className="font-bold text-zinc-800 dark:text-white">{req.requesterName}</p>
+                                            <p className="text-[10px] text-zinc-500 uppercase font-bold">Solicitante</p>
+                                            <p className="font-bold text-xs sm:text-sm text-zinc-800 dark:text-white">{req.requesterName}</p>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 mb-6">
-                                        <div className="flex justify-between text-sm">
+                                    <div className="space-y-1.5 mb-3.5">
+                                        <div className="flex justify-between text-xs">
                                             <span className="text-zinc-500">Evento:</span>
-                                            <span className="font-medium text-zinc-800 dark:text-zinc-200 text-right">{req.eventTitle}</span>
+                                            <span className="font-medium text-zinc-800 dark:text-zinc-200 text-right truncate ml-2">{req.eventTitle}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
+                                        <div className="flex justify-between text-xs">
                                             <span className="text-zinc-500">Data:</span>
                                             <span className="font-medium text-zinc-800 dark:text-zinc-200">{dateDisplay} às {timeDisplay}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
+                                        <div className="flex justify-between text-xs items-center">
                                             <span className="text-zinc-500">Função:</span>
-                                            <span className="font-bold text-secondary dark:text-white bg-secondary/10 px-2 py-0.5 rounded">{req.role}</span>
+                                            <span className="font-bold text-secondary dark:text-white bg-secondary/10 px-1.5 py-0.5 rounded text-[11px]">{req.role}</span>
                                         </div>
                                     </div>
 
@@ -217,9 +227,9 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                                     () => onCancelRequest?.(req.id)
                                                 );
                                             }}
-                                            className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/30 active:scale-95"
+                                            className="w-full py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/30 active:scale-95"
                                         >
-                                            <Trash2 size={18}/> Retirar do Mural
+                                            <Trash2 size={14}/> Retirar do Mural
                                         </button>
                                     ) : (
                                         <button 
@@ -230,9 +240,9 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                                     () => onAcceptRequest(req.id)
                                                 );
                                             }}
-                                            className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-secondary hover:bg-secondaryHover text-white shadow-lg shadow-secondary/20 active:scale-95"
+                                            className="w-full py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all bg-secondary hover:bg-secondaryHover text-white shadow-sm shadow-secondary/20 active:scale-95"
                                         >
-                                            Assumir Escala <ArrowRight size={18}/>
+                                            <CheckCircle2 size={14}/> Assumir Escala
                                         </button>
                                     )}
                                 </div>

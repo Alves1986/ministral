@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   CalendarPlus,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
 import {
   Role,
@@ -21,6 +22,7 @@ import {
 } from "../utils/dateUtils";
 import { useMinistryData } from "../hooks/useMinistryData"; // Import hook to get data
 import { ServiceSchedule } from "./ServiceSchedule";
+import { EventChatModal } from "./EventChatModal";
 
 // UPDATE PROPS: Remove explicit event/schedule/etc if we use internal data or update usage
 interface Props {
@@ -53,6 +55,7 @@ export const NextEventCard: React.FC<Props> = ({
   const [timeStatus, setTimeStatus] = useState<TimeStatus>("early");
   const [countdownString, setCountdownString] = useState("");
   const [showServiceSchedule, setShowServiceSchedule] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Use data directly passed from the new hook structure in App.tsx
   // The prop `event` now comes as `nextEvent` from `useMinistryData` which has `{ event, members }` structure.
@@ -131,19 +134,18 @@ export const NextEventCard: React.FC<Props> = ({
 
     if (isConfirmed) {
       return (
-        <div className="flex gap-3 w-full">
-          <div className="flex-1 flex items-center justify-center gap-3 text-white bg-ministral-500/20 px-6 py-4 rounded-[1.5rem] text-sm font-black uppercase tracking-widest border border-ministral-500/30 backdrop-blur-md shadow-lg shadow-ministral-500/10">
-            <ShieldCheck size={20} className="text-ministral-400" /> Presença
-            Confirmada
+        <div className="flex gap-2 w-full">
+          <div className="flex-1 flex items-center justify-center gap-2 text-white bg-ministral-500/20 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border border-ministral-500/30 backdrop-blur-md shadow-md shadow-ministral-500/10">
+            <ShieldCheck size={16} className="text-ministral-400" /> Presença Confirmada
           </div>
           <a
             href={googleCalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-4 bg-white/10 text-white rounded-[1.5rem] hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center"
+            className="p-2.5 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center shrink-0"
             title="Google Agenda"
           >
-            <CalendarPlus size={24} />
+            <CalendarPlus size={18} />
           </a>
         </div>
       );
@@ -155,9 +157,9 @@ export const NextEventCard: React.FC<Props> = ({
           href={googleCalUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-3 w-full py-4 bg-white text-ministral-dark rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-ministral-50 transition-all shadow-2xl active:scale-95"
+          className="flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-white text-ministral-dark rounded-xl text-xs font-black uppercase tracking-wider hover:bg-ministral-50 transition-all shadow-md active:scale-95"
         >
-          <CalendarPlus size={18} /> Salvar no Agenda
+          <CalendarPlus size={15} /> Salvar no Agenda
         </a>
       );
     }
@@ -167,31 +169,31 @@ export const NextEventCard: React.FC<Props> = ({
         return (
           <button
             disabled
-            className="flex items-center justify-center gap-3 w-full py-4 bg-black/40 text-white/40 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest cursor-not-allowed border border-white/5"
+            className="flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-black/40 text-white/40 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-not-allowed border border-white/5"
           >
-            <Clock size={16} /> Abre em {countdownString}
+            <Clock size={14} /> Abre em {countdownString}
           </button>
         );
       case "closed":
         return (
           <button
             disabled
-            className="flex items-center justify-center gap-3 w-full py-4 bg-rose-500/20 text-rose-300 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest cursor-not-allowed border border-rose-500/30"
+            className="flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-rose-500/20 text-rose-300 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-not-allowed border border-rose-500/30"
           >
-            <AlertCircle size={16} /> Check-in Encerrado
+            <AlertCircle size={14} /> Check-in Encerrado
           </button>
         );
       case "open":
         return (
           <button
             onClick={() => onConfirm(memberKey)}
-            className="w-full flex flex-col items-center justify-center gap-1 px-8 py-4 bg-gradient-to-r from-[#c9a84c] to-[#b2933d] hover:from-[#d8b95c] hover:to-[#c9a84c] text-[#0f1f3d] rounded-[1.5rem] shadow-2xl shadow-ministral-gold/20 active:scale-95 transition-all border border-[#c9a84c]/20"
+            className="w-full flex flex-col items-center justify-center gap-0.5 px-4 py-2.5 bg-gradient-to-r from-[#c9a84c] to-[#b2933d] hover:from-[#d8b95c] hover:to-[#c9a84c] text-[#0f1f3d] rounded-xl shadow-lg shadow-ministral-gold/20 active:scale-95 transition-all border border-[#c9a84c]/20"
           >
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
-              <MapPin size={18} fill="currentColor" className="opacity-80" />{" "}
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider">
+              <MapPin size={15} fill="currentColor" className="opacity-80" />{" "}
               Confirmar Check-in
             </div>
-            <span className="text-[10px] font-bold opacity-80">
+            <span className="text-[9px] font-bold opacity-80">
               Fecha em {countdownString}
             </span>
           </button>
@@ -403,50 +405,50 @@ export const NextEventCard: React.FC<Props> = ({
   };
 
   return (
-    <div className="relative mb-12 rounded-[3rem] overflow-hidden bg-white dark:bg-ministral-dark shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-200 dark:border-slate-800 animate-slide-up ring-1 ring-black/5">
+    <div className="relative mb-0 rounded-2xl lg:rounded-3xl overflow-hidden bg-white dark:bg-ministral-dark shadow-md border border-slate-200 dark:border-slate-800 animate-slide-up ring-1 ring-black/5">
       <div className="grid grid-cols-1 lg:grid-cols-12">
         {/* Main Info - High Fidelity Sidebar */}
         <div
-          className="lg:col-span-4 p-8 lg:p-12 bg-cover bg-center relative overflow-hidden flex flex-col justify-between text-white"
+          className="lg:col-span-4 p-5 lg:p-6 bg-cover bg-center relative overflow-hidden flex flex-col justify-between text-white"
           style={{ backgroundImage: `url(${getBackgroundUrl()})` }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#121212]/90 to-transparent"></div>
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-150 contrast-150 mix-blend-overlay"></div>
 
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="px-3 py-1 rounded-full bg-ministral-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-ministral-500/30 flex items-center gap-1.5">
-                <Sparkles size={12} fill="currentColor" /> Próximo
+            <div className="flex items-center gap-2 mb-3 lg:mb-4">
+              <div className="px-2.5 py-0.5 rounded-full bg-ministral-500 text-white text-[9px] lg:text-[10px] font-black uppercase tracking-wider shadow-md shadow-ministral-500/30 flex items-center gap-1">
+                <Sparkles size={11} fill="currentColor" /> Próximo
               </div>
               {eventIsToday && (
-                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-ministral-400">
+                <div className="flex items-center gap-1 text-[9px] lg:text-[10px] font-black uppercase tracking-wider text-ministral-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-ministral-400 animate-ping"></span>{" "}
                   Hoje
                 </div>
               )}
             </div>
 
-            <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">
+            <h2 className="text-2xl lg:text-3xl font-black text-white leading-tight mb-3 lg:mb-4 tracking-tight">
               {eventData.title}
             </h2>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 text-ministral-400">
-                <CalendarClock size={20} />
-                <span className="text-lg font-bold tracking-tight">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-ministral-400">
+                <CalendarClock size={16} />
+                <span className="text-sm lg:text-base font-bold tracking-tight">
                   {dateDisplay}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-slate-300">
-                <Clock size={20} />
-                <span className="text-lg font-bold tracking-tight">
+              <div className="flex items-center gap-2 text-slate-300">
+                <Clock size={16} />
+                <span className="text-sm lg:text-base font-bold tracking-tight">
                   {eventTime}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="mt-12 relative z-10">
+          <div className="mt-5 lg:mt-6 relative z-10">
             {(() => {
               const myRole = eventMembers.find(
                 (t: any) => currentUser && t.name === currentUser.name,
@@ -461,8 +463,8 @@ export const NextEventCard: React.FC<Props> = ({
                 );
               }
               return (
-                <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md text-center">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-0.5">
                     Status
                   </p>
                   <p className="text-xs font-bold text-slate-300">
@@ -475,39 +477,48 @@ export const NextEventCard: React.FC<Props> = ({
         </div>
 
         {/* Team Detail List */}
-        <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-ministral-dark relative">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-            <div className="flex items-center gap-4">
-              <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">
+        <div className="lg:col-span-8 p-4 lg:p-6 bg-white dark:bg-ministral-dark relative">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                 Equipe Escalada
               </h3>
               {config?.enabledTabs?.includes("service_schedule") && (
                 <button
                   onClick={() => setShowServiceSchedule(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 hover:bg-[#c9a84c]/20 transition-colors text-[10px] font-black uppercase tracking-widest"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 hover:bg-[#c9a84c]/20 transition-colors text-[9px] font-black uppercase tracking-wider"
                 >
-                  <Sparkles size={12} />
+                  <Sparkles size={11} />
                   Cronograma
                 </button>
               )}
+              {ministryName?.toLowerCase().includes("louvor") && eventMembers.some((t: any) => currentUser && (t.name === currentUser.name || t.profileId === currentUser.id)) && (
+                <button
+                  onClick={() => setIsChatOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 transition-colors text-[9px] font-black uppercase tracking-wider"
+                >
+                  <MessageCircle size={11} />
+                  Chat da Equipe
+                </button>
+              )}
             </div>
-            <span className="text-[10px] font-black text-ministral-600 dark:text-white bg-ministral-50 dark:bg-ministral-600/20 px-3 py-1 rounded-full">
+            <span className="text-[10px] font-black text-ministral-600 dark:text-white bg-ministral-50 dark:bg-ministral-600/20 px-2.5 py-0.5 rounded-full w-fit">
               {eventMembers.length} Integrantes
             </span>
           </div>
 
           {eventMembers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
+            <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
               <CalendarClock
-                size={48}
-                className="text-slate-200 dark:text-slate-800 mb-4"
+                size={36}
+                className="text-slate-200 dark:text-slate-800 mb-2"
               />
-              <p className="text-slate-400 font-bold text-sm">
+              <p className="text-slate-400 font-bold text-xs">
                 Nenhum membro escalado ainda.
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-3">
               {eventMembers.map((t: any, idx: number) => {
                 const isMe = currentUser && t.name === currentUser.name;
                 // Use avatarUrl directly from the fetched data if available
@@ -516,15 +527,15 @@ export const NextEventCard: React.FC<Props> = ({
                 return (
                   <div
                     key={idx}
-                    className={`group flex items-center p-4 rounded-[2rem] border transition-all duration-500 ${
+                    className={`group flex items-center p-2.5 lg:p-3 rounded-xl border transition-all duration-300 ${
                       isMe
                         ? "bg-ministral-50/50 dark:bg-ministral-500/5 border-ministral-200 dark:border-ministral-800/50 ring-2 ring-ministral-500/10"
-                        : "bg-slate-50/50 dark:bg-slate-800/40 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-xl"
+                        : "bg-slate-50/50 dark:bg-slate-800/40 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-md"
                     }`}
                   >
                     <div className="relative shrink-0">
                       <div
-                        className={`w-14 h-14 rounded-2xl overflow-hidden border-2 transition-all duration-500 ${t.confirmed ? "border-ministral-500 shadow-lg shadow-ministral-500/20" : "border-slate-200 dark:border-slate-700"}`}
+                        className={`w-10 h-10 lg:w-11 lg:h-11 rounded-xl overflow-hidden border-2 transition-all duration-300 ${t.confirmed ? "border-ministral-500 shadow-md shadow-ministral-500/20" : "border-slate-200 dark:border-slate-700"}`}
                       >
                         {avatar ? (
                           <img
@@ -533,30 +544,30 @@ export const NextEventCard: React.FC<Props> = ({
                           />
                         ) : (
                           <div
-                            className={`w-full h-full flex items-center justify-center font-black text-xl ${t.confirmed ? "bg-ministral-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-400"}`}
+                            className={`w-full h-full flex items-center justify-center font-bold text-sm ${t.confirmed ? "bg-ministral-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-400"}`}
                           >
                             {t.name.charAt(0)}
                           </div>
                         )}
                       </div>
                       {t.confirmed && (
-                        <div className="absolute -top-2 -right-2 bg-ministral-500 text-white rounded-full p-1 border-4 border-white dark:border-ministral-dark shadow-lg scale-110">
-                          <CheckCircle2 size={12} />
+                        <div className="absolute -top-1.5 -right-1.5 bg-ministral-500 text-white rounded-full p-0.5 border-2 border-white dark:border-ministral-dark shadow-md scale-105">
+                          <CheckCircle2 size={10} />
                         </div>
                       )}
                     </div>
 
-                    <div className="ml-5 flex-1 min-w-0">
-                      <p className="text-[10px] font-black text-ministral-600 dark:text-white uppercase tracking-widest mb-0.5">
+                    <div className="ml-3 flex-1 min-w-0">
+                      <p className="text-[9px] font-black text-ministral-600 dark:text-white uppercase tracking-wider mb-0.5">
                         {t.role}
                       </p>
                       <p
-                        className={`text-base font-black truncate tracking-tight ${t.confirmed ? "text-slate-900 dark:text-white" : "text-slate-400"}`}
+                        className={`text-xs lg:text-sm font-bold truncate tracking-tight ${t.confirmed ? "text-slate-900 dark:text-white" : "text-slate-400"}`}
                       >
                         {t.name}
                       </p>
                       {isMe && (
-                        <span className="inline-block mt-1 text-[9px] font-black bg-ministral-500 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                        <span className="inline-block mt-0.5 text-[8px] font-black bg-ministral-500 text-white px-1.5 py-0.2 rounded-full uppercase tracking-tight">
                           Você
                         </span>
                       )}
@@ -579,6 +590,16 @@ export const NextEventCard: React.FC<Props> = ({
           ministryName={ministryName}
           practicalGuidelines={config?.practicalGuidelines}
           onClose={() => setShowServiceSchedule(false)}
+        />
+      )}
+
+      {isChatOpen && eventData && (
+        <EventChatModal
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          eventIso={eventData.iso}
+          eventTitle={eventData.title}
+          members={members}
         />
       )}
     </div>

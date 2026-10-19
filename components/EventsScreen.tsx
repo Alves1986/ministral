@@ -74,6 +74,35 @@ export const EventsScreen: React.FC = () => {
           return;
       }
 
+      // Validação de conflito de agenda (impede eventos no mesmo dia e horário)
+      let hasConflict = false;
+      if (type === 'single') {
+          const newDateObj = new Date(date + 'T12:00:00');
+          const newWeekday = newDateObj.getDay();
+          hasConflict = rules.some(r => {
+              if (r.time !== time) return false;
+              if (r.type === 'single') return r.date === date;
+              if (r.type === 'weekly') return r.weekday === newWeekday;
+              return false;
+          });
+      } else if (type === 'weekly') {
+          const newWeekday = Number(weekday);
+          hasConflict = rules.some(r => {
+              if (r.time !== time) return false;
+              if (r.type === 'weekly') return r.weekday === newWeekday;
+              if (r.type === 'single' && r.date) {
+                  const existingDateObj = new Date(r.date + 'T12:00:00');
+                  return existingDateObj.getDay() === newWeekday;
+              }
+              return false;
+          });
+      }
+
+      if (hasConflict) {
+          addToast("Já existe um evento cadastrado para esta mesma data e horário.", "error");
+          return;
+      }
+
       setSubmitting(true);
       try {
           // Prepare payload components
@@ -152,62 +181,62 @@ export const EventsScreen: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto pb-24">
+    <div className="space-y-4 sm:space-y-5 animate-fade-in max-w-5xl mx-auto pb-16">
         {/* Header */}
-        <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
-            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+        <div className="border-b border-zinc-200 dark:border-zinc-700 pb-3">
+            <h2 className="text-xl sm:text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                 <CalendarDays className="text-ministral-500"/> Regras de Agenda
             </h2>
-            <p className="text-zinc-500 text-sm mt-1">
+            <p className="text-zinc-500 text-xs sm:text-sm mt-0.5">
                 Configure os eventos fixos (semanais) e eventos especiais da escala.
             </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
             {/* Form Section */}
-            <div className="lg:col-span-1 space-y-6">
-                <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm sticky top-6">
-                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4">Adicionar Evento</h3>
+            <div className="lg:col-span-1 space-y-4">
+                <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sticky top-6">
+                    <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider mb-3">Adicionar Evento</h3>
                     
-                    <form onSubmit={handleAdd} className="space-y-4">
+                    <form onSubmit={handleAdd} className="space-y-3">
                         {/* Type Toggle */}
                         <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg">
                             <button
                                 type="button" 
                                 onClick={() => setType('weekly')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${type === 'weekly' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${type === 'weekly' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                             >
-                                <Repeat size={14}/> Semanal
+                                <Repeat size={13}/> Semanal
                             </button>
                             <button
                                 type="button" 
                                 onClick={() => setType('single')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${type === 'single' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${type === 'single' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                             >
-                                <Calendar size={14}/> Único
+                                <Calendar size={13}/> Único
                             </button>
                         </div>
 
                         <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1">Título do Evento</label>
+                            <label className="text-[11px] font-bold text-zinc-500 uppercase block mb-1 ml-0.5">Título do Evento</label>
                             <input 
                                 value={title}
                                 onChange={e => setTitle(e.target.value)}
                                 placeholder="Ex: Culto de Jovens"
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all"
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all"
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div>
-                                <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1">Horário</label>
+                                <label className="text-[11px] font-bold text-zinc-500 uppercase block mb-1 ml-0.5">Horário</label>
                                 <div className="relative group">
-                                    <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-ministral-gold transition-colors"/>
+                                    <Clock size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-ministral-gold transition-colors"/>
                                     <input 
                                         type="time" 
                                         value={time}
                                         onChange={e => setTime(e.target.value)}
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all min-w-0"
+                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 pr-2 py-2 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all min-w-0"
                                     />
                                 </div>
                             </div>
@@ -215,25 +244,25 @@ export const EventsScreen: React.FC = () => {
                             <div>
                                 {type === 'weekly' ? (
                                     <>
-                                        <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1">Dia da Semana</label>
+                                        <label className="text-[11px] font-bold text-zinc-500 uppercase block mb-1 ml-0.5">Dia da Semana</label>
                                         <select 
                                             value={weekday}
                                             onChange={e => setWeekday(Number(e.target.value))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 cursor-pointer appearance-none transition-all"
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-2 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 cursor-pointer appearance-none transition-all"
                                         >
                                             {weekdays.map((d, i) => <option key={i} value={i}>{d}</option>)}
                                         </select>
                                     </>
                                 ) : (
                                     <>
-                                        <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1">Data</label>
+                                        <label className="text-[11px] font-bold text-zinc-500 uppercase block mb-1 ml-0.5">Data</label>
                                         <div className="relative group">
-                                            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-ministral-gold transition-colors"/>
+                                            <Calendar size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-ministral-gold transition-colors"/>
                                             <input 
-                                                type="date"
+                                                type="date" 
                                                 value={date}
                                                 onChange={e => setDate(e.target.value)}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all min-w-0"
+                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 pr-2 py-2 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-ministral-gold text-zinc-800 dark:text-zinc-200 transition-all min-w-0"
                                             />
                                         </div>
                                     </>
@@ -244,9 +273,9 @@ export const EventsScreen: React.FC = () => {
                         <button 
                             type="submit" 
                             disabled={submitting}
-                            className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-ministral-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                            className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-2.5 rounded-lg shadow-md shadow-ministral-500/20 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            {submitting ? <Loader2 size={18} className="animate-spin"/> : <Plus size={18}/>}
+                            {submitting ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
                             Adicionar Regra
                         </button>
                     </form>
@@ -254,39 +283,39 @@ export const EventsScreen: React.FC = () => {
             </div>
 
             {/* List Section */}
-            <div className="lg:col-span-2 space-y-8">
+            <div className="lg:col-span-2 space-y-5">
                 {/* Weekly Rules */}
-                <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                        <Repeat size={16}/> Eventos Semanais (Padrão)
+                <div className="space-y-3">
+                    <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                        <Repeat size={14}/> Eventos Semanais (Padrão)
                     </h3>
                     
                     {loading ? (
-                        <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>
+                        <div className="py-6 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>
                     ) : weeklyRules.length === 0 ? (
-                        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 border-dashed rounded-xl p-8 text-center text-zinc-400 text-sm">
+                        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 border-dashed rounded-lg p-6 text-center text-zinc-400 text-xs sm:text-sm">
                             Nenhuma regra semanal cadastrada.
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                             {weeklyRules.map(rule => (
-                                <div key={rule.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group hover:border-ministral-300 dark:hover:border-ministral-700 transition-colors">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 rounded-xl flex flex-col items-center justify-center border border-ministral-100 dark:border-ministral-500/30">
-                                            <span className="text-[10px] font-black uppercase">{weekdays[rule.weekday!].substring(0,3)}</span>
-                                            <span className="text-xs font-bold">{rule.time.substring(0, 5)}</span>
+                                <div key={rule.id} className="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group hover:border-ministral-300 dark:hover:border-ministral-700 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 rounded-lg flex flex-col items-center justify-center border border-ministral-100 dark:border-ministral-500/30">
+                                            <span className="text-[9px] font-black uppercase">{weekdays[rule.weekday!].substring(0,3)}</span>
+                                            <span className="text-[11px] font-bold">{rule.time.substring(0, 5)}</span>
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-zinc-800 dark:text-white text-sm">{rule.title}</h4>
-                                            <p className="text-xs text-zinc-500">Toda {weekdays[rule.weekday!]}</p>
+                                            <h4 className="font-bold text-zinc-800 dark:text-white text-xs sm:text-sm">{rule.title}</h4>
+                                            <p className="text-[11px] text-zinc-500">Toda {weekdays[rule.weekday!]}</p>
                                         </div>
                                     </div>
                                     <button 
                                         onClick={() => handleDelete(rule.id, rule.title)}
-                                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                        className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
                                         title="Remover regra"
                                     >
-                                        <Trash2 size={18}/>
+                                        <Trash2 size={16}/>
                                     </button>
                                 </div>
                             ))}
@@ -295,50 +324,50 @@ export const EventsScreen: React.FC = () => {
                 </div>
 
                 {/* Single Rules */}
-                <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                            <Calendar size={16}/> Eventos Especiais (Únicos)
+                <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                            <Calendar size={14}/> Eventos Especiais (Únicos)
                         </h3>
-                        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg">
-                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, -1))} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm">←</button>
-                            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 min-w-[120px] text-center capitalize">{getMonthName(filterMonth)}</span>
-                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, 1))} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm">→</button>
+                        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-0.5 rounded-lg">
+                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, -1))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm text-xs">←</button>
+                            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 min-w-[100px] text-center capitalize">{getMonthName(filterMonth)}</span>
+                            <button type="button" onClick={() => setFilterMonth(adjustMonth(filterMonth, 1))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent shadow-sm text-xs">→</button>
                         </div>
                     </div>
                     
                     {loading ? (
-                        <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>
+                        <div className="py-6 flex justify-center"><Loader2 className="animate-spin text-zinc-400"/></div>
                     ) : singleRules.length === 0 ? (
-                        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 border-dashed rounded-xl p-8 text-center text-zinc-400 text-sm">
+                        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 border-dashed rounded-lg p-6 text-center text-zinc-400 text-xs sm:text-sm">
                             Nenhum evento especial cadastrado.
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                             {singleRules.map(rule => {
                                 const dateObj = rule.date ? new Date(rule.date + 'T12:00:00') : new Date();
                                 const isPast = new Date(rule.date || '') < new Date(new Date().toISOString().split('T')[0]);
 
                                 return (
-                                    <div key={rule.id} className={`bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group transition-colors ${isPast ? 'opacity-60 grayscale' : 'hover:border-ministral-300 dark:hover:border-ministral-700'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center border ${isPast ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 border-zinc-200' : 'bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 border-ministral-100 dark:border-ministral-500/30'}`}>
-                                                <span className="text-[10px] font-black uppercase">{dateObj.toLocaleDateString('pt-BR', {day: '2-digit'})}</span>
-                                                <span className="text-[8px] font-bold uppercase">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
+                                    <div key={rule.id} className={`bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm flex justify-between items-center group transition-colors ${isPast ? 'opacity-60 grayscale' : 'hover:border-ministral-300 dark:hover:border-ministral-700'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center border ${isPast ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 border-zinc-200' : 'bg-ministral-50 dark:bg-ministral-600/10 text-ministral-500 dark:text-ministral-100 border-ministral-100 dark:border-ministral-500/30'}`}>
+                                                <span className="text-[9px] font-black uppercase">{dateObj.toLocaleDateString('pt-BR', {day: '2-digit'})}</span>
+                                                <span className="text-[7px] font-bold uppercase">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-zinc-800 dark:text-white text-sm">{rule.title}</h4>
-                                                <p className="text-xs text-zinc-500 flex items-center gap-1">
+                                                <h4 className="font-bold text-zinc-800 dark:text-white text-xs sm:text-sm">{rule.title}</h4>
+                                                <p className="text-[11px] text-zinc-500 flex items-center gap-1">
                                                     <Clock size={10}/> {rule.time.substring(0, 5)} • {dateObj.toLocaleDateString('pt-BR')}
                                                 </p>
                                             </div>
                                         </div>
                                         <button 
                                             onClick={() => handleDelete(rule.id, rule.title)}
-                                            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                             title="Remover regra"
                                         >
-                                            <Trash2 size={18}/>
+                                            <Trash2 size={16}/>
                                         </button>
                                     </div>
                                 );

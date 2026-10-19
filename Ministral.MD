@@ -172,6 +172,11 @@
 - [x] **[BUG]** Corrigir bloqueio de cadastro de membros via convite com Google OAuth (preservar token, permitir signup e vincular à organização)
 - [x] **[FEAT]** Logs de Auditoria para administradores, registrando ações importantes do ministério.
 - [x] **[FEAT]** Gestão Autônoma de Ministérios por OrgAdmins na interface de Configurações, aplicando limites de planos com RPC segura.
+- [x] **[FEAT]** Inversão da lógica de disponibilidade de membros (marcação de indisponibilidade).
+- [x] **[FEAT]** Correção da política de RLS em logs de auditoria permitindo visibilidade ampla para administradores da mesma organização.
+- [x] **[FEAT]** Bloqueio de cadastro de eventos para evitar conflitos de horários em regras simultâneas.
+- [x] **[REFACTOR]** Simplificação da aba de Repertório (foco exclusivo em YouTube).
+- [x] **[FEAT]** Sistema de Chat da Equipe para membros escalados em eventos (suporte a áudio e texto).
 - [ ] **[BUG]** Corrigir erro no fluxo da Troca de Escala.
 - [ ] **[BUG]** Corrigir integração Google Agenda (botão do perfil sem resposta).
 - [ ] **[BUG]** Corrigir sistema de telemetria zerado.
@@ -185,22 +190,18 @@
 - [ ] **[FEAT]** Notificações de swap aprovado — notificar voluntário via WhatsApp quando troca for aceita
 
 ## Contexto da última sessão (atualizar ao fechar)
-- **Último trabalho**: Upgrade de segurança completo para SaaS (21/08/2026). Corrigidas 29+ vulnerabilidades de segurança identificadas no scan GitGuard:
-  - CRÍTICO: JWT real no `.env.example` → placeholder
-  - CRÍTICO: Firebase API key hardcoded → placeholder
-  - CRÍTICO: Timing attacks em 6 Edge Functions → `safeCompare()` (tempo constante)
-  - HIGH: `Math.random()` em tokens/IDs → `crypto.randomUUID()`
-  - HIGH: XSS via `innerHTML` → `textContent`
-  - HIGH: URL path injection (`instance_name`) → `sanitizeInstanceName()`
-  - MEDIUM: Error disclosure em 9 endpoints → mensagens sanitizadas
-  - MEDIUM: Regex email ReDoS → regex reescrita
-  - MEDIUM: URL injection `lat`/`lon` → sanitizados
-  - MEDIUM: `allowBackup="true"` Android → `false`
-  - Novo: `SECURITY.md` com instruções de rotação de chaves
-  - Novo: `_shared/safeCompare.ts` helper de comparação segura
-  - Git inicializado e commit feito: `4db04c9`
-- **O que ficou pendente**: Rotação manual de chaves no Supabase Dashboard (anon key, CHECKIN_SECRET_KEY). O SECURITY.md instrui o usuário passo a passo.
-- **Próximo passo**: Fazer deploy com as novas chaves rotacionadas. Verificar se todas as migrations foram executadas no Supabase.
+- **Último trabalho**: Limpeza do código, Otimizações de UI/UX, Notificações e Compartilhamento de URL (19/10/2026).
+  - **Editor de Escala**: Ocultada a opção de confirmação de presença do membro na grade visual de edição.
+  - **Sistema de Notificações Mobile/PWA**: Validação de suporte a Web Push no Service Worker; enriquecimento de notificações com redirecionamento contextual ao clicar (avisos, escala liberada, prazos de ausência, trocas e presença).
+  - **Relatório de Indisponibilidade**: Renomeado de 'Relatório de Disponibilidade' para 'Relatório de Indisponibilidade', estilização das datas com cor idêntica à aba de Ausências e inclusão de modal obrigatório de justificativa antes de salvar.
+  - **Histórico de Escala**: Reativação completa do link e atalhos da aba tanto no menu lateral quanto em Configurações e Acesso Rápido.
+  - **Logotipo do Topo**: Recorte aprimorado do container de logotipo no cabeçalho/sidebar com fundo dinâmico e sem bordas duras.
+  - **Compensação de Tamanho dos Cards (Desktop/PC)**: Redução de dimensões, paddings e tamanhos de fonte em cards de todas as abas para maior densidade e ergonomia visual.
+  - **Redesenho do Dashboard**: Card do Próximo Evento (Equipe Escalada) expandido para largura total com grid de 3 colunas para os membros; Card 'Agenda' reposicionado diretamente abaixo da equipe escalada ocupando toda a largura com distribuição horizontal espaçosa dos próximos cultos.
+  - **Ícone ao Compartilhar URL**: Criação de `share-icon.png` e padronização de `icon-light.png` com margem de segurança (~45% de escala centralizada), prevenindo ícone estourado/gigante ao compartilhar o link do app no WhatsApp, Telegram e redes sociais; inserção de meta tags Open Graph e Twitter Cards em `index.html`.
+  - **Limpeza do Sistema**: Exclusão de scripts temporários de patch e timestamps do Vite, organização de arquivos SQL em `supabase/migrations/` e atualização do `.gitignore`.
+- **O que ficou pendente**: Validação de produção no Vercel e confirmação da experiência de compartilhamento no WhatsApp pelos usuários finais.
+- **Próximo passo**: Deploy das melhorias para produção e monitoramento das interações dos voluntários.
 
 ---
 

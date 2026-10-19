@@ -8,4 +8,7 @@ test-rpc.js
 supabase/.temp
 diagnose_*.mjs
 check_*.ts
-firebase-applet-config.json
+firebase-applet-config.json
+*.timestamp-*.mjs
+vite.config.ts.timestamp*
+fix*.cjs

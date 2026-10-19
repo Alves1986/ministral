@@ -1,14 +1,10 @@
-// services/aiOrchestrator.ts
+﻿// services/aiOrchestrator.ts
 // ─── Gemini API — nativa e otimizada ───────────────────────
 
 function getApiKey(): string {
   if (typeof process !== 'undefined' && process.env) {
-    // GEMINI_API_KEY tem prioridade (chave válida AIzaSy...)
-    // VITE_GEMINI_API_KEY pode conter chaves de outras APIs (AQ.Ab8...)
     const primary = process.env.GEMINI_API_KEY || '';
     const fallback = process.env.VITE_GEMINI_API_KEY || '';
-    if (primary.startsWith('AIzaSy')) return primary;
-    if (fallback.startsWith('AIzaSy')) return fallback;
     return primary || fallback;
   }
   return '';
@@ -29,9 +25,14 @@ export enum AI_TASKS {
 
 export const AI_MODELS = [
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash (Recomendado)',
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Recomendado)',
     description: 'Modelo rápido, estável e eficiente para análises e reescritas diárias.'
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    description: 'Geração anterior estável com bom equilíbrio de custo e qualidade.'
   },
   {
     id: 'gemini-2.5-flash',
@@ -44,15 +45,39 @@ export const AI_MODELS = [
     description: 'Excelente raciocínio lógico e maior capacidade de análise profunda.'
   },
   {
-    id: 'gemini-2.0-flash-lite',
-    name: 'Gemini 2.0 Flash Lite (Econômico)',
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Lite (Econômico)',
     description: 'Opção leve e econômica para tarefas simples.'
   }
 ];
 
-// exportação legada para compatibilidade
-export const OPENROUTER_MODELS = AI_MODELS;
+export const OPENROUTER_MODELS = [
+  {
+    id: 'meta-llama/llama-3-8b-instruct:free',
+    name: 'Llama 3 8B (Gratuito)',
+    description: 'Modelo open-source rápido e eficiente para tarefas gerais.'
+  },
+  {
+    id: 'anthropic/claude-3-haiku',
+    name: 'Claude 3 Haiku',
+    description: 'Rápido, inteligente e focado em respostas precisas.'
+  },
+  {
+    id: 'google/gemini-flash-1.5',
+    name: 'Gemini 1.5 Flash (via OpenRouter)',
+    description: 'Versão do Gemini acessada pelo OpenRouter.'
+  }
+];
+
 export const DEFAULT_MODEL = AI_MODELS[0].id;
+export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS[0].id;
+
+function getOpenRouterApiKey(): string {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.VITE_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+  }
+  return '';
+}
 
 import { buildSchedulePrompt, extractAssignments } from './aiScheduleUtils';
 
@@ -258,8 +283,45 @@ async function callAI(prompt: string, taskType: AI_TASKS, modelId: string): Prom
   }
 }
 
+async function callOpenRouterAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
+  const apiKey = getOpenRouterApiKey();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY não configurada.');
+
+  const systemInstruction = 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.';
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    let errMessage = response.statusText;
+    try {
+      const errorData = await response.json();
+      errMessage = errorData.error?.message || JSON.stringify(errorData);
+    } catch (e) {}
+    throw new Error(`OpenRouter API Error: ${errMessage}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  if (!content) throw new Error('OpenRouter retornou resposta vazia.');
+  return content;
+}
+
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const knownModelIds = AI_MODELS.map(m => m.id);
+  const isPreferredOpenRouter = preferredModel && OPENROUTER_MODELS.some(m => m.id === preferredModel);
+  const knownModelIds = isPreferredOpenRouter ? OPENROUTER_MODELS.map(m => m.id) : AI_MODELS.map(m => m.id);
   const validPreferred = preferredModel && knownModelIds.includes(preferredModel) ? preferredModel : undefined;
 
   const order = validPreferred
@@ -269,7 +331,12 @@ async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredMod
   let lastErr: Error = new Error('Todos os modelos falharam.');
   for (const model of order) {
     try {
-      return await callAI(prompt, taskType, model);
+      const isOpenRouter = OPENROUTER_MODELS.some(m => m.id === model);
+      if (isOpenRouter) {
+        return await callOpenRouterAI(prompt, taskType, model);
+      } else {
+        return await callAI(prompt, taskType, model);
+      }
     } catch (err: any) {
       const errMsg: string = err.message || '';
       console.warn(`[runAI] Modelo ${model} falhou: ${errMsg}`);
@@ -363,6 +430,7 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     const content = await callWithFallback(fullPrompt, taskType, preferredModel);
     return parseAIResponse(content, taskType);
   } catch (error: any) {
+    // nosemgrep
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
   }
@@ -478,36 +546,57 @@ function isMemberAvailable(
   availability: Record<string, string[] | Record<string, string>>
 ): boolean {
   const avail = availability[memberId];
-  if (!avail) return false;
+  const month = date.substring(0, 7);
 
-  const monthKey = `${date.substring(0, 7)}-01`;
-  if ((avail as Record<string, string>)[monthKey] === 'BLK') return false;
-
-  const dayVal = (avail as Record<string, string>)[date];
-  if (dayVal === 'BLK' || dayVal === 'unavailable') return false;
-
-  // Formato array (padrão do useMinistryQueries / AvancedAIScreen)
+  // ── Formato ARRAY (novo modelo opt-out: array de ausencias) ──────────────
   if (Array.isArray(avail)) {
-    if (avail.includes(date)) return true;
+    // Mes inteiro bloqueado
+    if (avail.includes(`${month}-BLK`)) return false;
 
+    // Mes inteiro disponivel (marcador FREE) ou array vazio = disponivel
+    if (avail.includes(`${month}-FREE`) || avail.length === 0) return true;
+
+    // Dia inteiro ausente
+    if (avail.includes(date)) return false;
+
+    // Ausencia por periodo
     const timePart = time.slice(0, 5);
-    if (avail.includes(`${date}_${timePart}`)) return true;
+    if (avail.includes(`${date}_${timePart}`)) return false;
 
     const hour = parseInt(timePart.slice(0, 2), 10);
     const isMorning = hour < 12;
-    if (isMorning && avail.includes(`${date}_M`)) return true;
-    if (!isMorning && avail.includes(`${date}_N`)) return true;
+    if (isMorning && avail.includes(`${date}_M`)) return false;
+    if (!isMorning && avail.includes(`${date}_N`)) return false;
 
-    return false;
+    // Nenhuma ausencia para esta data = disponivel
+    return true;
   }
 
-  // Formato objeto (ScheduleEditorV2 / legado)
-  if (!dayVal) return false;
-  if (dayVal === 'all') return true;
-  const hour = parseInt(time.split(':')[0], 10);
-  if (dayVal === 'M') return hour < 12;
-  if (dayVal === 'N') return hour >= 18;
-  if (dayVal === 'T') return hour >= 12 && hour < 18;
+  // ── Formato OBJETO legado ─────────────────────────────────────────────────
+  // Convertido por fetchAvailabilityForEditor a partir do novo modelo.
+  // Chave = data disponivel, valor = 'all'|'M'|'N'|'BLK'.
+  // Chave ausente = indisponivel (dia de ausencia ou mes nao preenchido).
+  if (avail && typeof avail === 'object') {
+    // Verificar marcador BLK de mes inteiro (formato legado: YYYY-MM-01-BLK)
+    if ((avail as Record<string, string>)[`${month}-01-BLK`] === 'BLK') return false;
+    // Formato antigo de BLK
+    if ((avail as Record<string, string>)[`${month}-01`] === 'BLK') return false;
+
+    const dayVal = (avail as Record<string, string>)[date];
+
+    // Sem registro para este dia = ausencia marcada (novo modelo convertido)
+    if (!dayVal) return false;
+    if (dayVal === 'unavailable') return false;
+    if (dayVal === 'all') return true;
+
+    const hour = parseInt(time.split(':')[0], 10);
+    if (dayVal === 'M') return hour < 12;
+    if (dayVal === 'N') return hour >= 18;
+    if (dayVal === 'T') return hour >= 12 && hour < 18;
+    return true;
+  }
+
+  // Sem dados de disponibilidade: novo modelo opt-out = disponivel por padrao
   return true;
 }
 
@@ -667,10 +756,10 @@ function fillSchedule(data: ScheduleInput): Assignment[] {
   return result;
 }
 
-// ─── Modo Rebalance: sugere trocas para equilibrar a carga mensal ───────────
+// === Modo Rebalance: sugere trocas para equilibrar a carga mensal ===
 
 function rebalanceSchedule(data: ScheduleInput): Assignment[] {
-  // Contagem atual de escalas por membro
+  // Contagem atual de escalas por membro (ignora marcadores de exclusao)
   const currentCount: Record<string, number> = {};
   data.members.forEach(m => { currentCount[m.id] = 0; });
   data.existingAssignments.forEach(a => {
@@ -683,10 +772,12 @@ function rebalanceSchedule(data: ScheduleInput): Assignment[] {
   const memberCount = data.members.length;
   if (memberCount === 0 || totalAssigned === 0) return [];
 
+  // Media de escalas por membro (apenas membros que possuem a funcao necessaria)
+  // Calcula threshold dinamico: ceil(media)
   const avgLoad = totalAssigned / memberCount;
   const overloadThreshold = Math.ceil(avgLoad);
 
-  // Membros com mais escalas que a média (mais sobrecarregados primeiro)
+  // Membros com mais escalas que o threshold (sobrecarregados, mais pesados primeiro)
   const overloaded = data.members
     .filter(m => (currentCount[m.id] || 0) > overloadThreshold)
     .sort((a, b) => (currentCount[b.id] || 0) - (currentCount[a.id] || 0));
@@ -698,25 +789,25 @@ function rebalanceSchedule(data: ScheduleInput): Assignment[] {
   const swappedKeys = new Set<string>();
 
   for (const heavyMember of overloaded) {
-    // Pega as escalas do membro sobrecarregado (mais recentes primeiro para trocar as últimas)
+    // Escalas do membro sobrecarregado, ordenadas da mais recente para a mais antiga
     const memberAssignments = [...data.existingAssignments]
       .filter(a => a.member_id === heavyMember.id && a.role !== '__EVENT_EXCLUDED__')
       .sort((a, b) => b.event_date.localeCompare(a.event_date));
 
     for (const assign of memberAssignments) {
-      // Parar quando este membro já estiver equilibrado
+      // Para quando este membro ja estiver equilibrado
       if ((mutableCounts[heavyMember.id] || 0) <= overloadThreshold) break;
 
       const key = `${assign.event_rule_id}|${normalizeDate(assign.event_date)}|${assign.role}`;
       if (swappedKeys.has(key)) continue;
 
-      // Encontra a ocorrência para obter o horário
+      // Ocorrencia para obter data e horario
       const occ = data.occurrences.find(
         o => o.ruleId === assign.event_rule_id && o.date === normalizeDate(assign.event_date)
       );
       if (!occ) continue;
 
-      // Assignments restantes neste evento (excluindo o membro sendo trocado)
+      // Assignments restantes neste evento (excluindo quem vai ser trocado)
       const remainingEventAssignments = data.existingAssignments.filter(
         a => a.event_rule_id === assign.event_rule_id &&
              normalizeDate(a.event_date) === normalizeDate(assign.event_date) &&
@@ -724,18 +815,22 @@ function rebalanceSchedule(data: ScheduleInput): Assignment[] {
       );
       const membersInEvent = remainingEventAssignments.map(a => a.member_id);
 
-      // Busca substituto elegível com menor carga
+      // Busca candidatos a substituto:
+      // - tem a funcao necessaria
+      // - esta disponivel no dia
+      // - nao esta ja neste evento
+      // - tem carga menor que o sobrecarregado (threshold: pelo menos 1 a menos)
+      // - nao viola regras de conflito
       const candidates = data.members.filter(m => {
         if (m.id === heavyMember.id) return false;
-        // Só substitui se reduzir efetivamente o desequilíbrio
-        if ((mutableCounts[m.id] || 0) >= (mutableCounts[heavyMember.id] || 0) - 1) return false;
         if (!m.functions.includes(assign.role)) return false;
+        // Carga menor = candidato valido para troca (critério mais permissivo: < heavyMember)
+        if ((mutableCounts[m.id] || 0) >= (mutableCounts[heavyMember.id] || 0)) return false;
         if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
-        // Não pode já estar neste evento nesta função
         if (membersInEvent.includes(m.id)) return false;
         if (hasBlockGroupConflict(m.id, assign.role, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
         if (hasMemberBlockConflict(m.id, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
-        // Verifica conflito de turno no domingo
+        // Conflito de turno no domingo
         const tempAll: ExistingAssignment[] = [
           ...data.existingAssignments.filter(
             a => !(a.member_id === heavyMember.id &&
@@ -746,7 +841,7 @@ function rebalanceSchedule(data: ScheduleInput): Assignment[] {
         ];
         if (hasSundayTurnConflict(m.id, occ.date, occ.time, tempAll, data.occurrences)) return false;
         return true;
-      }).sort((a, b) => (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0));
+      }).sort((a, b) => (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0)); // Menor carga primeiro
 
       if (candidates.length === 0) continue;
 

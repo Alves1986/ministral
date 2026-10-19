@@ -169,10 +169,10 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                                 href={`https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para participar do ministério ${currentMinistry?.label || 'Ministral'}. Clique no link para se cadastrar: ${generatedLink}`)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="p-3 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-lg shadow-green-500/20 transition-all active:scale-95 flex items-center justify-center"
+                                className="px-3.5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-md shadow-green-500/20 transition-all active:scale-95 flex items-center justify-center"
                                 title="Compartilhar via WhatsApp"
                             >
-                                <MessageCircle size={20} />
+                                <MessageCircle size={16} />
                             </a>
                         </div>
 

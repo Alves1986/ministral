@@ -23,6 +23,8 @@ import {
   Sparkles,
   Plus,
   Building2,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 import { useToast } from "./Toast";
 import { LegalModal, LegalDocType } from "./LegalDocuments";
@@ -69,7 +71,7 @@ const MEMBER_TABS = [
   { id: "dashboard", label: "Início" },
   { id: "announcements", label: "Avisos" },
   { id: "calendar", label: "Calendário" },
-  { id: "availability", label: "Disponibilidade" },
+  { id: "availability", label: "Ausências" },
   { id: "swaps", label: "Trocas" },
   { id: "repertoire", label: "Repertório" },
   { id: "ranking", label: "Destaques" },
@@ -78,7 +80,7 @@ const MEMBER_TABS = [
 
 const QUICK_ACCESS_OPTIONS = [
   { id: "calendar", label: "Ver Escala" },
-  { id: "availability", label: "Disponibilidade" },
+  { id: "availability", label: "Ausências" },
   { id: "history", label: "Histórico de Escala" },
   { id: "swaps", label: "Trocas" },
   { id: "repertoire", label: "Repertório" },
@@ -231,8 +233,8 @@ export const SettingsScreen: React.FC<Props> = ({
 
       if (isOpenNow) {
         await sendNotificationSQL(ministryId, orgId, {
-          title: "📅 Agenda Atualizada",
-          message: `A disponibilidade está aberta até ${e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`,
+          title: "🗓️ Apontamento de Ausências Liberado!",
+          message: `O prazo para registrar ausências na escala está aberto até ${e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`,
           type: "info",
           actionLink: "availability",
         });
@@ -240,7 +242,7 @@ export const SettingsScreen: React.FC<Props> = ({
         await sendNotificationSQL(ministryId, orgId, {
           title: "🔒 Janela Encerrada",
           message:
-            "O período para envio de disponibilidade foi encerrado/alterado.",
+            "O período para apontamento de ausências na escala foi encerrado/alterado.",
           type: "warning",
         });
       }
@@ -262,7 +264,7 @@ export const SettingsScreen: React.FC<Props> = ({
 
       await sendNotificationSQL(ministryId, orgId, {
         title: "🔒 Janela Fechada",
-        message: "O período para enviar disponibilidade foi encerrado.",
+        message: "O período para apontamento de ausências na escala foi encerrado.",
         type: "warning",
       });
 
@@ -281,8 +283,8 @@ export const SettingsScreen: React.FC<Props> = ({
         month: "2-digit",
       });
       await sendNotificationSQL(ministryId, orgId, {
-        title: "📅 Disponibilidade Liberada!",
-        message: `A agenda está aberta até ${endDateFormatted}. Marque seus dias agora!`,
+        title: "🗓️ Apontamento de Ausências Liberado!",
+        message: `O período para registrar suas ausências na escala está aberto até ${endDateFormatted}. Informe suas datas no app!`,
         type: "success",
         actionLink: "availability",
       });
@@ -291,6 +293,27 @@ export const SettingsScreen: React.FC<Props> = ({
     await onSaveAvailabilityWindow(newStartStr, newEndStr);
     setAvailStart(toLocalInput(newStartStr));
     setAvailEnd(toLocalInput(newEndStr));
+  };
+
+  const handleSendDeadlineAlert = async () => {
+    if (!ministryId || !orgId) return;
+    const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
+    if (!endIso) {
+      addToast("Nenhuma data limite definida para a janela de ausências.", "warning");
+      return;
+    }
+    const e = new Date(endIso);
+    const dateFormatted = e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    const timeFormatted = e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    await sendNotificationSQL(ministryId, orgId, {
+      title: "⏳ Alerta de Prazo: Apontamento de Ausência",
+      message: `Atenção: o prazo para informar suas ausências na escala encerra em ${dateFormatted} às ${timeFormatted}. Não deixe para a última hora!`,
+      type: "warning",
+      actionLink: "availability",
+    });
+
+    addToast("Alerta de prazo enviado com sucesso para todos os membros!", "success");
   };
 
   const handleCreateMinistry = async (e: React.FormEvent) => {
@@ -351,6 +374,27 @@ export const SettingsScreen: React.FC<Props> = ({
     }
   };
 
+  const handleTestPush = async () => {
+    try {
+      if (!("serviceWorker" in navigator)) {
+        addToast("Service Worker não suportado neste dispositivo.", "error");
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) {
+        await reg.showNotification("Ministral — Notificação de Teste", {
+          body: "O sistema de notificações está funcionando perfeitamente no seu dispositivo!",
+          icon: "/branding/icon-light.png",
+          badge: "/branding/favicon-light.png",
+          data: { url: "/" },
+        } as any);
+        addToast("Notificação de teste enviada!", "success");
+      }
+    } catch (err: any) {
+      addToast("Erro ao exibir notificação: " + (err?.message || err), "error");
+    }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-10">
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
@@ -395,44 +439,44 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
 
       {activeTab === "admin" && isAdmin && (
-        <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden relative group">
+        <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden relative group">
           <div
-            className={`relative px-6 py-8 transition-colors duration-500 ${status ? "bg-gradient-to-br from-secondaryHover via-secondary to-ministral-dark" : "bg-gradient-to-br from-zinc-700 via-zinc-800 to-black"}`}
+            className={`relative px-4 py-4 sm:px-5 sm:py-5 transition-colors duration-500 ${status ? "bg-gradient-to-br from-secondaryHover via-secondary to-ministral-dark" : "bg-gradient-to-br from-zinc-700 via-zinc-800 to-black"}`}
           >
-            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-4">
+            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div className="flex items-center gap-3">
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md ${status ? "bg-secondary/30" : "bg-red-500/20"}`}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md border border-white/20 backdrop-blur-md ${status ? "bg-secondary/30" : "bg-red-500/20"}`}
                 >
                   {status ? (
-                    <Unlock size={28} className="text-white" />
+                    <Unlock size={20} className="text-white" />
                   ) : (
-                    <Lock size={28} className="text-red-100" />
+                    <Lock size={20} className="text-red-100" />
                   )}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-white font-bold text-xl tracking-tight">
-                      Janela de Disponibilidade
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h3 className="text-white font-bold text-base sm:text-lg tracking-tight">
+                      Janela de Apontamento de Ausências
                     </h3>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${status ? "bg-secondary/80 text-white border-secondary/50" : "bg-red-500 text-white border-red-400"}`}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${status ? "bg-secondary/80 text-white border-secondary/50" : "bg-red-500 text-white border-red-400"}`}
                     >
                       {status ? "Aberta" : "Fechada"}
                     </span>
                   </div>
-                  <p className="text-white/70 text-sm font-medium">
+                  <p className="text-white/70 text-xs font-medium">
                     {status
-                      ? "Os membros podem enviar suas datas."
-                      : "A agenda está bloqueada para edições."}
+                      ? "Os membros podem apontar suas ausências no app."
+                      : "O apontamento de ausências está bloqueado."}
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="p-6">
-            <div className="mb-8">
+          <div className="p-4 sm:p-5">
+            <div className="mb-5">
               <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block flex items-center gap-2">
                 <CalendarClock size={14} /> Configuração de Período
               </label>
@@ -477,58 +521,70 @@ export const SettingsScreen: React.FC<Props> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 onClick={handleSaveAdvanced}
-                className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+                className="flex items-center justify-center gap-2 w-full py-2.5 sm:py-3 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-xs sm:text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
               >
-                <Save size={18} /> Salvar & Notificar
+                <Save size={16} /> Salvar & Notificar
               </button>
 
               {status ? (
                 <button
                   onClick={() => handleQuickAction("block")}
-                  className="flex items-center justify-center gap-2 w-full py-4 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-sm transition-all shadow-sm hover:shadow active:scale-95"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 sm:py-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm hover:shadow active:scale-95"
                 >
-                  <Lock size={18} /> Bloquear Imediatamente
+                  <Lock size={16} /> Bloquear Imediatamente
                 </button>
               ) : (
                 <button
                   onClick={() => handleQuickAction("open")}
-                  className="flex items-center justify-center gap-2 w-full py-4 bg-secondary hover:bg-secondaryHover text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-secondary/20 hover:shadow-secondaryHover/40 active:scale-95 group"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 sm:py-3 bg-secondary hover:bg-secondaryHover text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-lg shadow-secondary/20 hover:shadow-secondaryHover/40 active:scale-95 group"
                 >
                   <Unlock
-                    size={18}
+                    size={16}
                     className="group-hover:rotate-12 transition-transform"
                   />{" "}
                   Liberar por 7 Dias
                 </button>
               )}
             </div>
+
+            {status && (
+              <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-700/60">
+                <button
+                  onClick={handleSendDeadlineAlert}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 sm:py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md active:scale-95"
+                  title="Enviar alerta push/in-app relembrando os membros da data limite de envio de ausências"
+                >
+                  <Clock size={16} /> Enviar Alerta de Prazo aos Membros
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {activeTab === "admin" && isAdmin && onSaveEnabledTabs && (
-        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-2.5 flex items-center gap-2">
             <ShieldCheck size={16} /> Abas Visíveis para Membros
           </h3>
-          <p className="text-xs text-zinc-500 mb-6">
+          <p className="text-xs text-zinc-500 mb-4">
             Escolha quais abas estarão disponíveis para os membros deste
             ministério. As abas de Perfil e Configurações são sempre visíveis.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {MEMBER_TABS.map((tab) => {
               const isEnabled =
                 ministryConfig?.enabledTabs?.includes(tab.id) ?? true;
               return (
                 <div
                   key={tab.id}
-                  className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50"
+                  className="flex items-center justify-between p-2.5 sm:p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-100 dark:border-zinc-700/50"
                 >
-                  <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-xs sm:text-sm font-bold text-zinc-700 dark:text-zinc-300">
                     {tab.label}
                   </span>
                   <button
@@ -563,16 +619,16 @@ export const SettingsScreen: React.FC<Props> = ({
       )}
 
       {activeTab === "admin" && isAdmin && (
-        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-2.5 flex items-center gap-2">
             <Zap size={16} /> Acesso Rápido (Dashboard)
           </h3>
-          <p className="text-xs text-zinc-500 mb-6">
+          <p className="text-xs text-zinc-500 mb-4">
             Escolha quais atalhos aparecerão na seção de Acesso Rápido da página
             inicial.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {QUICK_ACCESS_OPTIONS.map((item) => {
               const currentItems =
                 ministryConfig?.quickAccessItems === null ||
@@ -583,9 +639,9 @@ export const SettingsScreen: React.FC<Props> = ({
               return (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50"
+                  className="flex items-center justify-between p-2.5 sm:p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-100 dark:border-zinc-700/50"
                 >
-                  <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-xs sm:text-sm font-bold text-zinc-700 dark:text-zinc-300">
                     {item.label}
                   </span>
                   <button
@@ -627,11 +683,11 @@ export const SettingsScreen: React.FC<Props> = ({
       )}
 
       {activeTab === "admin" && isAdmin && (
-        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-2.5 flex items-center gap-2">
             <Sparkles size={16} /> Diretrizes Práticas (Culto e Eventos)
           </h3>
-          <p className="text-xs text-zinc-500 mb-6">
+          <p className="text-xs text-zinc-500 mb-4">
             Defina as diretrizes, avisos e check-lists que os escalados deste
             ministério verão ao consultar o Cronograma / Pauta do Culto.
           </p>
@@ -642,7 +698,7 @@ export const SettingsScreen: React.FC<Props> = ({
 - Chegar 30 min antes
 - Fazer check das baterias
 - Estar em oração..."
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-secondary/50 resize-y min-h-[150px] mb-4"
+            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-secondary/50 resize-y min-h-[100px] mb-3"
           />
           <button
             onClick={async () => {
@@ -651,7 +707,7 @@ export const SettingsScreen: React.FC<Props> = ({
                 await onSaveGuidelines(tempGuidelines);
               } catch (e) {}
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondaryHover text-white font-bold text-sm rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3.5 py-2 bg-secondary hover:bg-secondaryHover text-white font-bold text-xs sm:text-sm rounded-lg transition-colors"
           >
             <Save size={16} />
             Salvar Diretrizes
@@ -688,35 +744,35 @@ export const SettingsScreen: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
               {ministries?.map((min) => (
                 <div
                   key={min.id}
-                  className="bg-white dark:bg-zinc-800/50 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700/50 hover:border-secondary/30 transition-all flex flex-col"
+                  className="bg-white dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700/50 hover:border-secondary/30 transition-all flex flex-col"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="p-3 bg-secondary/10 text-secondary rounded-xl">
-                      <Building2 size={24} />
+                  <div className="flex justify-between items-start mb-2.5">
+                    <div className="p-2 bg-secondary/10 text-secondary rounded-lg">
+                      <Building2 size={20} />
                     </div>
                     {min.id === ministryId && (
-                      <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] uppercase font-bold rounded-full">
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] uppercase font-bold rounded-full">
                         Atual
                       </span>
                     )}
                   </div>
-                  <h4 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  <h4 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                     {min.label}
                   </h4>
-                  <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
+                  <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
                     Sigla: <span className="font-mono bg-zinc-100 dark:bg-zinc-900 px-1 rounded">{min.code}</span>
                   </p>
                 </div>
               ))}
               
               {(!ministries || ministries.length === 0) && (
-                <div className="col-span-full py-12 text-center text-zinc-500 dark:text-zinc-400">
-                  <Building2 size={48} className="mx-auto mb-4 opacity-20" />
-                  <p>Nenhum ministério encontrado.</p>
+                <div className="col-span-full py-8 text-center text-zinc-500 dark:text-zinc-400">
+                  <Building2 size={36} className="mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Nenhum ministério encontrado.</p>
                 </div>
               )}
             </div>
@@ -725,13 +781,13 @@ export const SettingsScreen: React.FC<Props> = ({
 
       {activeTab === "geral" && (
         <>
-          <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
               <Monitor size={16} /> Aparência
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5">
                   Tema
                 </label>
                 <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
@@ -739,7 +795,7 @@ export const SettingsScreen: React.FC<Props> = ({
                     <button
                       key={mode}
                       onClick={() => onSetThemeMode(mode)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${themeMode === mode ? "bg-white dark:bg-zinc-800 shadow text-zinc-900 dark:text-white" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                      className={`flex-1 py-1.5 sm:py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${themeMode === mode ? "bg-white dark:bg-zinc-800 shadow text-zinc-900 dark:text-white" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                     >
                       {mode === "light" && <Sun size={14} />}
                       {mode === "dark" && <Moon size={14} />}
@@ -755,7 +811,7 @@ export const SettingsScreen: React.FC<Props> = ({
               </div>
               {isAdmin && (
                 <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5">
                     Nome do Ministério <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-2">
@@ -766,7 +822,7 @@ export const SettingsScreen: React.FC<Props> = ({
                       onBlur={() => validateField('ministryName', tempTitle)}
                       aria-invalid={!!fieldErrors.ministryName}
                       aria-describedby={fieldErrors.ministryName ? 'error-ministry-name' : undefined}
-                      className={`flex-1 bg-zinc-50 dark:bg-zinc-900 border rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 ${
+                      className={`flex-1 bg-zinc-50 dark:bg-zinc-900 border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 ${
                           fieldErrors.ministryName ? 'border-red-500 dark:border-red-500' : 'border-zinc-200 dark:border-zinc-700'
                       }`}
                     />
@@ -776,9 +832,9 @@ export const SettingsScreen: React.FC<Props> = ({
                           onSaveTitle(tempTitle);
                         }
                       }}
-                      className="bg-secondary hover:bg-secondaryHover text-white p-2.5 rounded-lg transition-colors"
+                      className="bg-secondary hover:bg-secondaryHover text-white p-2 rounded-lg transition-colors"
                     >
-                      <Save size={18} />
+                      <Save size={16} />
                     </button>
                   </div>
                   {fieldErrors.ministryName && <p id="error-ministry-name" className="text-xs text-red-500 mt-1" role="alert">{fieldErrors.ministryName}</p>}
@@ -786,7 +842,7 @@ export const SettingsScreen: React.FC<Props> = ({
               )}
             </div>
             {onSaveTheme && (
-              <div className="mt-4 flex justify-end">
+              <div className="mt-3 flex justify-end">
                 <button
                   onClick={onSaveTheme}
                   className="text-xs text-secondary dark:text-secondary/80 font-bold hover:underline"
@@ -797,27 +853,27 @@ export const SettingsScreen: React.FC<Props> = ({
             )}
           </div>
 
-          <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
               <ShieldCheck size={16} /> Sistema
             </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between p-2.5 sm:p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-100 dark:border-zinc-700/50">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`p-2 rounded-lg ${notifPermission === "granted" ? "bg-secondary/10 text-secondary dark:bg-secondaryHover/30" : "bg-zinc-200 text-zinc-500"}`}
+                    className={`p-1.5 sm:p-2 rounded-lg ${notifPermission === "granted" ? "bg-secondary/10 text-secondary dark:bg-secondaryHover/30" : "bg-zinc-200 text-zinc-500"}`}
                   >
                     {notifPermission === "granted" ? (
-                      <BellRing size={20} />
+                      <BellRing size={18} />
                     ) : (
-                      <BellOff size={20} />
+                      <BellOff size={18} />
                     )}
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
+                    <h4 className="font-bold text-xs sm:text-sm text-zinc-800 dark:text-zinc-200">
                       Notificações Push
                     </h4>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-[11px] sm:text-xs text-zinc-500">
                       {notifPermission === "granted"
                         ? "Ativas neste dispositivo."
                         : "Permita para receber avisos."}
@@ -828,7 +884,7 @@ export const SettingsScreen: React.FC<Props> = ({
                   <button
                     onClick={handleNotificationClick}
                     disabled={isNotifLoading}
-                    className="px-3 py-1.5 bg-secondary hover:bg-secondaryHover text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2"
+                    className="px-2.5 py-1 bg-secondary hover:bg-secondaryHover text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
                   >
                     {isNotifLoading ? (
                       <Loader2 size={12} className="animate-spin" />
@@ -838,7 +894,17 @@ export const SettingsScreen: React.FC<Props> = ({
                   </button>
                 )}
                 {notifPermission === "granted" && (
-                  <Check size={18} className="text-secondary mr-2" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestPush}
+                      className="px-2 py-0.5 text-xs font-semibold text-secondary hover:bg-secondary/10 border border-secondary/30 rounded-lg transition-colors active:scale-95"
+                      title="Disparar notificação de teste neste dispositivo"
+                    >
+                      Testar
+                    </button>
+                    <Check size={16} className="text-secondary mr-1" />
+                  </div>
                 )}
               </div>
             </div>

@@ -323,17 +323,19 @@ export default async function handler(req: any, res: any) {
   }
 
   // Resolve a API key — suporta ambas as variáveis de ambiente
-  const apiKey =
+  const geminiApiKey =
     (process.env.GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.GEMINI_API_KEY : '') ||
     (process.env.VITE_GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.VITE_GEMINI_API_KEY : '') ||
     process.env.GEMINI_API_KEY ||
     process.env.VITE_GEMINI_API_KEY ||
     '';
 
-  if (!apiKey) {
-    console.error('[api/ai/run] GEMINI_API_KEY não configurada nas variáveis de ambiente do Vercel.');
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+
+  if (!geminiApiKey && !openRouterApiKey) {
+    console.error('[api/ai/run] Nenhuma chave de IA (Gemini ou OpenRouter) configurada.');
     return res.status(500).json({
-      error: 'Serviço de IA temporariamente indisponível.',
+      error: 'Serviço de IA temporariamente indisponível (Chaves ausentes).',
     });
   }
 
@@ -352,7 +354,7 @@ export default async function handler(req: any, res: any) {
     const useJson = JSON_TASKS.has(taskType);
     const prompt = buildPrompt(taskType, context, payload);
 
-    const content = await callWithFallback(apiKey, prompt, useJson, preferredModel);
+    const content = await callWithFallback(geminiApiKey, prompt, useJson, preferredModel);
     const result = parseResponse(content, taskType);
 
     return res.status(200).json(result);

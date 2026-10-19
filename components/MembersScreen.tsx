@@ -42,6 +42,7 @@ export const MembersScreen: React.FC<Props> = ({
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberProfile | null>(null);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'members' | 'audit'>('members');
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -385,55 +386,63 @@ export const MembersScreen: React.FC<Props> = ({
                 <p className="text-xs text-zinc-400 mt-1">Tente ajustar os filtros de busca.</p>
             </div>
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-3.5 auto-rows-fr items-stretch">
             {filteredMembers.map(member => {
                 const isOnline = onlineUsers.includes(member.id);
                 const isSelf = currentUser.id === member.id;
-                
                 const memberFunctions = member.ministry_functions || [];
+                const isExpanded = expandedCards[member.id] !== false; // expanded by default
 
                 return (
-                <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up">
-                    <div className="flex justify-between items-start">
-                        <div className="flex gap-4">
-                            <div className="relative">
-                                {member.avatar_url ? (
-                                    <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-100 dark:border-zinc-700 shadow-sm" />
-                                ) : (
-                                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-secondary to-secondaryHover flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-100 dark:border-zinc-700 shadow-sm">
-                                        {member.name.charAt(0).toUpperCase()}
-                                    </div>
-                                )}
-                                {isOnline && (
-                                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-secondary rounded-full border-2 border-white dark:border-[#18181b] animate-pulse shadow-sm" title="Online Agora"></div>
-                                )}
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-lg text-zinc-800 dark:text-zinc-100 truncate max-w-[150px]" title={member.name}>
-                                    {member.name} {isSelf && <span className="text-secondary dark:text-white text-xs">(Você)</span>}
-                                </h3>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                    {member.isAdmin ? (
-                                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ministral-gold bg-ministral-gold/10 px-2 py-0.5 rounded border border-ministral-gold/20">
-                                            <ShieldCheck size={10} /> Admin
-                                        </span>
-                                    ) : (
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
-                                            Membro
-                                        </span>
-                                    )}
+                <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 sm:p-3.5 flex flex-col relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up h-full">
+                    {/* Row 1: Avatar + Full Name + Expander */}
+                    <div className="flex items-center gap-2.5">
+                        <div className="relative shrink-0">
+                            {member.avatar_url ? (
+                                <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border-2 border-zinc-100 dark:border-zinc-700 shadow-sm" />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-secondary to-secondaryHover flex items-center justify-center text-white text-base font-bold border-2 border-zinc-100 dark:border-zinc-700 shadow-sm">
+                                    {member.name.charAt(0).toUpperCase()}
                                 </div>
-                            </div>
+                            )}
+                            {isOnline && (
+                                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-secondary rounded-full border-2 border-white dark:border-[#18181b] animate-pulse shadow-sm" title="Online Agora"></div>
+                            )}
                         </div>
-                        
+                        <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-100 flex-1 min-w-0 break-words leading-tight min-h-[2rem] flex items-center" title={member.name}>
+                            {member.name} {isSelf && <span className="text-secondary dark:text-white text-xs ml-1">(Você)</span>}
+                        </h3>
+                        <button
+                            onClick={() => setExpandedCards(prev => ({ ...prev, [member.id]: !isExpanded }))}
+                            aria-label={isExpanded ? `Recolher detalhes de ${member.name}` : `Expandir detalhes de ${member.name}`}
+                            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-all shrink-0"
+                        >
+                            <ChevronDown size={16} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                    </div>
+
+                    {/* Row 2: Role Badge + Admin Actions */}
+                    <div className="flex items-center justify-between mt-2 gap-2">
+                        <div className="flex items-center gap-1.5">
+                            {member.isAdmin ? (
+                                <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-ministral-gold bg-ministral-gold/10 px-1.5 py-0.5 rounded border border-ministral-gold/20">
+                                    <ShieldCheck size={9} /> Admin
+                                </span>
+                            ) : (
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                    Membro
+                                </span>
+                            )}
+                        </div>
                         {!isSelf && (
-                            <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-0.5">
                                 <button
                                     onClick={() => setEditingMember(member)}
-                                    className="p-2 rounded-lg text-zinc-400 hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondaryHover/10 transition-colors"
+                                    className="p-1.5 rounded-lg text-zinc-400 hover:text-secondary hover:bg-secondary/10 dark:hover:bg-secondaryHover/10 transition-colors"
                                     title="Editar Membro"
+                                    aria-label={`Editar ${member.name}`}
                                 >
-                                    <Edit2 size={16} />
+                                    <Edit2 size={13} />
                                 </button>
 
                                 <button 
@@ -441,10 +450,8 @@ export const MembersScreen: React.FC<Props> = ({
                                         const memberEmail = member.email;
                                         if (!memberEmail) return;
                                         if (!isEnterprise) {
-                                            // Verificar se é o criador (único admin atual)
                                             const adminsCount = members.filter(m => m.isAdmin).length;
                                             if (!member.isAdmin && adminsCount >= 1) {
-                                                // Tentando promover novo admin sem ser Enterprise
                                                 addToast(
                                                     'Múltiplos administradores estão disponíveis apenas no Plano Enterprise.',
                                                     'error'
@@ -459,13 +466,14 @@ export const MembersScreen: React.FC<Props> = ({
                                             () => onToggleAdmin(memberEmail, !!member.isAdmin, member.name)
                                         );
                                     }} 
-                                    className={`p-2 rounded-lg transition-colors ${member.isAdmin ? 'text-ministral-gold hover:bg-ministral-gold/10' : 'text-zinc-400 hover:text-secondary hover:bg-zinc-50 dark:hover:bg-zinc-800'}`} 
+                                    className={`p-1.5 rounded-lg transition-colors ${member.isAdmin ? 'text-ministral-gold hover:bg-ministral-gold/10' : 'text-zinc-400 hover:text-secondary hover:bg-zinc-50 dark:hover:bg-zinc-800'}`} 
                                     title={!isEnterprise && !member.isAdmin
                                         ? 'Múltiplos admins — somente Plano Enterprise'
                                         : member.isAdmin ? 'Remover Admin' : 'Tornar Admin'
                                     }
+                                    aria-label={member.isAdmin ? `Remover admin de ${member.name}` : `Tornar ${member.name} admin`}
                                 >
-                                    <Shield size={16} fill={member.isAdmin ? "currentColor" : "none"} />
+                                    <Shield size={13} fill={member.isAdmin ? "currentColor" : "none"} />
                                 </button>
                                 
                                 <button 
@@ -477,55 +485,60 @@ export const MembersScreen: React.FC<Props> = ({
                                         );
                                     }}
                                     aria-label={`Remover ${member.name} da equipe`}
-                                    className="p-2 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                 >
-                                    <Trash2 size={16} />
+                                    <Trash2 size={13} />
                                 </button>
                             </div>
                         )}
                     </div>
 
-                    <div className="flex flex-wrap gap-2 min-h-[26px]">
-                        {memberFunctions.length > 0 ? (
-                            memberFunctions.map(role => (
-                                <span key={role} className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
-                                    {role}
-                                </span>
-                            ))
-                        ) : (
-                            <span className="text-xs text-zinc-400 italic px-1">Sem função definida</span>
-                        )}
-                    </div>
-
-                    <hr className="border-zinc-100 dark:border-zinc-800/50" />
-
-                    <div className="space-y-2.5 text-sm">
-                        <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
-                            <Mail size={16} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
-                            <span className="truncate">{member.email || "Sem e-mail"}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
-                            <div className="flex items-center gap-3 truncate">
-                                <MessageCircle size={16} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
-                                {member.whatsapp ? <span className="truncate">{member.whatsapp}</span> : <span className="text-zinc-400 italic text-xs">WhatsApp não informado</span>}
+                    {/* Expanded Area: Functions + Contact */}
+                    {isExpanded && (
+                        <div className="mt-2.5 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/50 space-y-2 animate-fade-in">
+                            {/* Functions */}
+                            <div className="flex flex-wrap gap-1.5 min-h-[22px]">
+                                {memberFunctions.length > 0 ? (
+                                    memberFunctions.map(role => (
+                                        <span key={role} className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
+                                            {role}
+                                        </span>
+                                    ))
+                                ) : (
+                                    <span className="text-[11px] text-zinc-400 italic px-1">Sem função definida</span>
+                                )}
                             </div>
-                            {member.whatsapp && /^\(\d{2}\) \d{5}-\d{4}$/.test(member.whatsapp) && (
-                                <button 
-                                    onClick={() => window.open(`https://wa.me/55${member.whatsapp!.replace(/\D/g, '')}`, '_blank')}
-                                    className="p-1 text-secondary dark:text-white hover:bg-secondary/10 rounded transition-colors"
-                                    title="Abrir WhatsApp"
-                                >
-                                    <ExternalLink size={14} />
-                                </button>
-                            )}
-                        </div>
-                        {member.birthDate && (
-                            <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
-                                <Gift size={16} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
-                                <span className="truncate">{new Date(member.birthDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
+
+                            {/* Contact Details */}
+                            <div className="space-y-1.5 text-xs">
+                                <div className="flex items-center gap-2.5 text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+                                    <Mail size={13} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
+                                    <span className="truncate">{member.email || "Sem e-mail"}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+                                    <div className="flex items-center gap-2.5 truncate">
+                                        <MessageCircle size={13} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
+                                        {member.whatsapp ? <span className="truncate">{member.whatsapp}</span> : <span className="text-zinc-400 italic text-xs">WhatsApp não informado</span>}
+                                    </div>
+                                    {member.whatsapp && /^\(\d{2}\) \d{5}-\d{4}$/.test(member.whatsapp) && (
+                                        <button 
+                                            onClick={() => window.open(`https://wa.me/55${member.whatsapp!.replace(/\D/g, '')}`, '_blank')}
+                                            className="p-1 text-secondary dark:text-white hover:bg-secondary/10 rounded transition-colors"
+                                            title="Abrir WhatsApp"
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                {member.birthDate && (
+                                    <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 group/item hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+                                        <Gift size={15} className="text-zinc-300 dark:text-zinc-600 shrink-0"/>
+                                        <span className="truncate">{new Date(member.birthDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
                 );
             })}

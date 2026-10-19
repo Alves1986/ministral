@@ -17,18 +17,24 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
-        
+
         const baseDate = row.available_date;
-        
-        // Handle special notes
+
+        // Marcador de mes inteiro bloqueado
         if (row.note === 'BLK') {
             map[row.user_id].push(`${baseDate.substring(0, 7)}-BLK`);
             return;
         }
 
+        // Marcador de mes inteiro disponivel
+        if (row.note === 'FREE') {
+            map[row.user_id].push(`${baseDate.substring(0, 7)}-FREE`);
+            return;
+        }
+
+        // Observacao geral do membro para o mes
         if (row.note && row.note.startsWith('NOTE:')) {
             const actualNote = row.note.substring(5);
-            // Ignorar horários salvos acidentalmente como observação geral
             if (!/^\d{2}:\d{2}(:\d{2})?$/.test(actualNote.trim())) {
                 const monthKey = row.available_date.substring(0, 7) + '-00';
                 notes[`${row.user_id}_${monthKey}`] = actualNote;
@@ -36,14 +42,11 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
             return;
         }
 
-        // Legacy or period notes
-        let key = row.note ? `${baseDate}_${row.note}` : baseDate;
-        map[row.user_id].push(key);
-        
-        // Fallback for legacy notes that don't have NOTE: prefix
-        if (row.note && !['M', 'N', 'T', 'BLK'].includes(row.note) && !row.note.startsWith('NOTE:') && !/^\d{2}:\d{2}(:\d{2})?$/.test(row.note.trim())) {
-            const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.note;
+        // Ausencia por periodo (M = manha, N = noite) ou dia inteiro
+        if (row.note && ['M', 'N'].includes(row.note)) {
+            map[row.user_id].push(`${baseDate}_${row.note}`);
+        } else {
+            map[row.user_id].push(baseDate);
         }
     });
 
@@ -73,7 +76,7 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         .gte('available_date', `${targetMonth}-01`)
         .lt('available_date', `${nextMonth}-01`);
 
-    console.log("[saveMemberAvailabilityV2] Delete concluído", { delError });
+    console.log("[saveMemberAvailabilityV2] Delete concluido", { delError });
 
     if (delError) throw delError;
 
@@ -82,6 +85,7 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
 
     uniqueDates.forEach(dateString => {
         if (dateString.endsWith('-BLK')) {
+            // Mes inteiro indisponivel
             rows.push({
                 organization_id: orgId,
                 ministry_id: ministryId,
@@ -89,19 +93,41 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
                 available_date: `${targetMonth}-01`,
                 note: 'BLK'
             });
-        } else {
-            const [dateOnly, period] = dateString.split('_');
+        } else if (dateString.endsWith('-FREE')) {
+            // Mes inteiro disponivel (sem ausencias marcadas)
             rows.push({
                 organization_id: orgId,
                 ministry_id: ministryId,
                 user_id: userId,
-                available_date: dateOnly,
-                note: period ?? null
+                available_date: `${targetMonth}-01`,
+                note: 'FREE'
             });
+        } else {
+            // Ausencia de dia ou periodo especifico
+            const underscoreIdx = dateString.indexOf('_');
+            if (underscoreIdx !== -1) {
+                const dateOnly = dateString.substring(0, underscoreIdx);
+                const period = dateString.substring(underscoreIdx + 1);
+                rows.push({
+                    organization_id: orgId,
+                    ministry_id: ministryId,
+                    user_id: userId,
+                    available_date: dateOnly,
+                    note: period
+                });
+            } else {
+                rows.push({
+                    organization_id: orgId,
+                    ministry_id: ministryId,
+                    user_id: userId,
+                    available_date: dateString,
+                    note: null
+                });
+            }
         }
     });
 
-    // Save general note
+    // Salva observacao geral do mes
     const noteKey = `${targetMonth}-00`;
     const generalNote = notes[noteKey];
     if (generalNote && generalNote.trim()) {
@@ -120,8 +146,8 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         const { error: insError } = await sb
             .from('member_availability')
             .insert(rows);
-            
-        console.log("[saveMemberAvailabilityV2] Insert concluído", { insError });
+
+        console.log("[saveMemberAvailabilityV2] Insert concluido", { insError });
 
         if (insError) throw insError;
     }

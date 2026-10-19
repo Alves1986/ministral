@@ -67,14 +67,16 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Falha ao validar sessão.' });
   }
 
-  const apiKey =
+  const geminiApiKey =
     (process.env.GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.GEMINI_API_KEY : '') ||
     (process.env.VITE_GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.VITE_GEMINI_API_KEY : '') ||
     process.env.GEMINI_API_KEY ||
     process.env.VITE_GEMINI_API_KEY ||
     '';
 
-  if (!apiKey) {
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+
+  if (!geminiApiKey && !openRouterApiKey) {
     return res.status(500).json({ error: 'Serviço de IA temporariamente indisponível.' });
   }
 
@@ -111,7 +113,7 @@ export default async function handler(req: any, res: any) {
     let raw = '';
     for (const m of order) {
       try {
-        raw = await callGeminiJSON(apiKey, m, prompt);
+        raw = await callGeminiJSON(geminiApiKey, m, prompt);
         break;
       } catch (err: any) {
         lastErr = err;

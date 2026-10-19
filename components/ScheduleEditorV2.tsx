@@ -14,7 +14,8 @@ import {
     OccurrenceV2,
     fetchAvailabilityForEditor,
     fetchConflictRules,
-    fetchGlobalConflictsV2
+    fetchGlobalConflictsV2,
+    togglePublishScheduleV2
 } from '../services/scheduleServiceV2';
 import { sendNotificationSQL } from '../services/supabaseService';
 import { 
@@ -34,10 +35,13 @@ import {
     CheckCircle2,
     User,
     RefreshCw,
-    AlertCircle
+    AlertCircle,
+    Bell,
+    Send
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
+import { validateAssignment } from '../services/aiScheduleUtils';
 
 // --- COMPONENTES AUXILIARES ---
 import { ScheduleCell, getMemberAvailStatus, Avatar, isConflict } from './ScheduleCell';
@@ -191,6 +195,15 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [memberNotes, setMemberNotes] = useState<Record<string, string>>({});
     const [conflictRules, setConflictRules] = useState<{ blockGroups: string[][], allowExceptions: string[][], memberBlocks: string[][], memberPrefers: string[][], eventRoleExcludes: Record<string, string[]> }>({ blockGroups: [], allowExceptions: [], memberBlocks: [], memberPrefers: [], eventRoleExcludes: {} });
     const [globalConflicts, setGlobalConflicts] = useState<Record<string, { date: string, ministryId: string, role: string }[]>>({});
+    const [isPublishing, setIsPublishing] = useState(false);
+
+    // Verifica se a escala do mês está liberada/publicada
+    const isMonthPublished = useMemo(() => {
+        return assignments.some(a => 
+            (a.event_rule_id === 'PUBLISHED_FLAG' || a.role === '__PUBLISHED__') &&
+            a.event_date.startsWith(currentMonth)
+        );
+    }, [assignments, currentMonth]);
 
     // -- DERIVED STATE --
     const memberCounts = assignments.reduce((acc, curr) => {
@@ -351,8 +364,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             // Garantir que todos tem .slice
             const safeAi = Array.isArray(aiAssignments) ? aiAssignments.filter(a => a && typeof a.event_date === 'string' && a.role && a.event_rule_id) : [];
             
+            // Validar sugestões contra regras de negócio absolutas
+            const validAi = safeAi.filter((a: any) => {
+                const err = validateAssignment(a, input);
+                if (err) {
+                    console.warn(`Sugestão da IA rejeitada: [${a.event_date}] ${a.role} -> ${a.member_id}. Motivo: ${err.message}`);
+                    return false;
+                }
+                return true;
+            });
+
             // Filtrar apenas o que NÃO está preenchido
-            const newAssignments = safeAi.filter((ai: any) => {
+            const newAssignments = validAi.filter((ai: any) => {
                 const alreadyExists = assignments.some(a => 
                     a.event_date && typeof a.event_date === 'string' &&
                     a.event_date.slice(0, 10) === ai.event_date.slice(0, 10) && 
@@ -445,11 +468,21 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             const safeAi = Array.isArray(aiAssignments)
                 ? aiAssignments.filter((a: any) => a && typeof a.event_date === 'string' && a.role && a.event_rule_id)
                 : [];
-            if (safeAi.length === 0) {
-                addToast('A escala já está bem equilibrada! Nenhuma troca necessária.', 'info');
+                
+            const validAi = safeAi.filter((a: any) => {
+                const err = validateAssignment(a, input);
+                if (err) {
+                    console.warn(`Sugestão da IA (Reequilíbrio) rejeitada: [${a.event_date}] ${a.role} -> ${a.member_id}. Motivo: ${err.message}`);
+                    return false;
+                }
+                return true;
+            });
+
+            if (validAi.length === 0) {
+                addToast('A escala já está bem equilibrada ou não foi possível sugerir trocas seguras.', 'info');
                 return;
             }
-            setAiSuggestions(safeAi);
+            setAiSuggestions(validAi);
             setIsRebalanceMode(true);
             setShowReviewAI(true);
         } catch (error: any) {
@@ -534,7 +567,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     title: 'Você foi escalado(a)',
                     message: `${member?.name || 'Membro'}, você foi escalado(a) para "${eventTitle}" no dia ${dateFormatted}.`,
                     type: 'info',
-                    actionLink: 'schedule'
+                    actionLink: 'calendar',
+                    targetUserId: memberId
                 }).catch(() => {});
 
                 if (occurrence) {
@@ -610,6 +644,74 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const d = new Date(year, month - 1, 1);
     const monthLabel = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const shortMonthLabel = d.toLocaleDateString('pt-BR', { month: 'short' });
+
+    // Alternar liberação da escala do mês e notificar todos os membros
+    const handlePublishMonth = async () => {
+        setIsPublishing(true);
+        const newStatus = !isMonthPublished;
+        try {
+            await togglePublishScheduleV2(ministryId, orgId, currentMonth, newStatus);
+            if (newStatus) {
+                await sendNotificationSQL(ministryId, orgId, {
+                    title: `📅 Escala de ${monthLabel} Liberada!`,
+                    message: `A escala para ${monthLabel} foi publicada. Confira suas escalas e confirme sua presença no app!`,
+                    type: 'success',
+                    actionLink: 'calendar'
+                }).catch(() => {});
+                addToast(`Escala de ${monthLabel} liberada e membros notificados!`, 'success');
+            } else {
+                addToast(`Escala de ${monthLabel} despublicada (modo rascunho).`, 'info');
+            }
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId, 'v2'] });
+            await loadData();
+        } catch (error) {
+            console.error('Erro ao alternar publicação da escala:', error);
+            addToast('Erro ao atualizar status da escala.', 'error');
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    // Notificar membros escalados hoje para marcar presença
+    const handleRemindToday = async () => {
+        const todayIso = new Date().toISOString().split('T')[0];
+        const todayAssignments = assignments.filter(a => 
+            a.event_date === todayIso && 
+            a.role !== '__EVENT_EXCLUDED__' && 
+            a.event_rule_id !== 'PUBLISHED_FLAG' && 
+            a.role !== '__PUBLISHED__' && 
+            a.member_id
+        );
+
+        if (todayAssignments.length === 0) {
+            addToast('Nenhum membro escalado para hoje nesta escala.', 'info');
+            return;
+        }
+
+        try {
+            const notifiedMembers = new Set<string>();
+            for (const a of todayAssignments) {
+                if (!a.member_id || notifiedMembers.has(a.member_id)) continue;
+                notifiedMembers.add(a.member_id);
+                const member = members.find(m => m.id === a.member_id);
+                const occurrence = occurrences.find(o => o.date === a.event_date && o.ruleId === a.event_rule_id);
+                const eventTitle = occurrence?.title || 'Culto de Hoje';
+                
+                await sendNotificationSQL(ministryId, orgId, {
+                    title: '🔔 Hoje é seu dia de escala!',
+                    message: `Olá ${member?.name || 'Membro'}, você está escalado(a) hoje em "${eventTitle}" (${a.role}). Por favor, confirme sua presença no app!`,
+                    type: 'warning',
+                    actionLink: 'dashboard',
+                    targetUserId: a.member_id
+                }).catch(() => {});
+            }
+            addToast(`Lembrete de presença enviado para ${notifiedMembers.size} membro(s) escalado(s) hoje!`, 'success');
+        } catch (error) {
+            console.error('Erro ao enviar lembretes:', error);
+            addToast('Erro ao enviar lembretes de escala para hoje.', 'error');
+        }
+    };
 
     const disponiveisNoMes = members.filter(m => {
         const memberAvail = availability[m.id];
@@ -728,7 +830,30 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     </div>
 
                     {isAdmin && (
-                        <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                            <button
+                                onClick={handlePublishMonth}
+                                disabled={isPublishing}
+                                className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-md ${
+                                    isMonthPublished 
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20' 
+                                        : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60'
+                                }`}
+                                title={isMonthPublished ? "Escala publicada (clique para ocultar)" : "Publicar e notificar membros sobre a escala deste mês"}
+                            >
+                                <Send size={15} />
+                                <span>{isMonthPublished ? 'Escala Liberada' : 'Liberar Escala'}</span>
+                            </button>
+
+                            <button
+                                onClick={handleRemindToday}
+                                title="Notificar membros escalados hoje para marcar presença no app"
+                                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-md bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20"
+                            >
+                                <Bell size={15} />
+                                <span>Lembrar Hoje</span>
+                            </button>
+
                             <div className="relative group flex-1 sm:flex-none">
                                 <button
                                     onClick={() => isPro && setShowConfirmAI(true)}

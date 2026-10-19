@@ -4,7 +4,7 @@ export const NOTES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A',
 
 // Regex para identificar acordes (Ex: C, C#m7, G/B, A9)
 // Procura por letras A-G no início, opcionais #/b, opcionais complementos, opcional baixo /
-const CHORD_REGEX = /\b[A-G](?:#|b)?(?:m|maj|dim|aug|sus|add|2|4|5|6|7|9|11|13)*(?:\/[A-G](?:#|b)?)?\b/g;
+const CHORD_REGEX = /\b[A-G](?:#|b)?(?:m|maj|dim|aug|sus|add|2|4|5|6|7|9|11|13){0,4}(?:\/[A-G](?:#|b)?)?\b/g;
 
 export const transposeChord = (chord: string, steps: number): string => {
     // Detectar a escala dominante do acorde ANTES de transposicionar
