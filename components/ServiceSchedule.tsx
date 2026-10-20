@@ -50,22 +50,50 @@ export const ServiceSchedule: React.FC<Props> = ({
   });
 
   // 2. Buscar músicas do repertório
+  const isDance =
+    !!ministryName &&
+    (ministryName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("danc") ||
+     ministryName.toLowerCase().includes("coreograf"));
+
   const { data: songs = [], isLoading: loadingSongs } = useQuery({
-    queryKey: ["repertoire_event_songs", eventRuleId, eventDate, ministryId],
+    queryKey: ["repertoire_event_songs", eventRuleId, eventDate, ministryId, orgId],
     queryFn: async () => {
       const sb = getSupabase();
       if (!sb || !orgId || !ministryId) return [];
+
+      let targetMinistryIds = [ministryId];
+      try {
+        const { data: orgMins } = await sb
+          .from("organization_ministries")
+          .select("id, label, code")
+          .eq("organization_id", orgId);
+
+        if (isDance && orgMins) {
+          const worshipMins = orgMins.filter((m: any) => {
+            const txt = `${m.label || ''} ${m.code || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return txt.includes('louvor') || txt.includes('musica') || txt.includes('banda') || txt.includes('worship');
+          });
+          const wIds = worshipMins.map((m: any) => m.id);
+          if (!wIds.includes('louvor')) wIds.push('louvor');
+          targetMinistryIds = [...new Set([...targetMinistryIds, ...wIds])];
+        }
+      } catch (err) {
+        console.warn("[ServiceSchedule] Erro ao buscar ministérios de louvor:", err);
+      }
 
       let query = sb
         .from("repertoire_items")
         .select("*")
         .eq("organization_id", orgId)
-        .eq("ministry_id", ministryId);
+        .in("ministry_id", targetMinistryIds);
 
-      if (eventRuleId) {
-        query = query.eq("event_rule_id", eventRuleId);
+      // Suporta correspondência por date (YYYY-MM-DD) ou event_rule_id
+      if (eventDate && eventRuleId) {
+        query = query.or(`date.eq.${eventDate},event_rule_id.eq.${eventRuleId}`);
       } else if (eventDate) {
-        query = query.eq("event_date", eventDate);
+        query = query.eq("date", eventDate);
+      } else if (eventRuleId) {
+        query = query.eq("event_rule_id", eventRuleId);
       } else {
         return [];
       }
@@ -76,12 +104,14 @@ export const ServiceSchedule: React.FC<Props> = ({
     enabled: !!orgId && !!ministryId && (!!eventRuleId || !!eventDate),
   });
 
-  // Verifica se o membro tem função de projeção ou mídia ou se é de um ministério não musical
+  // Verifica se o ministério é musical ou Dança
   const isMusical =
     !ministryName ||
     ministryName.toLowerCase().includes("louvor") ||
-    ministryName.toLowerCase().includes("música");
-  const sectionTitle = isMusical ? "Repertório Musical" : "Pauta / Roteiro";
+    ministryName.toLowerCase().includes("música") ||
+    ministryName.toLowerCase().includes("musica") ||
+    isDance;
+  const sectionTitle = isMusical ? "Repertório Musical / Louvores" : "Pauta / Roteiro";
 
   const hasProjectionAccess = memberFunctions.length > 0; // Membros do ministério têm acesso à sua pauta
 

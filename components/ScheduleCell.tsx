@@ -238,7 +238,21 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     );
 
     const baseRole = role.replace(/\s\d+$/, '');
-    const roleMembers = filteredMembers.filter(m => m.ministry_functions?.includes(baseRole));
+    const normBaseRole = baseRole.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const roleMembers = filteredMembers.filter(m => {
+        const funcs = m.ministry_functions || [];
+        if (funcs.length > 0) {
+            return funcs.some(f => {
+                const normF = f.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                return normF === normBaseRole || f === baseRole;
+            });
+        }
+        // Se for Dança e o membro não tiver funções salvas, incluir (pois o ministério de dança só tem essa função)
+        if (normBaseRole === "danca" || normBaseRole === "dancarina" || normBaseRole === "bailarina") {
+            return true;
+        }
+        return false;
+    });
     
     const conflictMembers: { member: MemberV2, existingRole: string, type?: string }[] = [];
     const availableMembers: MemberV2[] = [];

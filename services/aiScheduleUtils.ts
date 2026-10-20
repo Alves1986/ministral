@@ -239,7 +239,11 @@ export function validateAssignment(
   }
 
   // 4. Membro não tem a função atribuída
-  if (member.functions && member.functions.length > 0 && !member.functions.includes(role)) {
+  const baseRole = role.replace(/\s\d+$/, '');
+  const memberHasRole = (member.functions || []).some(
+    (f) => f === role || f === baseRole || f.toLowerCase() === baseRole.toLowerCase()
+  );
+  if (member.functions && member.functions.length > 0 && !memberHasRole) {
     return {
       type: "INELIGIBLE_MEMBER",
       message: `${member.name} não possui a função "${role}".`,

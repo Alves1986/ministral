@@ -192,6 +192,7 @@ export interface RepertoireItem {
   content?: string;
   key?: string;
   organizationId?: string;
+  isFromWorship?: boolean;
 }
 
 export interface User {
@@ -305,6 +306,7 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "Mesa de Som",
   ],
   infantil: ["Lanche", "Professor 03–06", "Professor 07–11"],
+  danca: ["Dança"],
   default: ["Membro"],
 };
 

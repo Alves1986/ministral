@@ -415,6 +415,10 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
           if (ministryId === 'louvor' && role === 'Vocal') {
               return [1, 2, 3, 4, 5].map(i => ({ displayRole: `Vocal ${i}`, realRole: 'Vocal', keySuffix: `Vocal_${i}` }));
           }
+          const norm = role.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          if ((norm === 'danca' || norm === 'dancarina') && (ministryId === 'danca' || ministryId?.includes('danc'))) {
+              return [1, 2, 3, 4, 5].map(i => ({ displayRole: `Dança ${i}`, realRole: 'Dança', keySuffix: `Dança_${i}` }));
+          }
           return [{ displayRole: role, realRole: role, keySuffix: role }];
       });
   }, [roles, ministryId]);

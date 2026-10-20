@@ -483,13 +483,18 @@ export const NextEventCard: React.FC<Props> = ({
               <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                 Equipe Escalada
               </h3>
-              {config?.enabledTabs?.includes("service_schedule") && (
+              {(config?.enabledTabs?.includes("service_schedule") || 
+                config?.enabledTabs?.includes("repertoire") || 
+                ministryName?.toLowerCase().includes("danç") || 
+                ministryName?.toLowerCase().includes("danc") || 
+                ministryName?.toLowerCase().includes("louvor")) && (
                 <button
                   onClick={() => setShowServiceSchedule(true)}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 hover:bg-[#c9a84c]/20 transition-colors text-[9px] font-black uppercase tracking-wider"
+                  title="Ver repertório de louvores e cronograma do culto"
                 >
                   <Sparkles size={11} />
-                  Cronograma
+                  Repertório & Cronograma
                 </button>
               )}
               {ministryName?.toLowerCase().includes("louvor") && eventMembers.some((t: any) => currentUser && (t.name === currentUser.name || t.profileId === currentUser.id)) && (

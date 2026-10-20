@@ -62,6 +62,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
           else if (minLabel.includes('infantil')) defaults = DEFAULT_ROLES['infantil'];
           else if (minLabel.includes('musica')) defaults = DEFAULT_ROLES['louvor'];
           else if (minLabel.includes('kids')) defaults = DEFAULT_ROLES['infantil'];
+          else if (minLabel.includes('dança') || minLabel.includes('danca')) defaults = DEFAULT_ROLES['danca'];
           else defaults = DEFAULT_ROLES['default'];
       }
       

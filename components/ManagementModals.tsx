@@ -324,15 +324,27 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
   }, [roles]);
 
   const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
-  const hasVocal = cleanRoles.includes('Vocal');
-  const hasDance = cleanRoles.includes('Dança');
+  
+  const isVocalRole = (r: string) => {
+      const norm = r.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return norm === 'vocal';
+  };
+
+  const isDanceRole = (r: string) => {
+      const norm = r.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return norm === 'danca' || norm === 'dancarina' || norm === 'bailarina' || norm === 'coreografia';
+  };
+
+  const isDanceMinistry = ministryName?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('danc') || false;
+  const hasVocal = cleanRoles.some(isVocalRole);
+  const hasDance = cleanRoles.some(isDanceRole) || isDanceMinistry;
 
   const handleUpdate = (newCleanRoles: string[], newVocalCount: number, newDanceCount: number) => {
       const finalRoles = [...newCleanRoles];
-      if (newCleanRoles.includes('Vocal') && newVocalCount > 1) {
+      if (newCleanRoles.some(isVocalRole) && newVocalCount > 1) {
           finalRoles.push(`__vocal_count:${newVocalCount}`);
       }
-      if (newCleanRoles.includes('Dança') && newDanceCount > 1) {
+      if (hasDance && newDanceCount > 1) {
           finalRoles.push(`__dance_count:${newDanceCount}`);
       }
       onUpdate(finalRoles);
@@ -445,19 +457,19 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
 
         {hasDance && (
             <div className="mt-6 p-4 bg-ministral-50 dark:bg-ministral-900/10 border border-ministral-100 dark:border-ministral-900/30 rounded-xl">
-                <h4 className="text-sm font-bold text-ministral-700 dark:text-ministral-300 mb-2">Configuração de Dança</h4>
+                <h4 className="text-sm font-bold text-ministral-700 dark:text-ministral-300 mb-2">Configuração de Vagas de Dança</h4>
                 <p className="text-xs text-ministral-600/80 dark:text-ministral-400/80 mb-3">
-                    Defina quantas coreografias/pessoas podem ser escaladas em Dança simultaneamente.
+                    Defina quantas pessoas podem ser escaladas simultaneamente em Dança (ex: 4 ou 5 pessoas). O sistema criará as vagas <strong>Dança 1</strong>, <strong>Dança 2</strong>, etc. no editor de escala.
                 </p>
                 <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Quantidade:</span>
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Vagas por Evento:</span>
                     <input 
                         type="number" 
                         min="1" 
-                        max="10"
+                        max="15"
                         value={danceCount}
                         onChange={(e) => {
-                            const val = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                            const val = Math.max(1, Math.min(15, parseInt(e.target.value) || 1));
                             setDanceCount(val);
                             handleUpdate(cleanRoles, vocalCount, val);
                         }}

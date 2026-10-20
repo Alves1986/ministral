@@ -139,8 +139,13 @@ export function useMinistryData(
     let r = settingsQuery.data?.roles || [];
     if (r.length === 0 && mid) {
       const ministryDef = availableMinistries.find((m) => m.id === mid);
-      const code = ministryDef?.code || "";
-      r = DEFAULT_ROLES[code] || DEFAULT_ROLES["default"] || [];
+      const code = ministryDef?.code?.toLowerCase() || "";
+      const label = ministryDef?.label?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "";
+      if (code === "danca" || label.includes("danc")) {
+        r = DEFAULT_ROLES["danca"] || ["Dança"];
+      } else {
+        r = DEFAULT_ROLES[code] || DEFAULT_ROLES["default"] || [];
+      }
     }
     return r;
   }, [settingsQuery.data, mid, availableMinistries]);
@@ -166,19 +171,37 @@ export function useMinistryData(
       ? parseInt(danceCountMatch.split(":")[1])
       : 1;
 
+    const minLabelNorm = (foundMinistry?.label || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const minCodeNorm = (foundMinistry?.code || "").toLowerCase();
+    const isDanceMin = mid === "danca" || minCodeNorm === "danca" || minLabelNorm.includes("danc");
+
     // Fallback para ministério de louvor (legado/padrão)
     if (
       vocalCount === 1 &&
-      (mid === "louvor" || foundMinistry?.code === "louvor")
+      !vocalCountMatch &&
+      (mid === "louvor" || minCodeNorm === "louvor")
     ) {
       vocalCount = 5;
     }
 
+    // Fallback padrão para ministério de dança quando ainda não configurado pelo admin
+    if (
+      danceCount === 1 &&
+      !danceCountMatch &&
+      isDanceMin
+    ) {
+      danceCount = 4;
+    }
+
     return cleanRoles.flatMap((role) => {
-      if (role === "Vocal" && vocalCount > 1) {
+      const norm = role.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const isVocal = norm === "vocal";
+      const isDance = norm === "danca" || norm === "dancarina" || norm === "bailarina" || (isDanceMin && cleanRoles.length === 1);
+
+      if (isVocal && vocalCount > 1) {
         return Array.from({ length: vocalCount }, (_, i) => `Vocal ${i + 1}`);
       }
-      if (role === "Dança" && danceCount > 1) {
+      if (isDance && danceCount > 1) {
         return Array.from({ length: danceCount }, (_, i) => `Dança ${i + 1}`);
       }
       return [role];

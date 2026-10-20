@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildSchedulePrompt,
   extractAssignments,
+  validateAssignment,
   ScheduleInput,
 } from "../services/aiScheduleUtils";
 
@@ -74,5 +75,34 @@ describe("extractAssignments", () => {
 
   it("retorna [] para texto sem array", () => {
     expect(extractAssignments("Nenhuma vaga")).toEqual([]);
+  });
+});
+
+describe("validateAssignment com slots múltiplos (Dança / Vocal)", () => {
+  const danceScheduleInput: ScheduleInput = {
+    occurrences: [
+      { date: "2026-06-07", time: "19:00:00", ruleId: "r1", title: "Culto" },
+    ],
+    roles: ["Dança 1", "Dança 2", "Dança 3", "Dança 4"],
+    members: [
+      { id: "d1", name: "Mariana", functions: ["Dança"] },
+      { id: "d2", name: "Camila", functions: ["Dança"] },
+    ],
+    availability: { d1: [], d2: [] },
+    existingAssignments: [],
+  };
+
+  it("aceita membro com função Dança na vaga Dança 1 e Dança 2", () => {
+    const err1 = validateAssignment(
+      { event_rule_id: "r1", event_date: "2026-06-07", role: "Dança 1", member_id: "d1" },
+      danceScheduleInput
+    );
+    expect(err1).toBeNull();
+
+    const err2 = validateAssignment(
+      { event_rule_id: "r1", event_date: "2026-06-07", role: "Dança 2", member_id: "d2" },
+      danceScheduleInput
+    );
+    expect(err2).toBeNull();
   });
 });

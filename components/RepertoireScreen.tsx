@@ -389,7 +389,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             {mode === 'manage' ? 'Gerenciar Repertório' : 'Repertório Musical'}
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            {mode === 'manage' ? 'Selecione as músicas e envie para o repertório do culto.' : 'Lista de louvores para os próximos cultos.'}
+            {mode === 'manage' ? 'Selecione as músicas e envie para o repertório do culto.' : 'Lista de louvores integrados com a equipe de Louvor para os cultos e ensaios.'}
           </p>
         </div>
       </div>
@@ -612,8 +612,15 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                       </div>
                                       <div className="min-w-0">
                                           <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
-                                          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                              <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                                          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
+                                              {item.isFromWorship ? (
+                                                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                                                      <Music size={10} /> Louvor
+                                                  </span>
+                                              ) : (
+                                                  <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                                              )}
+                                              {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
                                               {item.content && <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600">CIFRA</span>}
                                           </div>
                                       </div>

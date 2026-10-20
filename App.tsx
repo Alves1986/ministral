@@ -829,8 +829,15 @@ const InnerApp = () => {
 
   const safeEnabledTabs = useMemo(() => {
     const tabs = ministryConfig.enabledTabs || DEFAULT_TABS;
-    return tabs.includes("history") ? tabs : [...tabs, "history"];
-  }, [ministryConfig.enabledTabs]);
+    const withHistory = tabs.includes("history") ? tabs : [...tabs, "history"];
+    // Dança e Mídia/Projeção sempre têm acesso integrado ao Repertório do Louvor
+    const minText = `${ministryConfig.label || ''} ${ministryConfig.code || ''} ${ministryTitle || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isDanceOrMedia = minText.includes("danc") || minText.includes("coreograf") || minText.includes("midia") || minText.includes("projec");
+    if (isDanceOrMedia && !withHistory.includes("repertoire")) {
+      return [...withHistory, "repertoire"];
+    }
+    return withHistory;
+  }, [ministryConfig, ministryTitle]);
 
   const isPro = activeUser?.isPro ?? false;
 
@@ -1265,7 +1272,7 @@ const InnerApp = () => {
                         .reverse()
                         .join("/"),
                     })),
-                    roles,
+                    expandedRoles,
                     schedule,
                     organization?.logo_url,
                   )

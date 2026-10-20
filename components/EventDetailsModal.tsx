@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus, Music, ExternalLink } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
 import { generateGoogleCalendarUrl } from '../utils/dateUtils';
 import { getSupabase } from '../services/supabase/client';
@@ -29,6 +29,8 @@ export const EventDetailsModal: React.FC<Props> = ({
   
   // Estado para armazenar assignments reais do banco
   const [assignmentMap, setAssignmentMap] = useState<Record<string, any[]>>({});
+  const [eventSongs, setEventSongs] = useState<any[]>([]);
+  const [loadingSongs, setLoadingSongs] = useState(false);
 
   useEffect(() => {
     if (event) {
@@ -79,11 +81,56 @@ export const EventDetailsModal: React.FC<Props> = ({
             }
             setAssignmentMap(grouped);
         };
+
+        const fetchSongs = async () => {
+            setLoadingSongs(true);
+            const datePart = event.iso.split('T')[0];
+            const sb = getSupabase();
+            if (!sb || !currentUser?.organizationId) {
+                setLoadingSongs(false);
+                return;
+            }
+
+            let targetMids = ministryId ? [ministryId] : [];
+            const isDance = ministryName?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("danc") || false;
+
+            try {
+                const { data: orgMins } = await sb
+                    .from("organization_ministries")
+                    .select("id, label, code")
+                    .eq("organization_id", currentUser.organizationId);
+
+                if (isDance && orgMins) {
+                    const worshipMins = orgMins.filter((m: any) => {
+                        const txt = `${m.label || ''} ${m.code || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                        return txt.includes('louvor') || txt.includes('musica') || txt.includes('banda') || txt.includes('worship');
+                    });
+                    const wIds = worshipMins.map((m: any) => m.id);
+                    if (!wIds.includes('louvor')) wIds.push('louvor');
+                    targetMids = [...new Set([...targetMids, ...wIds])];
+                }
+            } catch (err) {
+                console.warn("[EventDetailsModal] Erro ao buscar louvores:", err);
+            }
+
+            const { data: songsData } = await sb
+                .from('repertoire_items')
+                .select('*')
+                .eq('organization_id', currentUser.organizationId)
+                .in('ministry_id', targetMids)
+                .eq('date', datePart);
+
+            setEventSongs(songsData || []);
+            setLoadingSongs(false);
+        };
+
         fetchAssignments();
+        fetchSongs();
     } else {
         setAssignmentMap({});
+        setEventSongs([]);
     }
-  }, [isOpen, event, ministryId, currentUser]);
+  }, [isOpen, event, ministryId, currentUser, ministryName]);
 
   const expandedRoles = useMemo(() => {
       const vocalCountMatch = roles.find(r => r.startsWith('__vocal_count:'));
@@ -93,9 +140,14 @@ export const EventDetailsModal: React.FC<Props> = ({
       const danceCount = danceCountMatch ? parseInt(danceCountMatch.split(':')[1]) : 1;
       
       const cleanRoles = roles.filter(r => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
+      const isDanceMin = ministryName?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("danc") || false;
 
       return cleanRoles.flatMap(role => {
-          if (role === 'Vocal' && vocalCount > 1) {
+          const norm = role.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const isVocal = norm === 'vocal';
+          const isDance = norm === 'danca' || norm === 'dancarina' || norm === 'bailarina' || (isDanceMin && cleanRoles.length === 1);
+
+          if (isVocal && vocalCount > 1) {
               return Array.from({ length: vocalCount }, (_, i) => ({
                   display: `Vocal ${i + 1}`,
                   keySuffix: `Vocal ${i + 1}`,
@@ -103,7 +155,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                   index: i
               }));
           }
-          if (role === 'Dança' && danceCount > 1) {
+          if (isDance && danceCount > 1) {
               return Array.from({ length: danceCount }, (_, i) => ({
                   display: `Dança ${i + 1}`,
                   keySuffix: `Dança ${i + 1}`,
@@ -113,7 +165,7 @@ export const EventDetailsModal: React.FC<Props> = ({
           }
           return [{ display: role, keySuffix: role, baseRole: role, index: 0 }];
       });
-  }, [roles]);
+  }, [roles, ministryName]);
 
   if (!isOpen || !event) return null;
 
@@ -284,6 +336,53 @@ export const EventDetailsModal: React.FC<Props> = ({
                             )
                         })}
                     </div>
+                </div>
+
+                {/* Playlist / Louvores do Culto */}
+                <div className="pt-2">
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-700">
+                        <h3 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
+                            <Music size={14} className="text-secondary" /> Repertório & Louvores do Culto
+                        </h3>
+                        {eventSongs.length > 0 && (
+                            <span className="text-[10px] font-black bg-secondary/10 text-secondary dark:text-white px-2 py-0.5 rounded-full">
+                                {eventSongs.length} {eventSongs.length === 1 ? 'louvor' : 'louvores'}
+                            </span>
+                        )}
+                    </div>
+
+                    {loadingSongs ? (
+                        <div className="py-4 text-center text-xs text-zinc-400">Carregando louvores do culto...</div>
+                    ) : eventSongs.length === 0 ? (
+                        <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl text-center border border-dashed border-zinc-200 dark:border-zinc-700">
+                            <p className="text-xs text-zinc-400 italic">Nenhum louvor cadastrado para este dia ainda.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                            {eventSongs.map((s) => (
+                                <div key={s.id} className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-800/80 rounded-xl border border-zinc-100 dark:border-zinc-700/60">
+                                    <div className="min-w-0 flex-1 pr-2">
+                                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">{s.title}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {s.key && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 rounded">Tom: {s.key}</span>}
+                                            <span className="text-[10px] text-zinc-400">{s.isFromWorship || s.observation?.includes('Louvor') ? 'Equipe de Louvor' : 'Repertório'}</span>
+                                        </div>
+                                    </div>
+                                    {s.link && (
+                                        <a
+                                            href={s.link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-1.5 text-secondary hover:bg-secondary/10 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold"
+                                            title="Ouvir / Abrir música"
+                                        >
+                                            <ExternalLink size={14} />
+                                        </a>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Actions */}

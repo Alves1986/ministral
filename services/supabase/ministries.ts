@@ -188,7 +188,7 @@ export const joinMinistry = async (
   const { data: profile } = await sb
     .from("profiles")
     .select(
-      "id, is_super_admin, is_admin, name, allowed_ministries, organization_id",
+      "id, is_super_admin, is_admin, name, email, allowed_ministries, organization_id",
     )
     .eq("id", user.id)
     .maybeSingle();
