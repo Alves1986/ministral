@@ -136,60 +136,101 @@ const stripHtml = (html: string) => {
 
 export const sendNotificationSQL = async (ministryId: string, orgId: string, notification: any) => {
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) return { success: false, error: 'No client' };
     
     // Limpa HTML para notificações (sempre texto simples)
     const cleanMessage = stripHtml(notification.message);
 
-    // -- Disparo da Notificação Push (Web Push) SEMPRE EXECUTA --
-    // Dispara imediatamente em background para não depender do insert no banco de dados local
-    setTimeout(() => {
-        sb.functions.invoke('push-notification', {
-            body: {
-                ministryId: ministryId,
-                title: notification.title,
-                message: cleanMessage,
-                type: notification.type,
-                actionLink: notification.actionLink,
-                ...(notification.targetUserId ? { userIds: [notification.targetUserId] } : {})
-            }
-        }).then(({ error }) => {
-            if (error) console.warn("[Push Notification] Edge function error:", error);
-        }).catch(err => {
-            console.warn("[Push Notification] Failed to trigger push:", err);
-        });
-    }, 50);
+    // -- 1. Disparo da Notificação Push (Web Push via Edge Function) --
+    // Disparado imediatamente com tratamento de erros para garantir entrega mesmo se o banco local oscilar
+    let pushDispatched = false;
+    try {
+        const pushBody: any = {
+            ministryId: ministryId,
+            orgId: orgId,
+            title: notification.title,
+            message: cleanMessage,
+            type: notification.type || 'info',
+            actionLink: notification.actionLink || 'dashboard'
+        };
+        if (notification.targetUserId) {
+            pushBody.userIds = [notification.targetUserId];
+        }
 
+        sb.functions.invoke('push-notification', { body: pushBody })
+            .then(({ data, error }) => {
+                if (error) {
+                    console.warn("[Push Notification] Edge function aviso/erro:", error);
+                } else {
+                    pushDispatched = true;
+                    console.log("[Push Notification] Disparo concluído:", data?.message || data);
+                }
+            })
+            .catch(err => {
+                console.warn("[Push Notification] Falha de rede ao disparar push:", err);
+            });
+    } catch (pushErr) {
+        console.warn("[Push Notification] Erro ao invocar push:", pushErr);
+    }
+
+    // -- 2. Persistência In-App (Tabela notifications no Supabase) --
+    // Constrói payload seguro: só inclui colunas opcionais se fornecidas
     const payload: any = {
         organization_id: orgId,
         ministry_id: ministryId,
         title: notification.title,
         message: cleanMessage,
-        type: notification.type,
-        action_link: notification.actionLink,
-        target_user_id: notification.targetUserId || null
+        type: notification.type || 'info'
     };
 
-    const { error } = await sb.from('notifications').insert(payload);
-    
-    if (error) {
-        console.error("[Notifications] Error sending notification:", error);
-        
-        // Fallback: Se a coluna action_link não existir ou erro de cache de schema
-        const isMissingColumn = error.code === 'PGRST204' || 
-                               error.code === '42703' || // Postgres "column does not exist"
-                               error.message?.includes('action_link') || 
-                               error.message?.includes('não existe');
+    if (notification.actionLink) {
+        payload.action_link = notification.actionLink;
+    }
+    if (notification.targetUserId) {
+        payload.target_user_id = notification.targetUserId;
+    }
 
-        if (isMissingColumn) {
-            console.warn("[Notifications] action_link column issue, retrying without it.");
-            delete payload.action_link;
-            const { error: retryError } = await sb.from('notifications').insert(payload);
-            if (retryError) throw retryError;
-        } else {
-            throw error;
+    let insertError: any = null;
+    try {
+        const res = await sb.from('notifications').insert(payload);
+        insertError = res.error;
+    } catch (e) {
+        insertError = e;
+    }
+
+    if (insertError) {
+        console.warn("[Notifications] Falha no insert inicial, tentando fallback com schema base:", insertError);
+        
+        // Fallback: remove colunas adicionais que possam não existir no schema do Postgres
+        // (ex: target_user_id ou action_link) e tenta inserir com colunas estritamente essenciais
+        const minimalPayload: any = {
+            organization_id: orgId,
+            ministry_id: ministryId,
+            title: notification.title,
+            message: cleanMessage,
+            type: notification.type || 'info'
+        };
+
+        try {
+            const { error: retryError } = await sb.from('notifications').insert(minimalPayload);
+            if (!retryError) {
+                console.log("[Notifications] Inserção in-app recuperada com schema básico.");
+                insertError = null;
+            } else {
+                insertError = retryError;
+                console.warn("[Notifications] Fallback de inserção in-app também falhou:", retryError);
+            }
+        } catch (retryEx) {
+            insertError = retryEx;
+            console.warn("[Notifications] Erro crítico no retry:", retryEx);
         }
     }
+
+    return { 
+        success: !insertError || pushDispatched, 
+        inAppSaved: !insertError, 
+        pushDispatched 
+    };
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string, orgId: string) => {
@@ -400,7 +441,16 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     }
 
     if (notificationsToInsert.length > 0) {
-        const insertResult = await sb.from('notifications').insert(notificationsToInsert);
+        let insertResult = await sb.from('notifications').insert(notificationsToInsert);
+        if (insertResult.error) {
+            console.warn('[notifySuperAdmins] Inserção falhou, tentando fallback sem action_link:', insertResult.error);
+            const fallbackInserts = notificationsToInsert.map(n => {
+                const copy = { ...n };
+                delete copy.action_link;
+                return copy;
+            });
+            insertResult = await sb.from('notifications').insert(fallbackInserts);
+        }
 
         // ── PUSH REAL para os admins alvo (supervisão: notificar "quem, o quê" mesmo fora do app) ──
         if (orgId && targetMinistryId) {

@@ -44,66 +44,103 @@ export function urlBase64ToUint8Array(base64String: string) {
 }
 
 export const subscribeUserToPush = async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn("Push notifications not supported");
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        console.warn("[Push] Push notifications not supported in this browser/device");
         return null;
     }
 
     if (!VAPID_PUBLIC_KEY) {
-        console.error("VAPID Key is missing. Cannot subscribe.");
+        console.error("[Push] VAPID Key is missing. Cannot subscribe.");
         return null;
     }
 
     try {
-        // 1. Solicitar permissão explicitamente
-        const permission = await Notification.requestPermission();
+        // 1. Solicitar permissão explicitamente se ainda não foi decidida
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
         if (permission !== 'granted') {
-            console.warn("Permission not granted for Notification");
+            console.warn("[Push] Permission not granted:", permission);
             return null;
         }
 
-        // 2. Garantir que o SW está registrado e pronto
+        // 2. Garantir que o Service Worker está registrado e pronto
         let registration = await navigator.serviceWorker.getRegistration();
         if (!registration) {
             registration = await navigator.serviceWorker.register('/sw.js');
         }
-        await navigator.serviceWorker.ready;
+        const activeReg = await navigator.serviceWorker.ready;
 
-        // 3. Obter ou criar subscription
-        let subscription = await registration.pushManager.getSubscription();
+        const targetKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+        // 3. Obter ou renovar subscription
+        let subscription = await activeReg.pushManager.getSubscription();
+
+        if (subscription) {
+            // Valida se a inscrição existente utiliza a mesma VAPID key
+            const existingKey = (subscription as any).options?.applicationServerKey;
+            if (existingKey) {
+                const existingArr = new Uint8Array(existingKey);
+                const isMatch = existingArr.length === targetKeyBytes.length &&
+                    existingArr.every((v, i) => v === targetKeyBytes[i]);
+
+                if (!isMatch) {
+                    console.warn("[Push] Chave VAPID alterada. Renovando inscrição...");
+                    await subscription.unsubscribe();
+                    subscription = null;
+                }
+            }
+        }
 
         if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
+            subscription = await activeReg.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                applicationServerKey: targetKeyBytes
             });
         }
 
         // 4. Enviar para o backend (Supabase)
         const sb = getSupabase();
-        if (sb) {
-            const { data: { user } } = await sb.auth.getUser();
-            if (user) {
-                const subJson = subscription.toJSON();
-                
-                const { error } = await sb.from('push_subscriptions').upsert({
-                    user_id: user.id,
-                    endpoint: subJson.endpoint,
-                    p256dh: subJson.keys?.p256dh,
-                    auth: subJson.keys?.auth,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'endpoint' });
+        if (sb && subscription) {
+            let authUser = null;
+            try {
+                const { data } = await sb.auth.getUser();
+                authUser = data?.user;
+            } catch (e) {
+                console.warn("[Push] Falha ao obter auth.getUser, tentando session:", e);
+            }
 
-                if (error) {
-                    console.error("Failed to save subscription to DB:", error);
-                    return null;
+            if (!authUser) {
+                const { data: sessionData } = await sb.auth.getSession();
+                authUser = sessionData?.session?.user;
+            }
+
+            if (authUser) {
+                const subJson = subscription.toJSON();
+                if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+                    const { error } = await sb.from('push_subscriptions').upsert({
+                        user_id: authUser.id,
+                        endpoint: subJson.endpoint,
+                        p256dh: subJson.keys.p256dh,
+                        auth: subJson.keys.auth,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'endpoint' });
+
+                    if (error) {
+                        console.error("[Push] Falha ao salvar inscrição no Supabase:", error);
+                    } else {
+                        console.log("[Push] Inscrição salva com sucesso no Supabase para o usuário:", authUser.id);
+                    }
                 }
-                
+                return subscription;
+            } else {
+                console.warn("[Push] Usuário não autenticado no momento da inscrição. Inscrição local pronta.");
                 return subscription;
             }
         }
     } catch (e) {
-        console.error("Failed to subscribe to push:", e);
+        console.error("[Push] Erro ao registrar inscrição push:", e);
         return null;
     }
     return null;

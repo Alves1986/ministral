@@ -447,6 +447,13 @@ const InnerApp = () => {
         clearTimeout(safetyTimer);
         setAppReady(true);
       }
+
+      // Garante que o dispositivo (PWA instalado ou navegador) sincronize a inscrição Push no Supabase
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        subscribeUserToPush().catch((err) => {
+          console.warn("[Push] Auto-sync da inscrição falhou:", err);
+        });
+      }
     }
   }, [status, sessionUser]);
 
@@ -497,10 +504,16 @@ const InnerApp = () => {
   // Sincronizar navegação quando uma notificação Push for clicada ou a URL mudar
   useEffect(() => {
     const handleSwMessage = (event: MessageEvent) => {
-      if (event.data?.type === "NAVIGATE" && event.data?.tab) {
+      if (event.data?.type === "NAVIGATE") {
         let tab = event.data.tab;
+        if (!tab && event.data.url) {
+          try {
+            const parsed = new URL(event.data.url, window.location.origin);
+            tab = parsed.searchParams.get("tab");
+          } catch (e) {}
+        }
         if (tab === "schedule") tab = "calendar";
-        setCurrentTab(tab);
+        if (tab) setCurrentTab(tab);
       }
     };
 
@@ -2092,22 +2105,20 @@ const InnerApp = () => {
                           activeUser!.name,
                         );
 
-                        // (b) Operação secundária (sem await)
+                        // (b) Operação secundária de notificação (Push e In-App)
                         Supabase.sendNotificationSQL(ministryId, orgId, {
                           title: t,
                           message: m,
                           type,
                           actionLink: extLink || "announcements",
                         }).catch((err) => {
-                          console.error(
-                            "Erro na notificação (secundário):",
+                          console.warn(
+                            "Notificação push secundária:",
                             err,
                           );
-                          addToast(
-                            "Aviso publicado, mas houve falha ao disparar as notificações Push/WhatsApp.",
-                            "warning",
-                          );
                         });
+
+                        addToast("Aviso publicado com sucesso!", "success");
 
                         // (c) Invalidação de cache substituindo refreshData
                         await queryClient.invalidateQueries({

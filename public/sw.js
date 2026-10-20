@@ -69,6 +69,12 @@ self.addEventListener('notificationclick', (event) => {
     ? event.notification.data.url
     : '/';
 
+  let targetTab = null;
+  try {
+    const parsedUrl = new URL(targetUrl, self.location.origin);
+    targetTab = parsedUrl.searchParams.get('tab');
+  } catch (e) {}
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       // Se já tem uma aba aberta, foca nela e navega
@@ -79,7 +85,7 @@ self.addEventListener('notificationclick', (event) => {
             client.navigate(targetUrl);
           }
           if ('postMessage' in client) {
-            client.postMessage({ type: 'NAVIGATE', url: targetUrl });
+            client.postMessage({ type: 'NAVIGATE', url: targetUrl, tab: targetTab });
           }
           return;
         }

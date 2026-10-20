@@ -252,7 +252,8 @@ export const SettingsScreen: React.FC<Props> = ({
           message:
             "O período para apontamento de ausências na escala foi encerrado/alterado.",
           type: "warning",
-        });
+          actionLink: "availability",
+        }).catch(() => {});
       }
 
       addToast("Período atualizado e notificação enviada!", "success");
@@ -274,7 +275,8 @@ export const SettingsScreen: React.FC<Props> = ({
         title: "🔒 Janela Fechada",
         message: "O período para apontamento de ausências na escala foi encerrado.",
         type: "warning",
-      });
+        actionLink: "availability",
+      }).catch(() => {});
 
       addToast("Janela bloqueada com sucesso.", "warning");
     } else {
@@ -295,7 +297,7 @@ export const SettingsScreen: React.FC<Props> = ({
         message: `O período para registrar suas ausências na escala está aberto até ${endDateFormatted}. Informe suas datas no app!`,
         type: "success",
         actionLink: "availability",
-      });
+      }).catch(() => {});
     }
 
     await onSaveAvailabilityWindow(newStartStr, newEndStr);
@@ -319,7 +321,7 @@ export const SettingsScreen: React.FC<Props> = ({
       message: `Atenção: o prazo para informar suas ausências na escala encerra em ${dateFormatted} às ${timeFormatted}. Não deixe para a última hora!`,
       type: "warning",
       actionLink: "availability",
-    });
+    }).catch(() => {});
 
     addToast("Alerta de prazo enviado com sucesso para todos os membros!", "success");
   };

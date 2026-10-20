@@ -4,10 +4,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 
-const ALLOWED_ORIGIN = Deno.env.get('APP_ORIGIN') || 'https://seu-dominio.com';
-
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -89,21 +87,41 @@ Deno.serve(async (req: Request) => {
     }
 
     const hasAccess = 
-        callerProfile.is_admin || 
+        callerProfile.is_super_admin === true ||
+        callerProfile.is_admin === true || 
         (cleanMid && callerProfile.ministry_id === cleanMid) || 
         (cleanMid && callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
 
-    if (!hasAccess) {
+    let isMinistryAdmin = false;
+    if (!hasAccess && cleanMid) {
+        // Verifica se é admin ou líder na tabela canônica ministry_members
+        const { data: memberRecord } = await supabase
+            .from('ministry_members')
+            .select('role')
+            .eq('profile_id', user.id)
+            .eq('ministry_id', cleanMid)
+            .maybeSingle();
+        if (memberRecord && (memberRecord.role === 'admin' || memberRecord.role === 'leader')) {
+            isMinistryAdmin = true;
+        }
+
+        // Verifica se pertence à mesma organização do ministério
+        if (!isMinistryAdmin && callerProfile.organization_id) {
+            const { data: minData } = await supabase
+                .from('organization_ministries')
+                .select('organization_id')
+                .eq('id', cleanMid)
+                .maybeSingle();
+            if (minData && minData.organization_id === callerProfile.organization_id) {
+                isMinistryAdmin = true;
+            }
+        }
+    }
+
+    if (!hasAccess && !isMinistryAdmin) {
         return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     // --- SECURITY CHECK END ---
-
-    // === ADMIN ACTIONS ===
-    // REMOVIDOS: actions 'delete_member' e 'toggle_admin' usavam schema legado
-    // (tabela 'events' e coluna schedule_assignments.event_id) que não existem
-    // no schema atual (event_rules + event_date). O app usa deleteMember e
-    // toggleAdminSQL (services/supabase/misc.ts) com RLS/segurança — se esses
-    // actions forem necessários novamente, implementar com o schema atual.
 
     // === PUSH NOTIFICATIONS LOGIC ===
     const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -116,7 +134,7 @@ Deno.serve(async (req: Request) => {
     privateKey = privateKey.trim().replace(/[\r\n\s]/g, '').replace(/^['"]|['"]$/g, '');
 
     try {
-        webpush.setVapidDetails('mailto:admin@example.com', publicKey, privateKey);
+        webpush.setVapidDetails('mailto:contato@ministral.com.br', publicKey, privateKey);
     } catch (err: any) {
         return new Response(JSON.stringify({ success: false, message: "Erro na configuração de notificações." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
@@ -124,22 +142,33 @@ Deno.serve(async (req: Request) => {
     if (!cleanMid) return new Response(JSON.stringify({ success: false, message: 'Ministry ID missing' }), { headers: corsHeaders, status: 400 });
 
     // Determina os DESTINATÁRIOS:
-    // - `userIds` (array) ou `userId` no body: envio DIRECIONADO (ex: avisar admins/super admins).
+    // - `userIds` (array) ou `userId` no body: envio DIRECIONADO (ex: avisar voluntário escalado ou solicitação).
     // - caso contrário: todos os membros do ministério.
     let explicitTarget: string[] = [];
     if (Array.isArray(userIds) && userIds.length) explicitTarget = userIds.map(String);
     else if (userId) explicitTarget = [String(userId)];
 
-    // Busca os usuários vinculados ao ministério (para validação e fallback)
+    // Busca os usuários vinculados ao ministério:
+    // 1. Pela tabela canônica ministry_members
+    const { data: mMembers } = await supabase
+        .from('ministry_members')
+        .select('profile_id')
+        .eq('ministry_id', cleanMid);
+
+    // 2. Por perfis legados com allowed_ministries ou ministry_id
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id')
-        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
-    const ministryUserIds = new Set((profiles || []).map((p: any) => p.id));
+        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
+
+    const ministryUserIds = new Set([
+        ...(mMembers || []).map((m: any) => m.profile_id),
+        ...(profiles || []).map((p: any) => p.id)
+    ]);
 
     // Se vem alvo explícito, restringe aos usuários do ministério — a não ser que o
     // chamador seja admin/super admin (pode notificar admins de outras orgs/super admins).
-    const isPrivileged = callerProfile?.is_super_admin === true || callerProfile?.is_admin === true;
+    const isPrivileged = callerProfile?.is_super_admin === true || callerProfile?.is_admin === true || isMinistryAdmin;
 
     let targetUserIds: string[];
     if (explicitTarget.length > 0) {
