@@ -29,6 +29,21 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
+
+    const isChunkError = 
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Importing a module script failed') ||
+      error.message?.includes('Expected a JavaScript-or-Wasm module script');
+
+    if (isChunkError) {
+      const key = 'chunk_reload_lock';
+      const last = Number(sessionStorage.getItem(key) || 0);
+      const now = Date.now();
+      if (now - last > 8000) {
+        sessionStorage.setItem(key, String(now));
+        window.location.reload();
+      }
+    }
   }
 
   private handleReload = () => {
@@ -37,22 +52,29 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      const isNetworkError = this.state.error?.message?.includes('network') || this.state.error?.message?.includes('fetch') || !navigator.onLine;
+      const isChunkError = 
+        this.state.error?.message?.includes('Failed to fetch dynamically imported module') ||
+        this.state.error?.message?.includes('Importing a module script failed') ||
+        this.state.error?.message?.includes('Expected a JavaScript-or-Wasm module script');
+
+      const isNetworkError = !isChunkError && (this.state.error?.message?.includes('network') || this.state.error?.message?.includes('fetch') || !navigator.onLine);
 
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 text-center">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full animate-slide-up">
-            <div className="w-16 h-16 mx-auto mb-6 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center text-red-600 dark:text-red-400">
-              {isNetworkError ? <WifiOff size={32} /> : <AlertTriangle size={32} />}
+            <div className={`w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center ${isChunkError ? 'bg-secondary/10 text-secondary' : isNetworkError ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+              {isChunkError ? <RefreshCw size={32} className="animate-spin" /> : isNetworkError ? <WifiOff size={32} /> : <AlertTriangle size={32} />}
             </div>
             
             <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">
-              {isNetworkError ? "Falha de Conexão" : "Algo deu errado"}
+              {isChunkError ? "Nova Versão Disponível" : isNetworkError ? "Falha de Conexão" : "Algo deu errado"}
             </h2>
             
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-8 leading-relaxed">
-              {isNetworkError 
-                ? "Não foi possível carregar os dados. Verifique sua internet e tente novamente."
+              {isChunkError 
+                ? "O Ministral foi atualizado com novas melhorias. Clique no botão abaixo para carregar a versão mais recente."
+                : isNetworkError 
+                ? "Não foi possível carregar os dados. Verifique sua conexão e tente novamente."
                 : "Ocorreu um erro inesperado na aplicação. Nossa equipe foi notificada."}
             </p>
 
@@ -61,7 +83,7 @@ export class ErrorBoundary extends Component<Props, State> {
               className="w-full py-3.5 bg-ministral-500 text-white rounded-xl font-bold text-sm shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 active:scale-95"
             >
               <RefreshCw size={18} />
-              Recarregar Aplicação
+              {isChunkError ? "Atualizar Aplicação" : "Recarregar Aplicação"}
             </button>
             
             {this.state.error && process.env.NODE_ENV === 'development' && (

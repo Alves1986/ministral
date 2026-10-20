@@ -1,5 +1,24 @@
 import { getSupabase } from './client';
 
+// Cache em memória e localStorage para evitar erros 400 se as migrações SQL ainda não foram executadas no Supabase
+let targetUserIdSupported: boolean = (() => {
+    try {
+        const val = localStorage.getItem('supabase_has_target_user_id');
+        return val === null ? true : val === 'true';
+    } catch {
+        return true;
+    }
+})();
+
+let actionLinkSupported: boolean = (() => {
+    try {
+        const val = localStorage.getItem('supabase_has_action_link');
+        return val === null ? true : val === 'true';
+    } catch {
+        return true;
+    }
+})();
+
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string, isAdmin: boolean = false) => {
     const sb = getSupabase();
     if (!sb || !orgId) return [];
@@ -13,16 +32,18 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         if (isAdmin) {
             orConditions.push(`ministry_id.in.(${idsList})`);
             orConditions.push(`type.eq.join_request`);
-        } else {
+        } else if (targetUserIdSupported) {
             orConditions.push(`and(ministry_id.in.(${idsList}),target_user_id.is.null)`);
+        } else {
+            orConditions.push(`ministry_id.in.(${idsList})`);
         }
-    } else if (!isAdmin) {
+    } else if (!isAdmin && targetUserIdSupported) {
         orConditions.push(`target_user_id.is.null`);
     } else if (isAdmin) {
         orConditions.push(`type.eq.join_request`);
     }
 
-    if (userId) {
+    if (userId && targetUserIdSupported) {
         orConditions.push(`target_user_id.eq.${userId}`);
     }
 
@@ -52,6 +73,11 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
     // 2. Fallback robusto se houver erro (400 por falta de FK, coluna target_user_id inexistente, etc.)
     if (fetchError || !globalNotifs) {
+        if (fetchError?.message?.includes('target_user_id') || fetchError?.details?.includes('target_user_id')) {
+            targetUserIdSupported = false;
+            try { localStorage.setItem('supabase_has_target_user_id', 'false'); } catch {}
+        }
+
         try {
             // Busca direta compatível: filtra estritamente por organization_id e ministry_id
             // sem referenciar target_user_id ou embeds que possam não existir no banco
@@ -469,15 +495,24 @@ export const notifySuperAdmins = async (
             title,
             message: finalMessage,
             type,
-            action_link: actionLink || 'super-admin',
-            target_user_id: resolvedTargetUserId
+            ...(actionLinkSupported && actionLink ? { action_link: actionLink } : {}),
+            ...(targetUserIdSupported && resolvedTargetUserId ? { target_user_id: resolvedTargetUserId } : {})
         });
     }
 
     if (notificationsToInsert.length > 0) {
         let insertResult = await sb.from('notifications').insert(notificationsToInsert);
         if (insertResult.error) {
-            console.warn('[notifySuperAdmins] Inserção completa falhou, tentando fallback sem target_user_id e action_link:', insertResult.error);
+            if (insertResult.error.message?.includes('target_user_id')) {
+                targetUserIdSupported = false;
+                try { localStorage.setItem('supabase_has_target_user_id', 'false'); } catch {}
+            }
+            if (insertResult.error.message?.includes('action_link')) {
+                actionLinkSupported = false;
+                try { localStorage.setItem('supabase_has_action_link', 'false'); } catch {}
+            }
+
+            console.warn('[notifySuperAdmins] Inserção falhou, tentando fallback com schema base:', insertResult.error);
             const fallbackInserts = notificationsToInsert.map(n => {
                 const copy = { ...n };
                 delete copy.action_link;

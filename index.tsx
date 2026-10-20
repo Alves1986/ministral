@@ -12,6 +12,36 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Previne erro de tela "Falha de Conexão" quando um novo deploy na Vercel altera os hashes dos chunks (.js):
+// O Vite dispara 'vite:preloadError' quando um módulo dinâmico antigo não existe mais no servidor.
+window.addEventListener('vite:preloadError', (event: any) => {
+  event?.preventDefault?.();
+  const key = 'chunk_reload_lock';
+  const last = Number(sessionStorage.getItem(key) || 0);
+  const now = Date.now();
+  if (now - last > 8000) {
+    sessionStorage.setItem(key, String(now));
+    window.location.reload();
+  }
+});
+
+window.addEventListener('error', (event) => {
+  const msg = event?.message || '';
+  if (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Expected a JavaScript-or-Wasm module script')
+  ) {
+    const key = 'chunk_reload_lock';
+    const last = Number(sessionStorage.getItem(key) || 0);
+    const now = Date.now();
+    if (now - last > 8000) {
+      sessionStorage.setItem(key, String(now));
+      window.location.reload();
+    }
+  }
+});
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = createRoot(rootElement);
