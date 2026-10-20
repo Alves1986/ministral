@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, AlignLeft } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, AlignLeft, ListPlus } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
-import { searchYouTubeVideos } from '../services/youtubeService';
+import { searchYouTubeVideos, extractPlaylistId } from '../services/youtubeService';
 import { searchCifraClub, getVagalumeLyrics } from '../services/cifraClubService';
 import { ChordViewer } from './ChordViewer';
 import { useQueryClient } from '@tanstack/react-query';
@@ -179,16 +179,48 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const handleYouTubeSearch = async () => {
-      if (!youtubeQuery.trim()) return;
+      const query = youtubeQuery.trim();
+      if (!query) return;
+      const isPlaylist = !!extractPlaylistId(query);
       setYoutubeLoading(true);
       try {
-          const results = await searchYouTubeVideos(youtubeQuery);
+          const results = await searchYouTubeVideos(query);
           setYoutubeResults(results);
-          if (results.length === 0) addToast("Nenhum vídeo encontrado.", "warning");
+          if (results.length === 0) {
+              addToast(isPlaylist ? "Nenhum vídeo localizado nesta playlist do YouTube." : "Nenhum vídeo encontrado.", "warning");
+          } else if (isPlaylist) {
+              addToast(`Playlist carregada com sucesso! ${results.length} louvor(es) encontrado(s).`, "success");
+          }
       } catch (e: any) {
           addToast(e.message || "Erro ao buscar no YouTube.", "error");
       } finally {
           setYoutubeLoading(false);
+      }
+  };
+
+  const handleAddAllYouTubeToDraft = () => {
+      if (youtubeResults.length === 0) return;
+      let addedCount = 0;
+      setDraftItems(prev => {
+          const existing = new Set(prev.map(i => i.title.toLowerCase().trim()));
+          const next = [...prev];
+          for (const v of youtubeResults) {
+              if (v.title && !existing.has(v.title.toLowerCase().trim())) {
+                  next.push({
+                      title: v.title,
+                      link: v.link,
+                      content: ''
+                  });
+                  existing.add(v.title.toLowerCase().trim());
+                  addedCount++;
+              }
+          }
+          return next;
+      });
+      if (addedCount > 0) {
+          addToast(`${addedCount} músicas da playlist adicionadas à seleção!`, 'success');
+      } else {
+          addToast("Todas as músicas desta lista já foram adicionadas.", "info");
       }
   };
 
@@ -443,10 +475,81 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   {activeTab === 'youtube' && (
                       <div className="space-y-4 animate-fade-in">
                           <div className="flex gap-2">
-                              <input type="text" placeholder="Buscar vídeo no YouTube..." value={youtubeQuery} onChange={e => setYoutubeQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100" />
-                              <button onClick={handleYouTubeSearch} disabled={youtubeLoading} className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
+                              <input 
+                                  type="text" 
+                                  placeholder="Cole a URL da Playlist, do Vídeo ou busque por música..." 
+                                  value={youtubeQuery} 
+                                  onChange={e => setYoutubeQuery(e.target.value)} 
+                                  onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()} 
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" 
+                              />
+                              <button 
+                                  onClick={handleYouTubeSearch} 
+                                  disabled={youtubeLoading} 
+                                  className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50 transition-colors shrink-0"
+                                  title="Buscar no YouTube"
+                              >
+                                  {youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
+                              </button>
                           </div>
-                          {youtubeResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{youtubeResults.map(video => (<div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 overflow-hidden w-full"><img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" /><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>{video.title}</p><p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p></div></div><button onClick={() => handleAddToDraft(video.title, video.link)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1 ml-2"><Plus size={14}/> Add</button></div>))}</div>}
+
+                          {/* Barra de resumo e adição em massa para Playlists e Múltiplos Vídeos */}
+                          {youtubeResults.length > 0 && (
+                              <div className="flex items-center justify-between p-2.5 bg-red-500/10 dark:bg-red-900/20 border border-red-500/20 rounded-xl">
+                                  <div className="flex items-center gap-2 text-xs font-bold text-red-700 dark:text-red-400">
+                                      <Youtube size={16} />
+                                      <span>
+                                          {extractPlaylistId(youtubeQuery) 
+                                              ? `Playlist: ${youtubeResults.length} louvor(es)` 
+                                              : `${youtubeResults.length} vídeo(s) encontrado(s)`}
+                                      </span>
+                                  </div>
+                                  <button
+                                      onClick={handleAddAllYouTubeToDraft}
+                                      className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                  >
+                                      <ListPlus size={14} />
+                                      <span>Adicionar Todas</span>
+                                  </button>
+                              </div>
+                          )}
+
+                          {youtubeResults.length > 0 && (
+                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
+                                  {youtubeResults.map(video => (
+                                      <div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
+                                          <div className="flex items-center gap-3 overflow-hidden w-full">
+                                              <img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" alt={video.title} />
+                                              <div className="min-w-0 flex-1">
+                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>
+                                                      {video.title}
+                                                  </p>
+                                                  {video.channelTitle && (
+                                                      <p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p>
+                                                  )}
+                                              </div>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                              <a 
+                                                  href={video.link} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer" 
+                                                  className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                                  title="Ouvir no YouTube"
+                                              >
+                                                  <ExternalLink size={14} />
+                                              </a>
+                                              <button 
+                                                  onClick={() => handleAddToDraft(video.title, video.link)} 
+                                                  className="text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1"
+                                              >
+                                                  <Plus size={14}/> Add
+                                              </button>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
                       </div>
                   )}
 

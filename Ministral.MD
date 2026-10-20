@@ -84,6 +84,10 @@
      - Criação de [docs/agent-context/MINISTRAL_HISTORY.md](docs/agent-context/MINISTRAL_HISTORY.md) preservando 100% do histórico técnico e das auditorias passadas.
      - Otimização do `Ministral.MD` como índice ágil e confiável com backlog ativo estruturado por estado.
      - Refinamento de `AGENTS.MD` com regras permanentes.
+   3. **Repertório Musical e Suporte Completo a Playlists do YouTube**:
+      - Corrigida a identificação e extração de Playlists do YouTube (`/playlist?list=...`, `&list=...` e IDs canônicos `PL...`) em [RepertoireScreen.tsx](components/RepertoireScreen.tsx), [youtubeService.ts](services/youtubeService.ts) e [api/youtube/search.ts](api/youtube/search.ts).
+      - Implementado suporte multi-camada: busca oficial via API do YouTube com fallback resiliente direto para extração de playlists e vídeos (zero quota / sem bloqueios de API key).
+      - Adicionado botão de importação em lote "Adicionar Todas" na interface do repertório para adicionar todas as faixas da playlist com um único clique.
 - **Validação**: `npm run build` aprovado gerando bundles e service worker sem advertências impeditivas.
 - **Próximo Passo**: Teste de ponta a ponta no mobile e aprovação da solicitação de entrada de teste.
 
