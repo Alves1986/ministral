@@ -73,7 +73,7 @@
 - **Data**: 20/10/2026
 - **Realizações**:
   1. **Auditoria e Blindagem de Notificações e Solicitações de Entrada**:
-     - Corrigido o fluxo de aprovação de solicitações de entrada (`join_request`): blindado [MembersScreen.tsx](components/MembersScreen.tsx) para extrair o nome do usuário e dados mesmo se a coluna `action_link` estiver ausente no banco, com resolução automática do `userId` na tabela `profiles`.
+     - Corrigido o fluxo de aprovação de solicitações de entrada (`join_request`): blindado [MembersScreen.tsx](components/MembersScreen.tsx) com avatar, nome real, e-mail e citação da notificação original, além de resolução automática de perfis (`profiles`) e seletor manual de vinculação para notificações legadas ou com nomes genéricos ("Novo Integrante").
      - Atualizado [NotificationCenter.tsx](components/NotificationCenter.tsx) para redirecionar o clique em solicitações de entrada diretamente para a aba de membros com o ministério correto já selecionado.
      - Adicionado banner de alerta e badge numérico no item de menu "Membros" em [DashboardLayout.tsx](components/DashboardLayout.tsx) e [App.tsx](App.tsx) quando houver solicitações aguardando aprovação.
      - Blindado `fetchNotificationsSQL` em [services/supabase/notifications.ts](services/supabase/notifications.ts) para sempre retornar `type = join_request` para administradores e nunca quebrar com erro 400.

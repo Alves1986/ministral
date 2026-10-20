@@ -23,6 +23,140 @@ interface Props {
   onRejectJoin?: (notificationId: string, userId: string, ministryId?: string) => Promise<void>;
 }
 
+// Helper para limpar e sanitizar nome extraído de notificações
+const cleanExtractedName = (raw: string): string => {
+  if (!raw) return '';
+  let cleaned = raw
+    .replace(/^["']|["']$/g, '') // remove aspas
+    .replace(/\s*\(Minist[ée]rio:.*?\)/gi, '') // remove trailing (Ministério: ...)
+    .replace(/\s*no minist[ée]rio.*$/gi, '') // remove trailing no ministério...
+    .trim();
+
+  // Remove leading "O usuário", "O membro", etc. se inadvertidamente capturado
+  cleaned = cleaned.replace(/^O\s+(?:usu[áa]rio|membro|volunt[áa]rio)\s+/i, '').trim();
+
+  const invalidNames = [
+    'undefined', 'null', 'novo integrante', 'usuário', 'usuario', 
+    'o usuário', 'o usuario', 'membro', 'o membro', 'voluntário', 
+    'voluntario', 'o voluntário', 'o voluntario'
+  ];
+
+  if (invalidNames.includes(cleaned.toLowerCase())) {
+    return '';
+  }
+
+  return cleaned;
+};
+
+// Parser com múltiplas heurísticas para extrair dados da solicitação
+const parseNotificationDetails = (n: any) => {
+  let userId = n.targetUserId || n.target_user_id || '';
+  let userName = '';
+  let userEmail = '';
+  let roles: string[] = [];
+
+  // 1. Tenta extrair de actionLink (JSON ou UUID)
+  if (typeof n.actionLink === 'string') {
+    const trimmed = n.actionLink.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.userId) userId = String(parsed.userId);
+        if (parsed.userName) userName = String(parsed.userName);
+        if (parsed.email || parsed.userEmail) userEmail = String(parsed.email || parsed.userEmail);
+        if (Array.isArray(parsed.roles)) roles = parsed.roles;
+      } catch (e) {}
+    } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+      userId = trimmed;
+    }
+  }
+
+  const message = typeof n.message === 'string' ? n.message : '';
+  const title = typeof n.title === 'string' ? n.title : '';
+
+  // 2. Tenta extrair de marcador em message ([DADOS_SOLICITACAO:{...}] ou <!--JOIN_DATA:{...}-->)
+  if (!userId || !userName) {
+    const markerMatch = message.match(/\[DADOS_SOLICITACAO:(.*?)\]/) || message.match(/<!--JOIN_DATA:(.*?)-->/);
+    if (markerMatch && markerMatch[1]) {
+      try {
+        const parsed = JSON.parse(markerMatch[1]);
+        if (parsed.userId) userId = String(parsed.userId);
+        if (parsed.userName) userName = String(parsed.userName);
+        if (parsed.email || parsed.userEmail) userEmail = String(parsed.email || parsed.userEmail);
+        if (Array.isArray(parsed.roles)) roles = parsed.roles;
+      } catch (e) {}
+    }
+  }
+
+  // 3. Tenta extrair JSON genérico embutido em message
+  if (!userId || !userName) {
+    const jsonMatch = message.match(/\{[\s\S]*?"userId"[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.userId) userId = String(parsed.userId);
+        if (parsed.userName) userName = String(parsed.userName);
+        if (parsed.email || parsed.userEmail) userEmail = String(parsed.email || parsed.userEmail);
+        if (Array.isArray(parsed.roles)) roles = parsed.roles;
+      } catch (e) {}
+    }
+  }
+
+  // 4. Heurísticas de extração de nome no texto da mensagem e título
+  if (!userName) {
+    // a. "O usuário/membro [Nome] solicitou entrada / entrou diretamente"
+    const m1 = message.match(/O\s+(?:usu[áa]rio|membro|volunt[áa]rio)\s+([^\n\r.]+?)\s+(?:solicitou entrada|entrou diretamente|pediu para entrar|quer entrar)/i);
+    if (m1 && m1[1] && m1[1].trim()) {
+      userName = m1[1].trim();
+    }
+  }
+
+  if (!userName) {
+    // b. "[Nome] solicitou entrada no ministério" (no início da mensagem ou após quebra de linha)
+    const m2 = message.match(/(?:^|\n|:\s*)([A-ZÀ-Úa-zà-ú0-9._%+-]+(?:\s+[A-ZÀ-Úa-zà-ú0-9._%+-]+)+)\s+solicitou entrada/i);
+    if (m2 && m2[1] && m2[1].trim()) {
+      userName = m2[1].trim();
+    }
+  }
+
+  if (!userName) {
+    // c. "Solicitação de entrada de [Nome]" ou "Solicitação de entrada: [Nome]"
+    const m3 = message.match(/solicita[çc][ãa]o\s+de\s+entrada\s*(?:de|:)\s*(?:O usu[áa]rio\s+)?([^\n\r(.:]+)/i);
+    if (m3 && m3[1] && m3[1].trim()) {
+      userName = m3[1].trim();
+    }
+  }
+
+  if (!userName) {
+    // d. "Novo Integrante: [Nome]" ou "Novo Integrante (Entrada Direta): [Nome]"
+    const m4 = (title + ' ' + message).match(/novo integrante(?:\s*\([^)]*\))?\s*:\s*(?:O\s+usu[áa]rio\s+)?([^\n\r(.:]+)/i);
+    if (m4 && m4[1] && m4[1].trim()) {
+      userName = m4[1].trim();
+    }
+  }
+
+  if (!userName) {
+    // e. Se no título há "Solicitação de Entrada - [Nome]"
+    const m5 = title.match(/solicita[çc][ãa]o\s+de\s+entrada\s*[-:]\s*(.+)/i);
+    if (m5 && m5[1] && m5[1].trim()) {
+      userName = m5[1].trim();
+    }
+  }
+
+  // 5. Extração de Email
+  const emailMatch = message.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch && emailMatch[1]) {
+    userEmail = emailMatch[1].trim();
+    if (!userName) {
+      userName = userEmail;
+    }
+  }
+
+  userName = cleanExtractedName(userName);
+
+  return { userId, userName, userEmail, roles };
+};
+
 export const MembersScreen: React.FC<Props> = ({ 
   members, 
   onlineUsers, 
@@ -76,6 +210,37 @@ export const MembersScreen: React.FC<Props> = ({
 
 
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [resolvedProfiles, setResolvedProfiles] = useState<Record<string, {
+    userId: string;
+    name: string;
+    email: string;
+    avatarUrl?: string;
+  }>>({});
+  const [orgCandidates, setOrgCandidates] = useState<Array<{ id: string; name: string; email: string; avatar_url?: string }>>([]);
+  const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+
+  // Carrega voluntários da organização para resolver perfil e permitir vinculação direta
+  useEffect(() => {
+    if (!currentUser.organizationId || !isAdmin) return;
+    let isMounted = true;
+    const loadCandidates = async () => {
+      const sb = getSupabase();
+      if (!sb) return;
+      try {
+        const { data } = await sb
+          .from('profiles')
+          .select('id, name, email, avatar_url')
+          .eq('organization_id', currentUser.organizationId);
+        if (data && isMounted) {
+          setOrgCandidates(data);
+        }
+      } catch (e) {
+        console.warn('[MembersScreen] Erro ao carregar candidatos da org:', e);
+      }
+    };
+    loadCandidates();
+    return () => { isMounted = false; };
+  }, [currentUser.organizationId, isAdmin]);
 
   // Filter join requests from notifications — blindado contra schemas sem action_link
   const joinRequests = useMemo(() => {
@@ -86,7 +251,8 @@ export const MembersScreen: React.FC<Props> = ({
         .filter(n => {
             const isJoinType = n.type === 'join_request' || 
                                n.title?.toLowerCase().includes('solicita') || 
-                               (typeof n.message === 'string' && n.message.includes('solicitou entrada'));
+                               n.title?.toLowerCase().includes('novo integrante') ||
+                               (typeof n.message === 'string' && (n.message.includes('solicitou entrada') || n.message.includes('entrou diretamente')));
             const hasJoinData = typeof n.actionLink === 'string' && (n.actionLink.includes('"userId"') || n.actionLink.includes('join'));
             const nMinId = n.ministryId || (n as any).ministry_id;
             
@@ -96,54 +262,19 @@ export const MembersScreen: React.FC<Props> = ({
         })
         .map(n => {
             try {
-                let userId: string = '';
-                let userName: string = '';
-                let roles: string[] = [];
-
-                // 1. Tenta extrair de actionLink (JSON)
-                if (typeof n.actionLink === 'string' && n.actionLink.startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(n.actionLink);
-                        if (parsed.userId) userId = String(parsed.userId);
-                        if (parsed.userName) userName = String(parsed.userName);
-                        if (Array.isArray(parsed.roles)) roles = parsed.roles;
-                    } catch (e) {}
-                }
-
-                // 2. Tenta extrair do marcador em message ([DADOS_SOLICITACAO:{...}] ou <!--JOIN_DATA:{...}-->)
-                if ((!userId || !userName) && typeof n.message === 'string') {
-                    const markerMatch = n.message.match(/\[DADOS_SOLICITACAO:(.*?)\]/) || n.message.match(/<!--JOIN_DATA:(.*?)-->/);
-                    if (markerMatch && markerMatch[1]) {
-                        try {
-                            const parsed = JSON.parse(markerMatch[1]);
-                            if (parsed.userId) userId = String(parsed.userId);
-                            if (parsed.userName) userName = String(parsed.userName);
-                            if (Array.isArray(parsed.roles)) roles = parsed.roles;
-                        } catch (e) {}
-                    }
-                }
-
-                // 3. Fallback: extrai nome de usuário do texto da mensagem "O usuário [Nome] solicitou entrada..."
-                if (!userName && typeof n.message === 'string') {
-                    const nameMatch = n.message.match(/O usu[áa]rio\s+(.*?)\s+solicitou entrada/i);
-                    if (nameMatch && nameMatch[1]) {
-                        userName = nameMatch[1].trim();
-                    }
-                }
-
-                if (!userName) {
-                    userName = 'Novo Integrante';
-                }
+                const parsed = parseNotificationDetails(n);
 
                 return {
                     id: n.id,
                     ministryId: n.ministryId || currentUser.ministryId,
                     ministryName: n.ministryName || 'Ministério',
-                    userId: userId,
-                    userName: userName,
-                    roles: roles || [],
+                    userId: parsed.userId,
+                    userName: parsed.userName,
+                    userEmail: parsed.userEmail,
+                    roles: parsed.roles || [],
                     timestamp: n.timestamp,
-                    rawMessage: n.message
+                    rawMessage: n.message,
+                    rawTitle: n.title
                 };
             } catch (e) {
                 return null;
@@ -152,20 +283,79 @@ export const MembersScreen: React.FC<Props> = ({
         .filter(Boolean) as any[];
   }, [notifications, currentUser.ministryId, currentUser.access_role, currentUser.isSuperAdmin, currentUser.isOrgAdmin]);
 
+  // Resolução inteligente de perfis para cada solicitação
+  useEffect(() => {
+    if (!joinRequests.length || !orgCandidates.length) return;
+    const newResolved: Record<string, { userId: string; name: string; email: string; avatarUrl?: string }> = {};
+
+    joinRequests.forEach(req => {
+      let matched: { id: string; name: string; email: string; avatar_url?: string } | undefined = undefined;
+
+      // 1. Pelo ID do usuário (se veio na notificação)
+      if (req.userId) {
+        matched = orgCandidates.find(c => c.id === req.userId);
+      }
+
+      // 2. Pelo email extraído
+      if (!matched && req.userEmail) {
+        const cleanEmail = req.userEmail.toLowerCase().trim();
+        matched = orgCandidates.find(c => c.email && c.email.toLowerCase().trim() === cleanEmail);
+      }
+
+      // 3. Pelo nome extraído (exato ou parcial)
+      if (!matched && req.userName) {
+        const targetName = req.userName.toLowerCase().trim();
+        matched = orgCandidates.find(c => {
+          if (!c.name) return false;
+          const cName = c.name.toLowerCase().trim();
+          return cName === targetName || cName.includes(targetName) || targetName.includes(cName);
+        });
+      }
+
+      // 4. Se a mensagem bruta contiver o nome ou email de algum candidato da org
+      if (!matched && req.rawMessage) {
+        const rawLower = req.rawMessage.toLowerCase();
+        matched = orgCandidates.find(c => {
+          if (c.email && rawLower.includes(c.email.toLowerCase())) return true;
+          if (c.name && c.name.length >= 3) {
+            const parts = c.name.toLowerCase().split(/\s+/).filter(p => p.length >= 3);
+            if (parts.length > 0 && parts.every(p => rawLower.includes(p))) return true;
+            if (rawLower.includes(c.name.toLowerCase())) return true;
+          }
+          return false;
+        });
+      }
+
+      if (matched) {
+        newResolved[req.id] = {
+          userId: matched.id,
+          name: matched.name || matched.email || 'Voluntário',
+          email: matched.email || '',
+          avatarUrl: matched.avatar_url
+        };
+      }
+    });
+
+    if (Object.keys(newResolved).length > 0) {
+      setResolvedProfiles(prev => ({ ...prev, ...newResolved }));
+    }
+  }, [joinRequests, orgCandidates]);
+
   const handleApproveJoin = async (req: any) => {
     setApprovingId(req.id);
     try {
-      let targetUserId = req.userId;
+      let targetUserId = manualSelections[req.id] || req.userId || resolvedProfiles[req.id]?.userId;
 
-      // Se o userId não veio no JSON (ex: action_link ausente), resolve pelo nome na tabela profiles
-      if (!targetUserId && req.userName) {
+      // Se o userId não veio no JSON, tenta resolver por busca direta em profiles por nome ou email
+      if (!targetUserId && (req.userName || req.userEmail)) {
         const sb = getSupabase();
         if (sb && currentUser.organizationId) {
+          const searchVal = (req.userName || req.userEmail).trim();
           const { data } = await sb
             .from('profiles')
-            .select('id')
+            .select('id, name, email')
             .eq('organization_id', currentUser.organizationId)
-            .ilike('name', req.userName.trim())
+            .or(`name.ilike.%${searchVal}%,email.ilike.%${searchVal}%`)
             .limit(1);
           if (data && data[0]?.id) {
             targetUserId = data[0].id;
@@ -174,7 +364,7 @@ export const MembersScreen: React.FC<Props> = ({
       }
 
       if (!targetUserId) {
-        addToast(`Não foi possível localizar o ID de "${req.userName}". O usuário deve fazer login pelo menos uma vez no app.`, 'error');
+        addToast(`Por favor, selecione qual membro da organização corresponde a esta solicitação no campo "Vincular a:" antes de aprovar.`, 'warning');
         return;
       }
 
@@ -389,20 +579,56 @@ export const MembersScreen: React.FC<Props> = ({
                     {joinRequests.map((req: any) => {
                         const isOtherMinistry = req.ministryId && req.ministryId !== currentUser.ministryId;
                         const isProcessing = approvingId === req.id;
+                        const manualId = manualSelections[req.id];
+                        const selectedManual = manualId ? orgCandidates.find(c => c.id === manualId) : null;
+                        const resolved = resolvedProfiles[req.id] || (selectedManual ? { userId: selectedManual.id, name: selectedManual.name, email: selectedManual.email, avatarUrl: selectedManual.avatar_url } : null);
+                        
+                        const effectiveUserId = req.userId || resolved?.userId;
+                        const displayName = resolved?.name || req.userName || resolved?.email || req.userEmail || 'Membro Solicitante';
+                        const displayEmail = resolved?.email || req.userEmail || '';
+                        const avatarUrl = resolved?.avatarUrl;
+                        const initial = (displayName || '?').charAt(0).toUpperCase();
+
                         return (
-                            <div key={req.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3">
-                                <div className="flex justify-between items-start gap-2">
+                            <div key={req.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3 transition-all hover:border-amber-500/40">
+                                <div className="flex justify-between items-start gap-3">
+                                    {/* Avatar */}
+                                    {avatarUrl ? (
+                                        <img 
+                                            src={avatarUrl} 
+                                            alt={displayName} 
+                                            className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" 
+                                        />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-secondary to-secondaryHover flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner">
+                                            {initial}
+                                        </div>
+                                    )}
+
+                                    {/* Informações Principais */}
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">{req.userName}</p>
+                                            <p className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">
+                                                {displayName}
+                                            </p>
                                             {isOtherMinistry && (
                                                 <span className="text-[10px] font-bold px-2 py-0.5 bg-secondary/10 text-secondary dark:text-amber-400 rounded-md">
                                                     Para: {req.ministryName}
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-zinc-500 mt-0.5">{new Date(req.timestamp).toLocaleString('pt-BR')}</p>
+                                        {displayEmail && (
+                                            <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1 mt-0.5 truncate">
+                                                <Mail size={12} className="shrink-0 text-zinc-400" />
+                                                <span className="truncate">{displayEmail}</span>
+                                            </p>
+                                        )}
+                                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                                            {new Date(req.timestamp).toLocaleString('pt-BR')}
+                                        </p>
                                     </div>
+
+                                    {/* Ações */}
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         <button 
                                             onClick={() => handleRejectJoin(req)}
@@ -427,6 +653,35 @@ export const MembersScreen: React.FC<Props> = ({
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* Mensagem da Notificação / Contexto original */}
+                                {req.rawMessage && (
+                                    <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-700/40 border border-zinc-100 dark:border-zinc-700/50 text-[11px] text-zinc-600 dark:text-zinc-300 italic">
+                                        "{req.rawMessage}"
+                                    </div>
+                                )}
+
+                                {/* Se o ID do membro não estiver definido, permite vincular diretamente a um membro da igreja */}
+                                {!effectiveUserId && orgCandidates.length > 0 && (
+                                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-col gap-1 text-xs">
+                                        <label className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                                            Vincular a um membro da organização para aprovar:
+                                        </label>
+                                        <select
+                                            value={manualSelections[req.id] || ''}
+                                            onChange={(e) => setManualSelections(prev => ({ ...prev, [req.id]: e.target.value }))}
+                                            className="w-full text-xs bg-white dark:bg-zinc-800 border border-amber-500/40 rounded-lg p-1.5 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        >
+                                            <option value="">Selecione o membro...</option>
+                                            {orgCandidates.map(c => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.name || 'Sem Nome'} {c.email ? `(${c.email})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 {req.roles && req.roles.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5 pt-1 border-t border-zinc-100 dark:border-zinc-700/50">
                                         <span className="text-[10px] text-zinc-400 self-center">Funções desejadas:</span>

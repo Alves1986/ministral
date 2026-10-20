@@ -82,7 +82,7 @@ export interface MinistrySettings {
 
 export interface AppNotification {
   id: string;
-  type: "info" | "success" | "warning" | "alert";
+  type: "info" | "success" | "warning" | "alert" | "join_request";
   title: string;
   message: string;
   timestamp: string;
@@ -91,6 +91,7 @@ export interface AppNotification {
   ministryId?: string;
   ministryName?: string;
   organizationId?: string;
+  targetUserId?: string;
 }
 
 export interface Announcement {

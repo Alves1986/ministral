@@ -130,7 +130,8 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                 type: n.type,
                 timestamp: n.created_at,
                 read: readSet.has(n.id),
-                actionLink: n.action_link
+                actionLink: n.action_link,
+                targetUserId: n.target_user_id || n.targetUserId || (n as any).user_id
             };
         });
 };
@@ -342,7 +343,15 @@ export const clearAllNotificationsSQL = async (
     }
 };
 
-export const notifySuperAdmins = async (title: string, message: string, actionLink?: string, targetMinistryId?: string, orgId?: string, type: string = 'info') => {
+export const notifySuperAdmins = async (
+    title: string, 
+    message: string, 
+    actionLink?: string, 
+    targetMinistryId?: string, 
+    orgId?: string, 
+    type: string = 'info',
+    targetUserId?: string
+) => {
     const sb = getSupabase();
     if (!sb) return;
 
@@ -435,6 +444,20 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
     const cleanRawMessage = stripHtml(message);
     const notificationsToInsert: any[] = [];
 
+    // Tenta resolver o target_user_id a partir do actionLink (se for JSON ou UUID) caso não tenha sido passado
+    let resolvedTargetUserId = targetUserId || null;
+    if (!resolvedTargetUserId && typeof actionLink === 'string') {
+        const trimmed = actionLink.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (parsed.userId) resolvedTargetUserId = String(parsed.userId);
+            } catch (e) {}
+        } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+            resolvedTargetUserId = trimmed;
+        }
+    }
+
     for (const [, target] of targetMap.entries()) {
         const { orgId: tOrgId, minId: tMinId } = target;
         const displayLabel = labelById.get(tMinId) || 'Ministério';
@@ -446,17 +469,19 @@ export const notifySuperAdmins = async (title: string, message: string, actionLi
             title,
             message: finalMessage,
             type,
-            action_link: actionLink || 'super-admin'
+            action_link: actionLink || 'super-admin',
+            target_user_id: resolvedTargetUserId
         });
     }
 
     if (notificationsToInsert.length > 0) {
         let insertResult = await sb.from('notifications').insert(notificationsToInsert);
         if (insertResult.error) {
-            console.warn('[notifySuperAdmins] Inserção falhou, tentando fallback sem action_link:', insertResult.error);
+            console.warn('[notifySuperAdmins] Inserção completa falhou, tentando fallback sem target_user_id e action_link:', insertResult.error);
             const fallbackInserts = notificationsToInsert.map(n => {
                 const copy = { ...n };
                 delete copy.action_link;
+                delete copy.target_user_id;
                 return copy;
             });
             insertResult = await sb.from('notifications').insert(fallbackInserts);

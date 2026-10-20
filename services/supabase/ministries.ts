@@ -245,30 +245,49 @@ export const joinMinistry = async (
         .eq("id", user.id);
     }
 
+    const directName =
+      profile?.name?.trim() ||
+      user.user_metadata?.full_name?.trim() ||
+      user.user_metadata?.name?.trim() ||
+      user.email?.split("@")[0] ||
+      user.email ||
+      "Novo Integrante";
+
     await notifySuperAdmins(
       "Novo Integrante (Entrada Direta)",
-      `O usuário ${profile?.name || user.email} entrou diretamente no ministério ${ministryName}.`,
+      `O usuário ${directName} entrou diretamente no ministério ${ministryName}.`,
       "members",
       ministryId,
       orgId,
+      "info",
+      user.id,
     );
   } else {
     // Regular user: Create a join request via weight notifications
-    const userName =
-      profile?.name || user.user_metadata?.full_name || user.email;
+    const cleanName =
+      profile?.name?.trim() ||
+      user.user_metadata?.full_name?.trim() ||
+      user.user_metadata?.name?.trim() ||
+      user.email?.split("@")[0] ||
+      user.email ||
+      "Novo Integrante";
+    const userEmail = profile?.email || user.email || "";
+
     const actionData = JSON.stringify({
       userId: user.id,
-      userName,
+      userName: cleanName,
+      userEmail,
       roles: roles || [],
     });
 
     const response = await notifySuperAdmins(
       "Solicitação de Entrada",
-      `O usuário ${userName} solicitou entrada no ministério ${ministryName}.\n[DADOS_SOLICITACAO:${actionData}]`,
+      `O usuário ${cleanName} solicitou entrada no ministério ${ministryName}.\n[DADOS_SOLICITACAO:${actionData}]`,
       actionData,
       ministryId,
       orgId,
       "join_request",
+      user.id,
     );
 
     if (response?.error) {
