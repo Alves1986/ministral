@@ -151,6 +151,20 @@
   3. Supabase: aplicar migration `20260630_push_reminder_log.sql` + criar o cron diário chamando `push-reminders` com header `x-cron-secret` (ex: `0 8 * * *`).
   4. O usuário precisa reautorizar push no app (o SW novo só assume após atualizar — a subscrição antiga com a chave VAPID antiga falha até reconectar).
 
+## Correção Crítica de Notificações Push & PWA (rodada 13)
+**Sintoma**: O sistema não notificava no WebApp instalado no PC nem no mobile (apenas teste direto na página web aberta no navegador). DevTools acusava:
+- `TypeError: Failed to register a ServiceWorker for scope (...) with script (.../sw.js): ServiceWorker script evaluation failed`
+- `Failed to subscribe to push: TypeError: Failed to register a ServiceWorker...`
+- `[Notifications] Fetch error: Object (status 400)`
+- `<meta name="apple-mobile-web-app-capable"> is deprecated`
+
+**Causa Raiz & Resolução**:
+1. **Crash de sintaxe no SW**: Em `public/sw.js`, havia a atribuição `self.__WB_MANIFEST = [];`. Ao rodar `vite build` com Workbox `injectManifest`, a injeção substituía `self.__WB_MANIFEST` pelo array de precache, transformando a linha em `[{...}] = [];` (alvo inválido de destructuring assignment em JS), provocando SyntaxError imediato ao avaliar o Service Worker. Resolvido com declaração de constante limpa `const swManifest = self.__WB_MANIFEST; self.__SW_MANIFEST = swManifest;`.
+2. **Entrega de Notificação no SO Mobile/Desktop**: Adicionados `tag` único por notificação e `renotify: true` nas opções de `showNotification`, além de fallbacks de ícones, garantindo que o Android e o Windows não silenciem ou descartem novas notificações.
+3. **Erro 400 na busca de notificações**: `fetchNotificationsSQL` montava `ministry_id.in.(null)` quando a lista de ministérios vinha vazia e quebrava caso a relação de FK com `organization_ministries` estivesse ausente. Adicionada higienização de filtros e fallback resiliente automático para `select('*')`.
+4. **Meta tag PWA**: Adicionada `<meta name="mobile-web-app-capable" content="yes" />` no `index.html`.
+
+
 ## Bugs conhecidos (contexto ativo)
 1. **Race condition de disponibilidade**: conflito entre optimistic UI e Supabase Realtime em `AvailabilityScreen.tsx` — Realtime reseta estado após optimistic update. Solução planejada: flag `isSyncing` para bloquear atualização do Realtime enquanto optimistic update estiver pendente
 2. **Ministry-switching lento**: roundtrips sequenciais em `onSwitchMinistry` dentro de `SessionContext.tsx` — paralelizar com `Promise.all`

@@ -2,7 +2,9 @@
 // Este arquivo DEVE ficar em /public/sw.js para ser servido na raiz do domínio
 
 const CACHE_NAME = 'ministral-v1';
-self.__WB_MANIFEST = [];
+// Injetado pelo Workbox injectManifest
+const swManifest = self.__WB_MANIFEST;
+self.__SW_MANIFEST = swManifest;
 
 // =============================================
 // EVENTO: push (recebe notificação do servidor)
@@ -35,13 +37,15 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon,
-    badge: data.badge,
+    icon: data.icon || '/branding/icon-light.png',
+    badge: data.badge || '/branding/favicon-light.png',
     data: data.data,
+    tag: (data.data && data.data.id) ? `ministral-${data.data.id}` : `ministral-${Date.now()}`,
+    renotify: true,
     vibrate: [200, 100, 200],
     requireInteraction: false,
     actions: [
-      { action: 'open', title: 'Abrir', icon: '/branding/favicon-light.png' },
+      { action: 'open', title: 'Abrir' },
       { action: 'close', title: 'Fechar' }
     ]
   };

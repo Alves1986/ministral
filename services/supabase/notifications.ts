@@ -2,55 +2,81 @@ import { getSupabase } from './client';
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string, isAdmin: boolean = false) => {
     const sb = getSupabase();
-    if (!sb) return [];
+    if (!sb || !orgId) return [];
     
-    let query = sb.from('notifications')
-        .select('*, organization_ministries(label)')
-        .eq('organization_id', orgId);
-    
-    const ids = ministryIds.length > 0 ? ministryIds.join(',') : 'null';
-    if (isAdmin) {
-        // Admin: vê todas as notificações do(s) ministério(s) dele OU as diretamente endereçadas a ele
-        query = query.or(`ministry_id.in.(${ids}),target_user_id.eq.${userId}`);
-    } else {
-        // Membro comum: vê apenas as do ministério dele que sejam gerais (target null) OU as diretamente endereçadas a ele
-        query = query.or(`and(ministry_id.in.(${ids}),target_user_id.is.null),target_user_id.eq.${userId}`);
-    }
-    
-    const { data: globalNotifs, error: fetchError } = await query
-        .order('created_at', { ascending: false })
-        .limit(30);
+    // Constrói condições seguras para o filtro OR
+    const validMinistryIds = (ministryIds || []).filter(Boolean);
+    const orConditions: string[] = [];
 
-    let finalNotifs = globalNotifs;
-
-    // Fallback para erro de cache de schema
-    if (fetchError && (fetchError.code === 'PGRST204' || fetchError.message?.includes('action_link'))) {
-        console.warn("[Notifications] Schema cache error on global fetch, retrying basic.");
-        let retryQuery = sb.from('notifications')
-            .select('id, title, message, type, created_at, ministry_id, organization_id, action_link, target_user_id')
-            .eq('organization_id', orgId);
-
+    if (validMinistryIds.length > 0) {
+        const idsList = validMinistryIds.join(',');
         if (isAdmin) {
-            retryQuery = retryQuery.or(`ministry_id.in.(${ids}),target_user_id.eq.${userId}`);
+            orConditions.push(`ministry_id.in.(${idsList})`);
         } else {
-            retryQuery = retryQuery.or(`and(ministry_id.in.(${ids}),target_user_id.is.null),target_user_id.eq.${userId}`);
+            orConditions.push(`and(ministry_id.in.(${idsList}),target_user_id.is.null)`);
         }
-
-        const { data: retryNotifs } = await retryQuery
-            .order('created_at', { ascending: false })
-            .limit(30);
-        
-        // Se falhar de novo, deixa o erro subir ou retorna vazio para não quebrar o app
-        if (!retryNotifs) return [];
-        
-        // Mapeamento simplificado para o fallback que será processado abaixo
-        finalNotifs = retryNotifs.map(n => ({
-            ...n,
-            organization_ministries: { label: 'Aviso' }
-        }));
-    } else if (fetchError) {
-        console.error("[Notifications] Fetch error:", fetchError);
+    } else if (!isAdmin) {
+        orConditions.push(`target_user_id.is.null`);
     }
+
+    if (userId) {
+        orConditions.push(`target_user_id.eq.${userId}`);
+    }
+
+    const applyFilters = (q: any) => {
+        let res = q.eq('organization_id', orgId);
+        if (orConditions.length > 0) {
+            res = res.or(orConditions.join(','));
+        }
+        return res;
+    };
+
+    // 1. Tenta query completa com embed de organization_ministries
+    let globalNotifs: any[] | null = null;
+    let fetchError: any = null;
+
+    try {
+        const query = applyFilters(
+            sb.from('notifications')
+              .select('*, organization_ministries(label)')
+        );
+        const res = await query.order('created_at', { ascending: false }).limit(30);
+        globalNotifs = res.data;
+        fetchError = res.error;
+    } catch (e) {
+        fetchError = e;
+    }
+
+    // 2. Fallback robusto se houver erro (400 por falta de FK, PGRST200, PGRST204, etc.)
+    if (fetchError || !globalNotifs) {
+        if (fetchError) {
+            console.warn("[Notifications] Query com join falhou, tentando busca direta sem embed:", fetchError.message || fetchError);
+        }
+        try {
+            const retryQuery = applyFilters(
+                sb.from('notifications')
+                  .select('*')
+            );
+            const { data: retryData, error: retryErr } = await retryQuery
+                .order('created_at', { ascending: false })
+                .limit(30);
+
+            if (!retryErr && retryData) {
+                globalNotifs = retryData.map((n: any) => ({
+                    ...n,
+                    organization_ministries: { label: 'Aviso' }
+                }));
+            } else {
+                console.warn("[Notifications] Fallback sem embed também retornou erro:", retryErr);
+                globalNotifs = [];
+            }
+        } catch (e) {
+            console.error("[Notifications] Erro crítico no fallback:", e);
+            globalNotifs = [];
+        }
+    }
+
+    let finalNotifs = globalNotifs || [];
         
     const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
