@@ -47,16 +47,19 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         fetchError = e;
     }
 
-    // 2. Fallback robusto se houver erro (400 por falta de FK, PGRST200, PGRST204, etc.)
+    // 2. Fallback robusto se houver erro (400 por falta de FK, coluna target_user_id inexistente, etc.)
     if (fetchError || !globalNotifs) {
-        if (fetchError) {
-            console.warn("[Notifications] Query com join falhou, tentando busca direta sem embed:", fetchError.message || fetchError);
-        }
         try {
-            const retryQuery = applyFilters(
-                sb.from('notifications')
-                  .select('*')
-            );
+            // Busca direta compatível: filtra estritamente por organization_id e ministry_id
+            // sem referenciar target_user_id ou embeds que possam não existir no banco
+            let retryQuery = sb.from('notifications')
+                .select('*')
+                .eq('organization_id', orgId);
+
+            if (validMinistryIds.length > 0) {
+                retryQuery = retryQuery.in('ministry_id', validMinistryIds);
+            }
+
             const { data: retryData, error: retryErr } = await retryQuery
                 .order('created_at', { ascending: false })
                 .limit(30);
@@ -67,11 +70,9 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                     organization_ministries: { label: 'Aviso' }
                 }));
             } else {
-                console.warn("[Notifications] Fallback sem embed também retornou erro:", retryErr);
                 globalNotifs = [];
             }
         } catch (e) {
-            console.error("[Notifications] Erro crítico no fallback:", e);
             globalNotifs = [];
         }
     }

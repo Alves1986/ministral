@@ -73,7 +73,10 @@
 - **Data**: 20/10/2026
 - **Realizações**:
   1. **Auditoria e Blindagem de Notificações**:
-     - Corrigido `sendNotificationSQL` em [services/supabase/notifications.ts](services/supabase/notifications.ts) com fallback de schema e remoção de payload incorreto de `target_user_id: null`.
+     - Blindado `fetchNotificationsSQL` em [services/supabase/notifications.ts](services/supabase/notifications.ts) com fallback que ignora `target_user_id` e relacionamentos complexos caso não existam no Postgres, eliminando os erros 400 (`column notifications.target_user_id does not exist`) no DevTools.
+     - Protegidos `acceptJoinRequest` e `rejectJoinRequest` em [services/supabase/ministries.ts](services/supabase/ministries.ts) com `sendNotificationSQL`.
+     - Criada migração idempotente [20261020_add_target_user_id_to_notifications.sql](supabase/migrations/20261020_add_target_user_id_to_notifications.sql) adicionando `target_user_id` e `action_link` com reload do cache de schema.
+     - Corrigido `sendNotificationSQL` com fallback de schema básico e envio isolado de Push.
      - Corrigida a Edge Function [push-notification/index.ts](supabase/functions/push-notification/index.ts) com liberação de CORS (`*`), validação de coordenadores via `ministry_members` e resolução de destinatários integrada.
      - Corrigido registro automático de inscrição Web Push em [utils/pushUtils.ts](utils/pushUtils.ts) e [App.tsx](App.tsx) ao carregar a sessão autenticada.
      - Implementado deep-link contextual no [public/sw.js](public/sw.js) ao clicar nas notificações push.
@@ -82,5 +85,6 @@
      - Criação de [docs/agent-context/MINISTRAL_HISTORY.md](docs/agent-context/MINISTRAL_HISTORY.md) preservando 100% do histórico técnico e das auditorias passadas.
      - Otimização do `Ministral.MD` como índice ágil e confiável com backlog ativo estruturado por estado.
      - Refinamento de `AGENTS.MD` com regras permanentes.
-- **Validação**: `tsc --noEmit` aprovado com 0 erros; `npm run build` aprovado gerando bundles e service worker sem advertências impeditivas.
-- **Próximo Passo**: Teste de ponta a ponta das notificações em dispositivo real com o código publicado no GitHub.
+- **Validação**: `npm run build` aprovado gerando bundles e service worker sem advertências impeditivas.
+- **Próximo Passo**: Teste de ponta a ponta no mobile (instalação como PWA no iOS ou concessão de permissão no Android).
+

@@ -1,6 +1,6 @@
 import { getSupabase } from "./client";
 import { Organization, MinistryDef, MinistrySettings } from "../../types";
-import { notifySuperAdmins } from "./notifications";
+import { notifySuperAdmins, sendNotificationSQL } from "./notifications";
 import { logAuditAction } from "./audit";
 
 
@@ -324,15 +324,13 @@ export const approveJoinRequest = async (
   // 3. Mark notification as read/cleared or delete it
   await sb.from("notifications").delete().eq("id", notificationId);
 
-  // 4. Notify user (optional, but good practice)
-  await sb.from("notifications").insert({
-    organization_id: orgId,
-    ministry_id: ministryId,
+  // 4. Notify user (optional, but good practice via resilient sender)
+  await sendNotificationSQL(ministryId, orgId, {
     title: "Solicitação Aprovada",
     message: "Sua solicitação para entrar no ministério foi aprovada!",
     type: "success",
-    target_user_id: userId,
-    action_link: "dashboard",
+    targetUserId: userId,
+    actionLink: "dashboard",
   });
 
   // 5. Audit log
@@ -357,16 +355,14 @@ export const rejectJoinRequest = async (
   // 1. Delete the request notification
   await sb.from("notifications").delete().eq("id", notificationId);
 
-  // 2. Notify user
-  await sb.from("notifications").insert({
-    organization_id: orgId,
-    ministry_id: ministryId,
+  // 2. Notify user via resilient sender
+  await sendNotificationSQL(ministryId, orgId, {
     title: "Solicitação Recusada",
     message:
       "Sua solicitação para entrar no ministério foi recusada pelos administradores.",
     type: "error",
-    target_user_id: userId,
-    action_link: "dashboard",
+    targetUserId: userId,
+    actionLink: "dashboard",
   });
 
   // 3. Audit log
