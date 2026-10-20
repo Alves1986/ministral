@@ -177,6 +177,12 @@
 ## Design system
 - Cor primária (navy): `#0f1f3d`
 - Cor de destaque (gold): `#c9a84c`
+- **Padrão de Apontamento de Ausências**:
+  - Dia Inteiro Indisponível: Vermelho (`bg-red-500` com ícone `<Ban />`)
+  - Domingo Manhã Indisponível: Âmbar/Laranja Solar (`bg-amber-500` com ícone `<Sun />` e `M`)
+  - Domingo Noite Indisponível: Azul Noturno/Índigo (`bg-indigo-600` com ícone `<Moon />` e `N`)
+  - Disponível: Neutro (`bg-zinc-50 dark:bg-zinc-900/50`)
+  - Legenda sincronizada em `AvailabilityScreen.tsx` e `AvailabilityReportScreen.tsx` para evitar confusão entre tons avermelhados/alaranjados.
 - Mobile-first / PWA — priorizar layouts de tela pequena
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 

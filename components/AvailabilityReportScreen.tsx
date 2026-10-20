@@ -158,13 +158,13 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
              <div className="w-3 h-3 rounded bg-red-500 shadow-sm"></div> Indisponível (Dia Inteiro)
          </div>
          <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
-             <div className="w-3 h-3 rounded bg-amber-600 shadow-sm"></div> Indisponível (Manhã)
+             <div className="w-3 h-3 rounded bg-amber-500 shadow-sm"></div> Indisponível (Manhã)
          </div>
          <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
-             <div className="w-3 h-3 rounded bg-rose-600 shadow-sm"></div> Indisponível (Noite)
+             <div className="w-3 h-3 rounded bg-indigo-600 shadow-sm"></div> Indisponível (Noite)
          </div>
          <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
-             <div className="w-3 h-3 rounded bg-emerald-500 shadow-sm"></div> Disponível
+             <div className="w-3 h-3 rounded bg-zinc-300 dark:bg-zinc-700 shadow-sm border border-zinc-400 dark:border-zinc-600"></div> Disponível
          </div>
       </div>
 
@@ -226,10 +226,10 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                            let periodLabel = "Dia inteiro";
 
                            if (type === 'M') {
-                               bgClass = "bg-amber-600 text-white border border-amber-600 shadow-sm"; // Manhã indisponível
+                               bgClass = "bg-amber-500 text-white border border-amber-600 shadow-sm"; // Manhã indisponível
                                periodLabel = "Manhã";
                            } else if (type === 'N') {
-                               bgClass = "bg-rose-600 text-white border border-rose-600 shadow-sm"; // Noite indisponível
+                               bgClass = "bg-indigo-600 text-white border border-indigo-700 shadow-sm"; // Noite indisponível
                                periodLabel = "Noite";
                            }
                            

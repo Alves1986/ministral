@@ -616,26 +616,26 @@ export const AvailabilityScreen: React.FC<Props> = ({
                                 </>
                             );
                         } else if (status === 'morning') {
-                            btnClass = "bg-amber-600 text-white border-amber-600 shadow-sm";
+                            btnClass = "bg-amber-500 text-white border-amber-600 shadow-sm";
                             content = (
                                 <>
-                                    <Ban size={12} className="mb-0.5" />
-                                    <span className="text-[10px] md:text-xs font-bold leading-none">M</span>
+                                    <Sun size={12} className="mb-0.5" />
+                                    <span className="text-[10px] md:text-xs font-bold leading-none">{day} <span className="text-[8px] opacity-90">M</span></span>
                                 </>
                             );
                         } else if (status === 'night') {
-                            btnClass = "bg-rose-600 text-white border-rose-600 shadow-sm";
+                            btnClass = "bg-indigo-600 text-white border-indigo-700 shadow-sm";
                             content = (
                                 <>
                                     <Moon size={12} className="mb-0.5" />
-                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                    <span className="text-[10px] md:text-xs font-bold leading-none">{day} <span className="text-[8px] opacity-90">N</span></span>
                                 </>
                             );
                         } else if (status === 'partial') {
-                            btnClass = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
+                            btnClass = "bg-amber-500 text-white border-amber-600 shadow-sm";
                             content = (
                                 <>
-                                    <CheckCircle2 size={12} className="mb-0.5" />
+                                    <Clock size={12} className="mb-0.5" />
                                     <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
                                 </>
                             );
@@ -673,15 +673,18 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     })}
                 </div>
 
-                <div className="flex flex-wrap gap-2 md:gap-3 mt-4 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-secondary shadow-sm"></div> Indisponível (Dia)
+                <div className="flex flex-wrap gap-2 md:gap-4 mt-4 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800 text-[10px] md:text-xs font-semibold">
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div> Indisponível (Dia Inteiro)
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-gold shadow-sm"></div> Indisponível (Manhã)
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm"></div> Indisponível (Manhã)
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-ministral-600 shadow-sm"></div> Indisponível (Noite)
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-600 shadow-sm"></div> Indisponível (Noite)
+                    </div>
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                        <div className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700 shadow-sm border border-zinc-400 dark:border-zinc-600"></div> Disponível
                     </div>
                 </div>
             </div>
