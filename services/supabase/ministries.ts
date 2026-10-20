@@ -139,10 +139,19 @@ export const fetchMinistrySettings = async (
       ?.filter((t: string) => t.startsWith("qa:"))
       ?.map((t: string) => t.replace("qa:", "")) || [];
 
+  const validLabel =
+    ministryDef?.label && ministryDef.label.trim() !== "Carregando..."
+      ? ministryDef.label.trim()
+      : null;
+  const validDisplay =
+    settings?.display_name && settings.display_name.trim() !== "Carregando..."
+      ? settings.display_name.trim()
+      : null;
+
   const result = {
     id: settings?.id,
     organizationMinistryId: ministryId,
-    displayName: ministryDef?.label || settings?.display_name || "Ministério",
+    displayName: validLabel || validDisplay || "Ministério",
     roles: settings?.roles || [],
     availabilityStart: ministryDef?.availability_start,
     availabilityEnd: ministryDef?.availability_end,
@@ -389,7 +398,10 @@ export const saveMinistrySettings = async (
   if (!sb) return;
 
   const updates: any = {};
-  if (displayName !== undefined) updates.display_name = displayName;
+  const cleanDisplayName = displayName?.trim();
+  if (cleanDisplayName && cleanDisplayName !== "Carregando...") {
+    updates.display_name = cleanDisplayName;
+  }
   if (roles !== undefined) updates.roles = roles;
   if (spotifyClientId !== undefined)
     updates.spotify_client_id = spotifyClientId;
@@ -411,6 +423,18 @@ export const saveMinistrySettings = async (
     );
     if (error) {
       console.error("[saveMinistrySettings] Erro ao salvar settings:", error);
+    }
+  }
+
+  // Atualizar também o label em organization_ministries para sincronização global
+  if (cleanDisplayName && cleanDisplayName !== "Carregando...") {
+    const { error: minErr } = await sb
+      .from("organization_ministries")
+      .update({ label: cleanDisplayName })
+      .eq("id", ministryId)
+      .eq("organization_id", orgId);
+    if (minErr) {
+      console.warn("[saveMinistrySettings] Erro ao atualizar organization_ministries label:", minErr);
     }
   }
 

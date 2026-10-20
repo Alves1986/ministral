@@ -110,7 +110,9 @@ export const SettingsScreen: React.FC<Props> = ({
   isOrgAdmin = false,
   onRefreshMinistries,
 }) => {
-  const [tempTitle, setTempTitle] = useState(initialTitle);
+  const [tempTitle, setTempTitle] = useState(
+    initialTitle && initialTitle !== "Carregando..." ? initialTitle : ""
+  );
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
   const [tempGuidelines, setTempGuidelines] = useState(
@@ -165,7 +167,7 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const validateField = (field: 'ministryName' | 'availStart' | 'availEnd', value: string) => {
     let error = '';
-    if (field === 'ministryName' && !value.trim()) {
+    if (field === 'ministryName' && (!value.trim() || value.trim() === 'Carregando...')) {
       error = 'Nome do ministério é obrigatório';
     } else if (field === 'availStart' && availEnd && value && value >= availEnd) {
       error = 'Abertura deve ser antes do fechamento';
@@ -175,6 +177,12 @@ export const SettingsScreen: React.FC<Props> = ({
     setFieldErrors(prev => ({ ...prev, [field]: error || undefined }));
     return !error;
   };
+
+  useEffect(() => {
+    if (initialTitle && initialTitle !== "Carregando...") {
+      setTempTitle(initialTitle);
+    }
+  }, [initialTitle]);
 
   useEffect(() => {
     if (availabilityWindow) {
@@ -817,22 +825,26 @@ export const SettingsScreen: React.FC<Props> = ({
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={tempTitle}
+                      value={tempTitle === "Carregando..." ? "" : tempTitle}
+                      placeholder={initialTitle === "Carregando..." ? "Carregando nome do ministério..." : "Ex: Louvor"}
+                      disabled={initialTitle === "Carregando..."}
                       onChange={(e) => setTempTitle(e.target.value)}
                       onBlur={() => validateField('ministryName', tempTitle)}
                       aria-invalid={!!fieldErrors.ministryName}
                       aria-describedby={fieldErrors.ministryName ? 'error-ministry-name' : undefined}
                       className={`flex-1 bg-zinc-50 dark:bg-zinc-900 border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 ${
                           fieldErrors.ministryName ? 'border-red-500 dark:border-red-500' : 'border-zinc-200 dark:border-zinc-700'
-                      }`}
+                      } ${initialTitle === "Carregando..." ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button
+                      disabled={initialTitle === "Carregando..." || tempTitle.trim() === "Carregando..." || !tempTitle.trim()}
                       onClick={() => {
                         if (validateField('ministryName', tempTitle)) {
-                          onSaveTitle(tempTitle);
+                          onSaveTitle(tempTitle.trim());
                         }
                       }}
-                      className="bg-secondary hover:bg-secondaryHover text-white p-2 rounded-lg transition-colors"
+                      className="bg-secondary hover:bg-secondaryHover disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+                      title="Salvar Nome do Ministério"
                     >
                       <Save size={16} />
                     </button>

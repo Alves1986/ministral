@@ -116,13 +116,23 @@ export function useMinistryData(
   }, [mid, currentUser?.id, currentUser?.allowedMinistries, setMinistryId]);
 
   const foundMinistry = availableMinistries.find((m) => m.id === mid);
+  const rawDisplayName = settingsQuery.data?.displayName;
+  const rawMinistryLabel = foundMinistry?.label;
+  const validTitle =
+    rawDisplayName && rawDisplayName !== "Carregando..."
+      ? rawDisplayName
+      : rawMinistryLabel && rawMinistryLabel !== "Carregando..."
+        ? rawMinistryLabel
+        : null;
+
+  const isStillLoading = settingsQuery.isLoading || (availableMinistries.length === 0 && Boolean(mid));
+
   const ministryTitle =
-    settingsQuery.data?.displayName ||
-    foundMinistry?.label ||
-    (mid.length === 36
+    validTitle ||
+    (isStillLoading && mid.length === 36
       ? "Carregando..."
       : mid
-        ? "Ministério"
+        ? (foundMinistry?.code || "Ministério")
         : "Selecione um Ministério");
 
   const rawRoles: string[] = useMemo(() => {

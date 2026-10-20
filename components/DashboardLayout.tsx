@@ -270,7 +270,8 @@ export const DashboardLayout: React.FC<Props> = ({
                              {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
                                  const isCurrent = currentMinistryId === mid;
                                  const config = availableMinistries.find(m => m.id === mid);
-                                 const displayLabel = config ? config.label : 'Carregando...';
+                                 const validConfigLabel = config?.label && config.label.trim() !== 'Carregando...' ? config.label.trim() : null;
+                                 const displayLabel = validConfigLabel || config?.code || (availableMinistries.length === 0 ? 'Carregando...' : 'Ministério');
     
                                  return (
                                      <button

@@ -1324,9 +1324,14 @@ const InnerApp = () => {
         themeMode={themeMode}
         onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)}
         onSaveTitle={async (newTitle) => {
-          await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle);
+          const clean = newTitle?.trim();
+          if (!clean || clean === "Carregando...") {
+            addToast("Nome de ministério inválido", "error");
+            return;
+          }
+          await Supabase.saveMinistrySettings(ministryId, orgId!, clean);
           const updatedMinistries = availableMinistries.map((m) =>
-            m.id === ministryId ? { ...m, label: newTitle } : m,
+            m.id === ministryId ? { ...m, label: clean } : m,
           );
           setAvailableMinistries(updatedMinistries);
           addToast("Nome atualizado com sucesso", "success");
