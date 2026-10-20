@@ -95,11 +95,15 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   });
 
   // 5. Notifications
+  const allMids = Array.from(new Set([
+    ...(user?.allowedMinistries || []),
+    ...(ministryId ? [ministryId] : [])
+  ])).filter(Boolean);
+
   const notificationsQuery: UseQueryResult<AppNotification[]> = useQuery({
-    queryKey: keys.notifications(user?.allowedMinistries || (ministryId ? [ministryId] : []), user?.id || '', orgId, !!isAdmin),
+    queryKey: keys.notifications(allMids, user?.id || '', orgId, !!isAdmin),
     queryFn: () => {
-      const mids = user?.allowedMinistries || (ministryId ? [ministryId] : []);
-      return Supabase.fetchNotificationsSQL(mids, user?.id || '', orgId, !!isAdmin);
+      return Supabase.fetchNotificationsSQL(allMids, user?.id || '', orgId, !!isAdmin);
     },
     enabled: Boolean(user?.id && orgId),
     staleTime: STALE_MEDIUM,

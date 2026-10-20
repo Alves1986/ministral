@@ -12,11 +12,14 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         const idsList = validMinistryIds.join(',');
         if (isAdmin) {
             orConditions.push(`ministry_id.in.(${idsList})`);
+            orConditions.push(`type.eq.join_request`);
         } else {
             orConditions.push(`and(ministry_id.in.(${idsList}),target_user_id.is.null)`);
         }
     } else if (!isAdmin) {
         orConditions.push(`target_user_id.is.null`);
+    } else if (isAdmin) {
+        orConditions.push(`type.eq.join_request`);
     }
 
     if (userId) {
@@ -57,7 +60,13 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                 .eq('organization_id', orgId);
 
             if (validMinistryIds.length > 0) {
-                retryQuery = retryQuery.in('ministry_id', validMinistryIds);
+                if (isAdmin) {
+                    retryQuery = retryQuery.or(`ministry_id.in.(${validMinistryIds.join(',')}),type.eq.join_request`);
+                } else {
+                    retryQuery = retryQuery.in('ministry_id', validMinistryIds);
+                }
+            } else if (isAdmin) {
+                retryQuery = retryQuery.eq('type', 'join_request');
             }
 
             const { data: retryData, error: retryErr } = await retryQuery

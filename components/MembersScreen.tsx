@@ -6,7 +6,7 @@ import { checkMemberLimit } from '../services/supabase/auth';
 import { useToast } from './Toast';
 import { useSession } from '../context/SessionContext';
 import { fetchAuditLogs, AuditLogEntry, AUDIT_ACTION_LABELS, AUDIT_ACTION_COLORS, AuditAction } from '../services/supabase/audit';
-
+import { getSupabase } from '../services/supabase/client';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -19,8 +19,8 @@ interface Props {
   isPro?: boolean;
   isEnterprise?: boolean;
   notifications?: any[];
-  onApproveJoin?: (notificationId: string, userId: string, roles: string[]) => Promise<void>;
-  onRejectJoin?: (notificationId: string, userId: string) => Promise<void>;
+  onApproveJoin?: (notificationId: string, userId: string, roles: string[], ministryId?: string) => Promise<void>;
+  onRejectJoin?: (notificationId: string, userId: string, ministryId?: string) => Promise<void>;
 }
 
 export const MembersScreen: React.FC<Props> = ({ 
@@ -75,28 +75,75 @@ export const MembersScreen: React.FC<Props> = ({
   }, [auditLogs, auditFilter]);
 
 
-  // Filter join requests from notifications
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  // Filter join requests from notifications — blindado contra schemas sem action_link
   const joinRequests = useMemo(() => {
       const isAdmin = currentUser.access_role === 'admin' || currentUser.isSuperAdmin || currentUser.isOrgAdmin;
       if (!isAdmin) return [];
 
-      return notifications
+      return (notifications || [])
         .filter(n => {
-            const isJoinType = n.type === 'join_request';
-            const hasJoinData = typeof n.actionLink === 'string' && n.actionLink.startsWith('{') && n.actionLink.includes('"userId"');
+            const isJoinType = n.type === 'join_request' || 
+                               n.title?.toLowerCase().includes('solicita') || 
+                               (typeof n.message === 'string' && n.message.includes('solicitou entrada'));
+            const hasJoinData = typeof n.actionLink === 'string' && (n.actionLink.includes('"userId"') || n.actionLink.includes('join'));
             const nMinId = n.ministryId || (n as any).ministry_id;
-            return (isJoinType || hasJoinData) && nMinId === currentUser.ministryId;
+            
+            // Permite ver solicitações do ministério ativo ou (para administradores) de qualquer ministério da org
+            const matchesMinistry = !nMinId || nMinId === currentUser.ministryId || currentUser.isSuperAdmin || currentUser.isOrgAdmin;
+            return (isJoinType || hasJoinData) && matchesMinistry;
         })
         .map(n => {
             try {
-                const data = typeof n.actionLink === 'string' ? JSON.parse(n.actionLink) : n.actionLink;
-                if (!data.userId || !data.userName) return null;
+                let userId: string = '';
+                let userName: string = '';
+                let roles: string[] = [];
+
+                // 1. Tenta extrair de actionLink (JSON)
+                if (typeof n.actionLink === 'string' && n.actionLink.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(n.actionLink);
+                        if (parsed.userId) userId = String(parsed.userId);
+                        if (parsed.userName) userName = String(parsed.userName);
+                        if (Array.isArray(parsed.roles)) roles = parsed.roles;
+                    } catch (e) {}
+                }
+
+                // 2. Tenta extrair do marcador em message ([DADOS_SOLICITACAO:{...}] ou <!--JOIN_DATA:{...}-->)
+                if ((!userId || !userName) && typeof n.message === 'string') {
+                    const markerMatch = n.message.match(/\[DADOS_SOLICITACAO:(.*?)\]/) || n.message.match(/<!--JOIN_DATA:(.*?)-->/);
+                    if (markerMatch && markerMatch[1]) {
+                        try {
+                            const parsed = JSON.parse(markerMatch[1]);
+                            if (parsed.userId) userId = String(parsed.userId);
+                            if (parsed.userName) userName = String(parsed.userName);
+                            if (Array.isArray(parsed.roles)) roles = parsed.roles;
+                        } catch (e) {}
+                    }
+                }
+
+                // 3. Fallback: extrai nome de usuário do texto da mensagem "O usuário [Nome] solicitou entrada..."
+                if (!userName && typeof n.message === 'string') {
+                    const nameMatch = n.message.match(/O usu[áa]rio\s+(.*?)\s+solicitou entrada/i);
+                    if (nameMatch && nameMatch[1]) {
+                        userName = nameMatch[1].trim();
+                    }
+                }
+
+                if (!userName) {
+                    userName = 'Novo Integrante';
+                }
+
                 return {
                     id: n.id,
-                    userId: data.userId,
-                    userName: data.userName,
-                    roles: data.roles || [],
-                    timestamp: n.timestamp
+                    ministryId: n.ministryId || currentUser.ministryId,
+                    ministryName: n.ministryName || 'Ministério',
+                    userId: userId,
+                    userName: userName,
+                    roles: roles || [],
+                    timestamp: n.timestamp,
+                    rawMessage: n.message
                 };
             } catch (e) {
                 return null;
@@ -104,6 +151,53 @@ export const MembersScreen: React.FC<Props> = ({
         })
         .filter(Boolean) as any[];
   }, [notifications, currentUser.ministryId, currentUser.access_role, currentUser.isSuperAdmin, currentUser.isOrgAdmin]);
+
+  const handleApproveJoin = async (req: any) => {
+    setApprovingId(req.id);
+    try {
+      let targetUserId = req.userId;
+
+      // Se o userId não veio no JSON (ex: action_link ausente), resolve pelo nome na tabela profiles
+      if (!targetUserId && req.userName) {
+        const sb = getSupabase();
+        if (sb && currentUser.organizationId) {
+          const { data } = await sb
+            .from('profiles')
+            .select('id')
+            .eq('organization_id', currentUser.organizationId)
+            .ilike('name', req.userName.trim())
+            .limit(1);
+          if (data && data[0]?.id) {
+            targetUserId = data[0].id;
+          }
+        }
+      }
+
+      if (!targetUserId) {
+        addToast(`Não foi possível localizar o ID de "${req.userName}". O usuário deve fazer login pelo menos uma vez no app.`, 'error');
+        return;
+      }
+
+      await onApproveJoin?.(req.id, targetUserId, req.roles, req.ministryId);
+    } catch (e: any) {
+      console.error('[MembersScreen] Erro ao aprovar solicitação:', e);
+      addToast(e?.message || 'Erro ao aprovar solicitação.', 'error');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleRejectJoin = async (req: any) => {
+    setApprovingId(req.id);
+    try {
+      await onRejectJoin?.(req.id, req.userId || '', req.ministryId);
+    } catch (e: any) {
+      console.error('[MembersScreen] Erro ao recusar solicitação:', e);
+      addToast(e?.message || 'Erro ao recusar solicitação.', 'error');
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   const handleInviteClick = () => {
     const plan = organization?.plan_type || 'trial';
@@ -279,45 +373,77 @@ export const MembersScreen: React.FC<Props> = ({
         <div id="panel-members" role="tabpanel">
 
         {joinRequests.length > 0 && (
-            <div className="bg-ministral-50 dark:bg-ministral-900/10 border border-ministral-200 dark:border-ministral-800/50 rounded-2xl p-6 mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                    <UserPlus className="text-ministral-600 dark:text-ministral-400" size={20}/>
-                    <h3 className="text-lg font-bold text-ministral-900 dark:text-ministral-100">Solicitações de Entrada ({joinRequests.length})</h3>
+            <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30 rounded-2xl p-6 mb-8 shadow-sm animate-fade-in">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                    <div className="flex items-center gap-2">
+                        <UserPlus className="text-amber-600 dark:text-amber-400" size={20}/>
+                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+                            Solicitações de Entrada ({joinRequests.length})
+                        </h3>
+                    </div>
+                    <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">
+                        Aguardando aprovação
+                    </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {joinRequests.map((req: any) => (
-                        <div key={req.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-ministral-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-bold text-zinc-800 dark:text-zinc-100">{req.userName}</p>
-                                    <p className="text-xs text-zinc-500">{new Date(req.timestamp).toLocaleString('pt-BR')}</p>
+                    {joinRequests.map((req: any) => {
+                        const isOtherMinistry = req.ministryId && req.ministryId !== currentUser.ministryId;
+                        const isProcessing = approvingId === req.id;
+                        return (
+                            <div key={req.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3">
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">{req.userName}</p>
+                                            {isOtherMinistry && (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 bg-secondary/10 text-secondary dark:text-amber-400 rounded-md">
+                                                    Para: {req.ministryName}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-zinc-500 mt-0.5">{new Date(req.timestamp).toLocaleString('pt-BR')}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <button 
+                                            onClick={() => handleRejectJoin(req)}
+                                            disabled={isProcessing}
+                                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                                            title="Recusar solicitação"
+                                        >
+                                            <X size={18}/>
+                                        </button>
+                                        <button 
+                                            onClick={() => handleApproveJoin(req)}
+                                            disabled={isProcessing}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 shadow-sm"
+                                            title="Aprovar e adicionar ao ministério"
+                                        >
+                                            {isProcessing ? (
+                                                <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                <Check size={14}/>
+                                            )}
+                                            Aprovar
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => onRejectJoin?.(req.id, req.userId)}
-                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                        title="Recusar"
-                                    >
-                                        <X size={18}/>
-                                    </button>
-                                    <button 
-                                        onClick={() => onApproveJoin?.(req.id, req.userId, req.roles)}
-                                        className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                                        title="Aprovar"
-                                    >
-                                        <Check size={18}/>
-                                    </button>
-                                </div>
+                                {req.roles && req.roles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-zinc-100 dark:border-zinc-700/50">
+                                        <span className="text-[10px] text-zinc-400 self-center">Funções desejadas:</span>
+                                        {req.roles.map((r: string) => (
+                                            <span key={r} className="text-[10px] font-medium px-2 py-0.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded">
+                                                {r}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-[11px] text-zinc-400 pt-1 border-t border-zinc-100 dark:border-zinc-700/50">
+                                        Entrada geral (sem funções pré-definidas)
+                                    </p>
+                                )}
                             </div>
-                            <div className="flex flex-wrap gap-1.5">
-                                {req.roles.map((r: string) => (
-                                    <span key={r} className="text-[10px] font-medium px-2 py-0.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded">
-                                        {r}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         )}

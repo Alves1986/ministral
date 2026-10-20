@@ -12,6 +12,7 @@ export interface NavItem {
   id: string;
   label: string;
   icon: React.ReactNode;
+  badge?: number;
 }
 
 export interface Props {
@@ -107,12 +108,20 @@ export const DashboardLayout: React.FC<Props> = ({
             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
         } ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3'}`}
       >
-        <span className={`transition-colors duration-300 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`}>
+        <span className={`transition-colors duration-300 flex-shrink-0 relative ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`}>
           {React.isValidElement(item.icon) ? React.cloneElement(item.icon as React.ReactElement<any>, { size: 20, strokeWidth: isActive ? 2.5 : 2 }) : item.icon}
+          {item.badge !== undefined && item.badge > 0 && isEffectivelyCollapsed && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-white dark:ring-ministral-dark animate-pulse" />
+          )}
         </span>
         {!isEffectivelyCollapsed && (
             <>
                 <span className="flex-1 text-left tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="px-2 py-0.5 text-[10px] font-black bg-amber-500 text-zinc-900 rounded-full shadow-sm animate-pulse">
+                    {item.badge}
+                  </span>
+                )}
                 {isActive && (
                     <ChevronRight size={14} className="opacity-60 flex-shrink-0" />
                 )}
@@ -511,6 +520,40 @@ export const DashboardLayout: React.FC<Props> = ({
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
             <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
+                {/* Banner de Solicitações de Entrada para Administradores */}
+                {(() => {
+                  const isAdmin = currentUser?.access_role === 'admin' || currentUser?.isSuperAdmin || currentUser?.isOrgAdmin;
+                  if (!isAdmin || !notifications || currentTab === 'members') return null;
+                  const pendingCount = notifications.filter(
+                    n => n.type === 'join_request' || 
+                         n.title?.toLowerCase().includes('solicita') || 
+                         (typeof n.message === 'string' && n.message.includes('solicitou entrada'))
+                  ).length;
+                  if (pendingCount === 0) return null;
+                  return (
+                    <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4 animate-slide-up shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                          <PlusCircle size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                            {pendingCount === 1 ? '1 solicitação de entrada pendente' : `${pendingCount} solicitações de entrada pendentes`}
+                          </h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            Há membro(s) aguardando sua aprovação para ingressar na equipe.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onTabChange('members')}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-900 text-xs font-black rounded-xl transition-all shadow-md active:scale-95 shrink-0"
+                      >
+                        Revisar em Membros →
+                      </button>
+                    </div>
+                  );
+                })()}
                 {children}
             </div>
         </div>

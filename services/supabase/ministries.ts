@@ -264,7 +264,7 @@ export const joinMinistry = async (
 
     const response = await notifySuperAdmins(
       "Solicitação de Entrada",
-      `O usuário ${userName} solicitou entrada no ministério ${ministryName}.`,
+      `O usuário ${userName} solicitou entrada no ministério ${ministryName}.\n[DADOS_SOLICITACAO:${actionData}]`,
       actionData,
       ministryId,
       orgId,

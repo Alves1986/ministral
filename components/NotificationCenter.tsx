@@ -100,6 +100,18 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
           await markNotificationsReadSQL([notification.id], currentUser.id, orgId);
       }
 
+      // 0. Se for solicitação de entrada, troca de ministério se necessário e vai direto para a aba de membros
+      if (notification.type === 'join_request' || notification.title?.toLowerCase().includes('solicita')) {
+          if (notification.ministryId && onSwitchMinistry && notification.ministryId !== ministryId) {
+              onSwitchMinistry(notification.ministryId);
+          }
+          if (onNavigate) {
+              onNavigate('members');
+          }
+          setIsOpen(false);
+          return;
+      }
+
       // Logic: 
       // 1. If notification is from another ministry, switch ministry first.
       const isDifferentMinistry = Boolean(notification.ministryId && notification.ministryId !== ministryId);
@@ -212,6 +224,16 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                                             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
                                                 {n.message}
                                             </p>
+                                            {n.type === 'join_request' && (
+                                                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                                                    <span className="px-2 py-0.5 bg-amber-500/15 rounded-md">
+                                                        Solicitação de Entrada
+                                                    </span>
+                                                    <span className="text-secondary dark:text-white font-semibold">
+                                                        Clique para aprovar em Membros →
+                                                    </span>
+                                                </div>
+                                            )}
                                             <span className="text-[10px] text-zinc-400 mt-2 block">
                                                 {new Date(n.timestamp).toLocaleString('pt-BR')}
                                             </span>

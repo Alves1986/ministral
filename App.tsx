@@ -730,6 +730,13 @@ const InnerApp = () => {
     [],
   );
 
+  const pendingJoinRequestsCount = useMemo(() => {
+    if (!isAdmin || !notifications) return 0;
+    return notifications.filter(
+      (n) => n.type === "join_request" || n.title?.toLowerCase().includes("solicita") || (typeof n.message === "string" && n.message.includes("solicitou entrada"))
+    ).length;
+  }, [isAdmin, notifications]);
+
   const RAW_MANAGEMENT_NAV = useMemo(
     () => [
       {
@@ -763,7 +770,12 @@ const InnerApp = () => {
         label: "Enviar Avisos",
         icon: <Send size={20} />,
       },
-      { id: "members", label: "Membros", icon: <Users size={20} /> },
+      { 
+        id: "members", 
+        label: "Membros", 
+        icon: <Users size={20} />,
+        badge: pendingJoinRequestsCount > 0 ? pendingJoinRequestsCount : undefined 
+      },
       { id: "advanced-ai", label: "IA Avançada", icon: <Sparkles size={20} /> },
       {
         id: "support-admin",
@@ -771,7 +783,7 @@ const InnerApp = () => {
         icon: <Headset size={20} />,
       },
     ],
-    [],
+    [pendingJoinRequestsCount],
   );
 
   const RAW_QUICK_ACTIONS = useMemo(
@@ -1524,19 +1536,21 @@ const InnerApp = () => {
         isPro={activeUser?.isPro ?? false}
         isEnterprise={activeUser?.isEnterprise ?? false}
         notifications={notifications}
-        onApproveJoin={async (notifId, userId, roles) => {
+        onApproveJoin={async (notifId, userId, roles, targetMinId) => {
+          const finalMinId = targetMinId || ministryId;
           await Supabase.approveJoinRequest(
             notifId,
             userId,
-            ministryId,
+            finalMinId,
             orgId!,
             roles,
           );
           addToast("Membro aprovado com sucesso!", "success");
           refreshData();
         }}
-        onRejectJoin={async (notifId, userId) => {
-          await Supabase.rejectJoinRequest(notifId, orgId!, ministryId, userId);
+        onRejectJoin={async (notifId, userId, targetMinId) => {
+          const finalMinId = targetMinId || ministryId;
+          await Supabase.rejectJoinRequest(notifId, orgId!, finalMinId, userId);
           addToast("Solicitação recusada.", "info");
           refreshData();
         }}
