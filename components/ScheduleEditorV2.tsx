@@ -200,14 +200,68 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     // Verifica se a escala do mês está liberada/publicada
     const isMonthPublished = useMemo(() => {
         return assignments.some(a => 
-            (a.event_rule_id === 'PUBLISHED_FLAG' || a.role === '__PUBLISHED__') &&
+            a.role === '__PUBLISHED__' &&
             a.event_date.startsWith(currentMonth)
         );
     }, [assignments, currentMonth]);
 
+    // -- DRAG TO SCROLL (Navegação arrastando com o mouse na tabela) --
+    const tableContainerRef = useRef<HTMLDivElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const isMouseDownRef = useRef(false);
+    const hasMovedRef = useRef(false);
+    const startXRef = useRef(0);
+    const scrollLeftRef = useRef(0);
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.button !== 0) return; // Apenas botão esquerdo
+        const target = e.target as HTMLElement;
+        // Não iniciar drag se clicou em inputs, selects, dropdowns abertos ou diálogos
+        if (target.closest('input, textarea, select, .z-\\[9999\\], [role="dialog"]')) return;
+
+        isMouseDownRef.current = true;
+        hasMovedRef.current = false;
+        startXRef.current = e.pageX - (tableContainerRef.current?.offsetLeft || 0);
+        scrollLeftRef.current = tableContainerRef.current?.scrollLeft || 0;
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!isMouseDownRef.current || !tableContainerRef.current) return;
+        const x = e.pageX - (tableContainerRef.current.offsetLeft || 0);
+        const walk = x - startXRef.current;
+
+        if (Math.abs(walk) > 4) {
+            if (!hasMovedRef.current) {
+                hasMovedRef.current = true;
+                setIsDragging(true);
+            }
+            tableContainerRef.current.scrollLeft = scrollLeftRef.current - walk;
+        }
+    };
+
+    const handleMouseUpOrLeave = () => {
+        isMouseDownRef.current = false;
+        if (hasMovedRef.current) {
+            setTimeout(() => {
+                hasMovedRef.current = false;
+                setIsDragging(false);
+            }, 60);
+        } else {
+            setIsDragging(false);
+        }
+    };
+
+    const handleClickCapture = (e: React.MouseEvent) => {
+        // Se arrastou, impede que o clique abra o dropdown da célula
+        if (hasMovedRef.current) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    };
+
     // -- DERIVED STATE --
     const memberCounts = assignments.reduce((acc, curr) => {
-        if (curr.member_id && curr.role !== '__EVENT_EXCLUDED__') {
+        if (curr.member_id && curr.role !== '__EVENT_EXCLUDED__' && curr.role !== '__PUBLISHED__') {
             acc[curr.member_id] = (acc[curr.member_id] || 0) + 1;
         }
         return acc;
@@ -650,7 +704,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         setIsPublishing(true);
         const newStatus = !isMonthPublished;
         try {
-            await togglePublishScheduleV2(ministryId, orgId, currentMonth, newStatus);
+            const fallbackRuleId = occurrences[0]?.ruleId || assignments.find(a => a.event_rule_id && a.event_rule_id !== 'PUBLISHED_FLAG')?.event_rule_id;
+            await togglePublishScheduleV2(ministryId, orgId, currentMonth, newStatus, fallbackRuleId);
             if (newStatus) {
                 await sendNotificationSQL(ministryId, orgId, {
                     title: `📅 Escala de ${monthLabel} Liberada!`,
@@ -658,16 +713,16 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     type: 'success',
                     actionLink: 'calendar'
                 }).catch(() => {});
-                addToast(`Escala de ${monthLabel} liberada e membros notificados!`, 'success');
+                addToast(`Escala de ${monthLabel} liberada e visível a todos!`, 'success');
             } else {
-                addToast(`Escala de ${monthLabel} despublicada (modo rascunho).`, 'info');
+                addToast(`Escala de ${monthLabel} em modo rascunho (oculta do calendário).`, 'info');
             }
-            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
-            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId, 'v2'] });
+            queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
             await loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Erro ao alternar publicação da escala:', error);
-            addToast('Erro ao atualizar status da escala.', 'error');
+            addToast(error?.message || 'Erro ao atualizar status da escala.', 'error');
         } finally {
             setIsPublishing(false);
         }
@@ -781,8 +836,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
 
     return (
         <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-full">
-            {/* HEADER */}
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+            {/* HEADER FIXO / STICKY */}
+            <div className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 shadow-sm rounded-t-lg">
                 <div className="flex items-center gap-3 w-full xl:w-auto">
                     <div className="bg-secondary/10 dark:bg-secondary/5 p-2.5 rounded-xl text-secondary shrink-0">
                         <Calendar size={24} />
@@ -890,8 +945,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 </div>
             </div>
 
-            {/* AREA DA TABELA */}
-            <div className="flex-1 overflow-auto custom-scrollbar p-1 pb-40"> 
+            {/* AREA DA TABELA COM NAVEGAÇÃO ARRASTANDO (DRAG-TO-SCROLL) */}
+            <div 
+                ref={tableContainerRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUpOrLeave}
+                onMouseLeave={handleMouseUpOrLeave}
+                onClickCapture={handleClickCapture}
+                className={`flex-1 overflow-auto custom-scrollbar p-1 pb-40 md:max-h-[calc(100vh-230px)] min-h-[420px] ${
+                    isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'
+                }`}
+            > 
                 {/* Desktop View (Table) */}
                 <div className="hidden md:block">
                     <table className="w-full text-sm border-separate border-spacing-0">

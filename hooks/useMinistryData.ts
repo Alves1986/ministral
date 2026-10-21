@@ -462,20 +462,62 @@ export function useMinistryData(
       expandedRoles,
       schedule: (() => {
         const rawSchedule = assignmentsQuery.data?.schedule || {};
-        const isMonthPublished = rawSchedule[`PUBLISHED_FLAG|${currentMonth}-01|__PUBLISHED__`] === "__PUBLISHED__";
-        if (isAdminFlag || isMonthPublished) return rawSchedule;
         
-        // Mantém apenas os eventos excluídos para que não apareçam no calendário
+        // Descobre todos os meses que possuem flag de publicação (__PUBLISHED__)
+        const publishedMonths = new Set<string>();
+        for (const [key, value] of Object.entries(rawSchedule)) {
+          if (value === '__PUBLISHED__' || key.endsWith('|__PUBLISHED__')) {
+            const parts = key.split('|');
+            if (parts[1]) {
+              publishedMonths.add(parts[1].slice(0, 7));
+            }
+          }
+        }
+
+        // Mantém apenas os eventos publicados ou exclusões (__EXCLUDED__)
+        // Oculta escalas em modo rascunho de qualquer visualização externa (calendário, perfil, etc.)
         const filtered: Record<string, string> = {};
         for (const [key, value] of Object.entries(rawSchedule)) {
-            if (value === '__EXCLUDED__') filtered[key] = value;
+          if (value === '__EXCLUDED__') {
+            filtered[key] = value;
+            continue;
+          }
+          if (value === '__PUBLISHED__') {
+            continue;
+          }
+          const parts = key.split('|');
+          const dateStr = parts[1];
+          const monthKey = dateStr ? dateStr.slice(0, 7) : currentMonth;
+          if (publishedMonths.has(monthKey)) {
+            filtered[key] = value;
+          }
         }
         return filtered;
       })(),
       attendance: (() => {
         const rawSchedule = assignmentsQuery.data?.schedule || {};
-        const isMonthPublished = rawSchedule[`PUBLISHED_FLAG|${currentMonth}-01|__PUBLISHED__`] === "__PUBLISHED__";
-        return (isAdminFlag || isMonthPublished) ? (assignmentsQuery.data?.attendance || {}) : {};
+        const rawAttendance = assignmentsQuery.data?.attendance || {};
+
+        const publishedMonths = new Set<string>();
+        for (const [key, value] of Object.entries(rawSchedule)) {
+          if (value === '__PUBLISHED__' || key.endsWith('|__PUBLISHED__')) {
+            const parts = key.split('|');
+            if (parts[1]) {
+              publishedMonths.add(parts[1].slice(0, 7));
+            }
+          }
+        }
+
+        const filteredAttendance: Record<string, boolean> = {};
+        for (const [key, value] of Object.entries(rawAttendance)) {
+          const parts = key.split('|');
+          const dateStr = parts[1];
+          const monthKey = dateStr ? dateStr.slice(0, 7) : currentMonth;
+          if (publishedMonths.has(monthKey)) {
+            filteredAttendance[key] = value;
+          }
+        }
+        return filteredAttendance;
       })(),
       membersMap: membersQuery.data?.memberMap || {},
       publicMembers: membersQuery.data?.publicList || [],

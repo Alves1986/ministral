@@ -376,35 +376,70 @@ export const togglePublishScheduleV2 = async (
   ministryId: string,
   orgId: string,
   monthStr: string,
-  isPublished: boolean
+  isPublished: boolean,
+  fallbackRuleId?: string
 ) => {
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
   if (isPublished) {
+    let ruleId = fallbackRuleId;
+    if (!ruleId) {
+      const { data: firstRule } = await sb
+        .from("event_rules")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("ministry_id", ministryId)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      ruleId = firstRule?.id;
+    }
+    if (!ruleId) {
+      const { data: anyRule } = await sb
+        .from("event_rules")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("ministry_id", ministryId)
+        .limit(1)
+        .maybeSingle();
+      ruleId = anyRule?.id;
+    }
+
+    if (!ruleId) {
+      throw new Error("Cadastre ao menos um evento ou culto antes de liberar a escala.");
+    }
+
     const { error } = await sb.from("schedule_assignments").upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_rule_id: "PUBLISHED_FLAG",
+        event_rule_id: ruleId,
         event_date: `${monthStr}-01`,
         role: "__PUBLISHED__",
         member_id: null,
         confirmed: false
       },
-      { onConflict: "ministry_id, event_rule_id, event_date, role" }
+      { onConflict: "organization_id,ministry_id,event_rule_id,event_date,role" }
     );
     if (error) throw error;
   } else {
+    const [year, month] = monthStr.split('-');
+    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+    const startDate = `${monthStr}-01`;
+    const endDate = `${monthStr}-${lastDay}`;
+
     const { error } = await sb.from("schedule_assignments")
       .delete()
+      .eq("organization_id", orgId)
       .eq("ministry_id", ministryId)
-      .eq("event_rule_id", "PUBLISHED_FLAG")
-      .eq("event_date", `${monthStr}-01`)
-      .eq("role", "__PUBLISHED__");
+      .eq("role", "__PUBLISHED__")
+      .gte("event_date", startDate)
+      .lte("event_date", endDate);
     if (error) throw error;
   }
 };
+
 
 export const saveAssignmentV2 = async (
   ministryId: string,
@@ -557,10 +592,17 @@ export const fetchNextEventCardData = async (
     if (!rules || rules.length === 0) return null;
     const rulesMap = new Map(rules.map(r => [r.id, r]));
 
+    const publishedMonths = new Set<string>(
+        assignmentsData
+            ?.filter(a => a.role === '__PUBLISHED__')
+            .map(a => a.event_date?.slice(0, 7)) || []
+    );
+
     // Agrupar por evento
     const groups: Record<string, any> = {};
     assignmentsData?.forEach(a => {
         const dateStr = a.event_date?.slice(0, 10);
+        const monthKey = dateStr?.slice(0, 7);
         const key = `${a.event_rule_id}|${dateStr}`;
         if (!groups[key]) {
             const rule = rulesMap.get(a.event_rule_id);
@@ -579,7 +621,9 @@ export const fetchNextEventCardData = async (
         if (groups[key]) {
             if (a.role === '__EVENT_EXCLUDED__') {
                 groups[key].excluded = true;
-            } else {
+            } else if (a.role === '__PUBLISHED__') {
+                // marcador de publicação, não adiciona como membro
+            } else if (monthKey && publishedMonths.has(monthKey)) {
                 groups[key].assignments.push(a);
             }
         }
