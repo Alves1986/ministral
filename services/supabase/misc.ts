@@ -506,14 +506,16 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
 
 export const updateProfileMinistry = async (userId: string, ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    const finalOrgId = orgId || serviceOrgId;
-    if (!sb || !finalOrgId) {
-        console.warn('[updateProfileMinistry] Missing Supabase client or orgId');
+    if (!sb || !userId) {
+        console.warn('[updateProfileMinistry] Missing Supabase client or userId');
         return;
     }
-    await sb.from('profiles').update({ ministry_id: ministryId })
-        .eq('id', userId)
-        .eq('organization_id', finalOrgId);
+    const updatePayload: { ministry_id: string; organization_id?: string } = { ministry_id: ministryId };
+    const finalOrgId = orgId || serviceOrgId;
+    if (finalOrgId) {
+        updatePayload.organization_id = finalOrgId;
+    }
+    await sb.from('profiles').update(updatePayload).eq('id', userId);
 };
 
 export const fetchMemberScheduleHistory = async (

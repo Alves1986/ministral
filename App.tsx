@@ -1019,6 +1019,7 @@ const InnerApp = () => {
             {/* Próximo Evento / Equipe Escalada (Largura Total para dar mais espaço) */}
             <div className="animate-slide-up" style={{ animationDelay: "0.2s" }}>
               <NextEventCard
+                key={ministryId}
                 event={nextEvent}
                 schedule={schedule}
                 attendance={attendance}
@@ -1343,6 +1344,7 @@ const InnerApp = () => {
           </div>
         </div>
         <ScheduleEditorV2
+          key={ministryId}
           ministryId={ministryId}
           orgId={orgId!}
           currentMonth={currentMonth}
@@ -1835,80 +1837,97 @@ const InnerApp = () => {
             }
 
             try {
-              // 1. Cancela Queries pendentes para evitar processamento desnecessário
+              // 1. Atualiza imediatamente o store com o novo ID para que localStorage e estado reflitam a escolha
+              setMinistryId(id);
+
+              // 2. Cancela Queries pendentes para evitar processamento desnecessário
               queryClient.cancelQueries();
 
-              // Prefetch silencioso das queries mais pesadas do novo ministério
-              // (não bloqueia — roda em paralelo com as outras operações)
-              const orgIdLocal = activeUser?.organizationId || "";
-              queryClient.prefetchQuery({
-                queryKey: ["settings", id, orgIdLocal],
-                queryFn: () => Supabase.fetchMinistrySettings(id, orgIdLocal),
-                staleTime: 10 * 60 * 1000,
-              });
-              queryClient.prefetchQuery({
-                queryKey: ["members", id, orgIdLocal],
-                queryFn: () => Supabase.fetchMinistryMembers(id, orgIdLocal),
-                staleTime: 5 * 60 * 1000,
-              });
-
-              // 2. Executa operações e fetches em paralelo para evitar delay sequencial
-              const [access, profileCheck] = await Promise.all([
-                Supabase.fetchUserMinistryAccess(uId, id, oId),
-                Supabase.getSupabase()!
-                  .from("profiles")
-                  .select("allowed_ministries")
-                  .eq("id", uId)
-                  .single(),
-                Supabase.updateProfileMinistry(uId, id, oId),
-              ]);
-
-              // 3. Invalida cache do TanStack Query do ministério anterior
+              // 3. Remove cache do ministério anterior
               const oldMinistryId = ministryId;
               queryClient.removeQueries({
                 predicate: (query) => query.queryKey[1] === oldMinistryId,
               });
-              queryClient.invalidateQueries();
 
-              // 4. Atualiza a sessão em background sem travar a UI
-              refreshSession().catch(console.error);
+              // 4. Executa operações e fetches em paralelo para evitar delay sequencial
+              const [access] = await Promise.all([
+                Supabase.fetchUserMinistryAccess(uId, id, oId),
+                Supabase.updateProfileMinistry(uId, id, oId).catch((err) => {
+                  console.warn("[onSwitchMinistry] updateProfileMinistry warning:", err);
+                }),
+              ]);
 
-              // 5. Atualiza store LOCALMENTE (Cancela subscriptions antigas e cria novas no Realtime via hooks)
-              setMinistryId(id);
+              // 5. Determina papel e permissões para o novo ministério
+              const isOrgAdminOrSuper = !!(activeUser?.isOrgAdmin || activeUser?.isSuperAdmin);
+              const newRole = isOrgAdminOrSuper
+                ? "admin"
+                : access.role === "admin"
+                  ? "admin"
+                  : "member";
+
+              const updatedAllowed = Array.from(
+                new Set([...(activeUser?.allowedMinistries || []), id])
+              );
+
+              // 6. Atualiza store LOCALMENTE com os dados do novo ministério
               setCurrentUser({
                 ...activeUser!,
                 ministryId: id,
                 ministry_functions: access.functions,
-                allowedMinistries:
-                  profileCheck.data?.allowed_ministries ||
-                  activeUser!.allowedMinistries,
-                access_role:
-                  activeUser!.isOrgAdmin || activeUser!.isSuperAdmin
-                    ? "admin"
-                    : access.role === "admin"
-                      ? "admin"
-                      : "member",
+                allowedMinistries: updatedAllowed,
+                access_role: newRole,
               });
+
+              // 7. Invalida cache para carregar dados do novo ministério
+              queryClient.invalidateQueries();
+
+              // 8. Atualiza a sessão em background
+              refreshSession().catch(console.error);
 
               const label =
                 availableMinistries.find((m) => m.id === id)?.label ||
                 "Ministério";
               addToast(`Alternado para ${label}`, "info");
 
-              // Validação de aba para o NOVO ministério (atualizado para usar o ID passado)
+              // 9. Validação de aba para o NOVO ministério e NOVO papel de acesso
               const newConfig = availableMinistries.find((m) => m.id === id);
               const newTabs = newConfig?.enabledTabs || DEFAULT_TABS;
+              const isNewAdmin = newRole === "admin";
+              const isNewMinister = access.functions?.some((r) =>
+                r.toLowerCase().includes("ministro")
+              ) || false;
+
+              const ADMIN_ONLY_TABS = [
+                "schedule-editor",
+                "members",
+                "event-rules",
+                "schedule-rules",
+                "report",
+                "monthly-report",
+                "send-announcements",
+                "settings",
+                "advanced-ai",
+                "plan",
+              ];
+
+              const isRestrictedAdminTab =
+                ADMIN_ONLY_TABS.includes(currentTab) && !isNewAdmin;
+              const isRestrictedRepertoireManager =
+                currentTab === "repertoire-manager" && !isNewAdmin && !isNewMinister;
+
               const isTabStillValid =
-                newTabs.includes(currentTab) ||
-                [
-                  "profile",
-                  "super-admin",
-                  "dashboard",
-                  "plan",
-                  "history",
-                  "advanced-ai",
-                  "support-admin",
-                ].includes(currentTab);
+                !isRestrictedAdminTab &&
+                !isRestrictedRepertoireManager &&
+                (newTabs.includes(currentTab) ||
+                  [
+                    "profile",
+                    "super-admin",
+                    "dashboard",
+                    "plan",
+                    "history",
+                    "advanced-ai",
+                    "support-admin",
+                  ].includes(currentTab));
 
               if (!isTabStillValid) {
                 setCurrentTab("dashboard");
@@ -2007,13 +2026,14 @@ const InnerApp = () => {
                 isAdmin &&
                 safeEnabledTabs.includes("event-rules") &&
                 status === "ready" &&
-                ministryId.length === 36 && <EventsScreen />}
+                ministryId.length === 36 && <EventsScreen key={ministryId} />}
               {currentTab === "schedule-rules" &&
                 isAdmin &&
                 safeEnabledTabs.includes("schedule-rules") &&
                 status === "ready" &&
                 ministryId.length === 36 && (
                   <ScheduleRulesScreen
+                    key={ministryId}
                     ministryId={ministryId}
                     orgId={orgId!}
                     availableRoles={roles}
@@ -2100,6 +2120,7 @@ const InnerApp = () => {
                 status === "ready" &&
                 ministryId.length === 36 && (
                   <AvailabilityReportScreen
+                    key={ministryId}
                     availability={availability}
                     availabilityNotes={availabilityNotes}
                     registeredMembers={publicMembers}
@@ -2118,6 +2139,7 @@ const InnerApp = () => {
                 status === "ready" &&
                 ministryId.length === 36 && (
                   <MonthlyReportScreen
+                    key={ministryId}
                     currentMonth={currentMonth}
                     onMonthChange={setCurrentMonth}
                     schedule={schedule}

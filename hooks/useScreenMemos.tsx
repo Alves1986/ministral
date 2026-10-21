@@ -47,6 +47,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
 
   const availabilityScreen = useMemo(() => (
     <AvailabilityScreen 
+        key={ministryId}
         availability={availability} 
         availabilityNotes={availabilityNotes} 
         setAvailability={setAvailability} 
@@ -66,6 +67,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
 
   const swapsScreen = useMemo(() => (
     <SwapRequestsScreen 
+        key={ministryId}
         schedule={schedule} 
         currentMonth={currentMonth} 
         currentUser={activeUser!} 
@@ -192,6 +194,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
     <>
       {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && (
         <RepertoireScreen 
+          key={ministryId}
           repertoire={repertoire} 
           setRepertoire={async () => { refreshData(); }} 
           currentUser={activeUser!} 
@@ -205,6 +208,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
       )}
       {(currentTab === 'repertoire-manager' && canManage && safeEnabledTabs.includes('repertoire-manager')) && (
         <RepertoireScreen 
+          key={ministryId}
           repertoire={repertoire} 
           setRepertoire={async () => { refreshData(); }} 
           currentUser={activeUser!} 

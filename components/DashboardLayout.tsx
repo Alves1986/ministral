@@ -67,6 +67,17 @@ export const DashboardLayout: React.FC<Props> = ({
 
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
+  const selectableMinistries = React.useMemo(() => {
+      if (currentUser?.isOrgAdmin || currentUser?.isSuperAdmin) {
+          const ids = new Set([
+              ...(currentUser?.allowedMinistries || []),
+              ...availableMinistries.map(m => m.id)
+          ]);
+          return Array.from(ids).filter(isValidMinistryId);
+      }
+      return (currentUser?.allowedMinistries || []).filter(isValidMinistryId);
+  }, [currentUser?.allowedMinistries, currentUser?.isOrgAdmin, currentUser?.isSuperAdmin, availableMinistries]);
+
   useClickOutside(ministryMenuRef, () => {
       if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
@@ -277,7 +288,7 @@ export const DashboardLayout: React.FC<Props> = ({
                            </div>
                            
                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                             {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
+                             {selectableMinistries.map(mid => {
                                  const isCurrent = currentMinistryId === mid;
                                  const config = availableMinistries.find(m => m.id === mid);
                                  const validConfigLabel = config?.label && config.label.trim() !== 'Carregando...' ? config.label.trim() : null;
@@ -289,6 +300,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                          onClick={() => {
                                              if (onSwitchMinistry) onSwitchMinistry(mid);
                                              setMinistryMenuOpen(false);
+                                             setSidebarOpen(false);
                                          }}
                                          className={`w-full text-left px-5 py-3.5 text-sm font-bold flex items-center justify-between transition-colors ${isCurrent ? 'bg-secondary/10 dark:bg-secondary/5 text-secondary dark:text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                      >

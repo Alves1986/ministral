@@ -55,7 +55,10 @@ export const useAppStore = create<AppState>((set) => ({
       }
 
       return { 
-          currentUser: user, 
+          currentUser: {
+              ...user,
+              ministryId: newMinistryId || user.ministryId
+          }, 
           ministryId: newMinistryId,
           organizationId: user.organizationId,
           isAppReady: true 
@@ -63,7 +66,10 @@ export const useAppStore = create<AppState>((set) => ({
   }),
   setMinistryId: (id) => {
       if (typeof window !== 'undefined') localStorage.setItem('ministry_id', id);
-      set({ ministryId: id });
+      set((state) => ({ 
+          ministryId: id,
+          currentUser: state.currentUser ? { ...state.currentUser, ministryId: id } : null
+      }));
   },
   setOrganizationId: (id) => set({ organizationId: id }),
   setAvailableMinistries: (ministries) => set({ availableMinistries: ministries }),

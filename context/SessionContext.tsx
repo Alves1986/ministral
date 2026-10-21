@@ -240,9 +240,12 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             let orgDetails: Organization | null = null;
             let allowedMinistries: string[] = [];
 
-            // Adivinhar activeMinistry para paralelizar
+            // Adivinhar activeMinistry para paralelizar (prioriza o store ativo em memória)
+            const storeMid = useAppStore.getState().ministryId;
             let guessedMinistry = '';
-            if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id)) {
+            if (storeMid && UUID_REGEX.test(storeMid)) {
+                guessedMinistry = storeMid;
+            } else if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id)) {
                 guessedMinistry = profile.ministry_id;
             } else {
                 const localStored = localStorage.getItem('ministry_id');
@@ -317,7 +320,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     useAppStore.getState().setMinistryId(profile.ministry_id);
                 }
 
-                if (guessedMinistry && allowedMinistries.includes(guessedMinistry)) {
+                const isPrivileged = !!(profile.is_admin || profile.is_super_admin);
+                if (guessedMinistry && (allowedMinistries.includes(guessedMinistry) || isPrivileged)) {
                     activeMinistry = guessedMinistry;
                 } else if (allowedMinistries.length > 0) {
                     activeMinistry = allowedMinistries[0];

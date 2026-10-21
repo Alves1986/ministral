@@ -90,8 +90,14 @@ export function useMinistryData(
   const { setMinistryId, availableMinistries } = useAppStore();
 
   useEffect(() => {
-    // Evita verificações se o usuário for superadmin ou se não houver ID válido
-    if (!mid || mid.length !== 36 || !currentUser || currentUser.isSuperAdmin)
+    // Evita verificações se o usuário for superadmin, orgAdmin ou se não houver ID válido
+    if (
+      !mid ||
+      mid.length !== 36 ||
+      !currentUser ||
+      currentUser.isSuperAdmin ||
+      currentUser.isOrgAdmin
+    )
       return;
 
     if (currentUser.allowedMinistries) {
@@ -113,7 +119,7 @@ export function useMinistryData(
         return () => clearTimeout(timeout);
       }
     }
-  }, [mid, currentUser?.id, currentUser?.allowedMinistries, setMinistryId]);
+  }, [mid, currentUser?.id, currentUser?.allowedMinistries, currentUser?.isOrgAdmin, currentUser?.isSuperAdmin, setMinistryId]);
 
   const foundMinistry = availableMinistries.find((m) => m.id === mid);
   const rawDisplayName = settingsQuery.data?.displayName;

@@ -91,6 +91,21 @@ export const fetchUserAllowedMinistries = async (
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
+  // Se o usuário for OrgAdmin ou SuperAdmin, tem permissão em todos os ministérios da organização
+  const { data: profile } = await sb
+    .from("profiles")
+    .select("is_admin, is_super_admin")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profile?.is_super_admin || profile?.is_admin) {
+    const { data: allMin } = await sb
+      .from("organization_ministries")
+      .select("id")
+      .eq("organization_id", orgId);
+    return allMin?.map((m: any) => m.id) || [];
+  }
+
   const { data: members, error } = await sb
     .from("ministry_members")
     .select("ministry_id")
