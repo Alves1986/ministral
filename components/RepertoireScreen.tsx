@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
-import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
+import { addToRepertoire, deleteFromRepertoire, notifyRepertoirePlaylistPublished, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
 import { getSupabase } from '../services/supabase/client';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos, extractPlaylistId } from '../services/youtubeService';
@@ -598,7 +598,7 @@ export const RepertoireScreen: React.FC<Props> = ({
           content: item.content,
           eventRuleId,
           observation
-        });
+        }, true); // skipNotification = true para não disparar por música
         if (success) successCount++;
       } catch (err: any) {
         console.error("Erro ao adicionar:", err);
@@ -612,15 +612,16 @@ export const RepertoireScreen: React.FC<Props> = ({
       setDraftItems([]); 
       addToast(`${successCount} músicas salvas no repertório!`, "success");
 
+      // Notifica UMA ÚNICA VEZ sobre a playlist completa do culto
       if (ministryId) {
-        const dateFormatted = date?.split('-').reverse().join('/');
-        const cultoSuffix = cultoTitle ? ` (${cultoTitle}${cultoTime ? ` ${cultoTime}` : ''})` : '';
         try {
-          await sendNotificationSQL(ministryId, orgId, {
-            title: "Novo Repertório",
-            message: `${successCount} músicas adicionadas para o culto de ${dateFormatted}${cultoSuffix}.`,
-            type: 'info',
-            actionLink: 'repertoire'
+          await notifyRepertoirePlaylistPublished(ministryId, orgId, {
+            cultoTitle,
+            cultoTime,
+            date,
+            songsCount: successCount,
+            addedBy: currentUser?.name || 'Ministro de Louvor',
+            eventRuleId
           });
         } catch (err) {
           console.error("Erro ao enviar notificação de repertório:", err);

@@ -5,7 +5,8 @@ export const replicateRepertoireToProjectionAndDance = async (
     item: any,
     sourceMinistryId: string,
     orgId: string,
-    eventRuleId: string | null = null
+    eventRuleId: string | null = null,
+    notify: boolean = false
 ) => {
     const sb = getSupabase();
     if (!sb || !orgId) return;
@@ -82,12 +83,14 @@ export const replicateRepertoireToProjectionAndDance = async (
                     event_rule_id: eventRuleId
                 });
 
-                sendNotificationSQL(targetMin.id, orgId, {
-                    title: '🎵 Playlist para Projeção Sincronizada!',
-                    message: `O louvor postou "${item.title}" para o culto de ${dateFormatted}. Disponível no repertório para preparar a projeção!`,
-                    type: 'info',
-                    actionLink: 'repertoire'
-                }).catch(() => {});
+                if (notify) {
+                    sendNotificationSQL(targetMin.id, orgId, {
+                        title: '🎵 Playlist para Projeção Sincronizada!',
+                        message: `O louvor postou "${item.title}" para o culto de ${dateFormatted}. Disponível no repertório para preparar a projeção!`,
+                        type: 'info',
+                        actionLink: 'repertoire'
+                    }).catch(() => {});
+                }
             }
         }
 
@@ -120,22 +123,177 @@ export const replicateRepertoireToProjectionAndDance = async (
                     event_rule_id: eventRuleId
                 });
 
-                sendNotificationSQL(targetDance.id, orgId, {
-                    title: '💃 Repertório do Louvor para Dança!',
-                    message: `O louvor postou "${item.title}" para o culto de ${dateFormatted}. Playlist e cifras disponíveis no repertório para ensaio de coreografia!`,
-                    type: 'info',
-                    actionLink: 'repertoire'
-                }).catch(() => {});
+                if (notify) {
+                    sendNotificationSQL(targetDance.id, orgId, {
+                        title: '💃 Repertório do Louvor para Dança!',
+                        message: `O louvor postou "${item.title}" para o culto de ${dateFormatted}. Playlist e cifras disponíveis no repertório para ensaio de coreografia!`,
+                        type: 'info',
+                        actionLink: 'repertoire'
+                    }).catch(() => {});
+                }
             }
         }
 
-        // 2. Notificar membros com funções específicas na organização
+        if (notify) {
+            // 2. Notificar membros com funções específicas na organização
+            const { data: profiles } = await sb
+                .from('profiles')
+                .select('id, name, ministry_functions')
+                .eq('organization_id', orgId);
+
+            // Notificar voluntários de Projeção
+            const projectionProfiles = (profiles || []).filter((p: any) => {
+                const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
+                return funcs.some((f: string) => 
+                    f.includes('projec') || 
+                    f.includes('projeç') || 
+                    f.includes('mídia') || 
+                    f.includes('midia') || 
+                    f.includes('comunic') ||
+                    f.includes('slide') ||
+                    f.includes('letra')
+                );
+            });
+
+            for (const p of projectionProfiles) {
+                sendNotificationSQL(sourceMinistryId, orgId, {
+                    title: '🎵 Playlist para Projeção Disponível!',
+                    message: `Olá ${p.name || ''}, o louvor postou a música "${item.title}" para o culto de ${dateFormatted}. Acesse o repertório para preparar a projeção!`,
+                    type: 'info',
+                    actionLink: 'repertoire',
+                    targetUserId: p.id
+                }).catch(() => {});
+            }
+
+            // Notificar voluntárias de Dança
+            const danceProfiles = (profiles || []).filter((p: any) => {
+                const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
+                return funcs.some((f: string) => 
+                    f.includes('dança') || 
+                    f.includes('danca') || 
+                    f.includes('coreograf') || 
+                    f.includes('teatro') || 
+                    f.includes('artes') || 
+                    f.includes('dance')
+                );
+            });
+
+            for (const p of danceProfiles) {
+                sendNotificationSQL(sourceMinistryId, orgId, {
+                    title: '💃 Playlist de Louvor para Dança!',
+                    message: `Olá ${p.name || ''}, o louvor adicionou a música "${item.title}" para o culto de ${dateFormatted}. Acesse o repertório para saber os louvores e ensaiar a coreografia!`,
+                    type: 'info',
+                    actionLink: 'repertoire',
+                    targetUserId: p.id
+                }).catch(() => {});
+            }
+        }
+    } catch (err) {
+        console.warn("[replicateRepertoireToProjectionAndDance] Falha ao sincronizar com Projeção e Dança:", err);
+    }
+};
+
+/**
+ * Notifica de forma unificada e consolidada que a playlist de um determinado culto foi postada.
+ * Dispara apenas UMA notificação para o ministério, Projeção, Dança e Super Admins,
+ * evitando spam por música.
+ */
+export const notifyRepertoirePlaylistPublished = async (
+    ministryId: string,
+    orgId: string,
+    details: {
+        cultoTitle?: string;
+        cultoTime?: string;
+        date: string;
+        songsCount: number;
+        addedBy?: string;
+        eventRuleId?: string | null;
+    }
+) => {
+    const sb = getSupabase();
+    if (!sb || !orgId) return;
+
+    try {
+        const dateFormatted = details.date ? details.date.split('-').reverse().join('/') : '';
+        const cultoName = details.cultoTitle
+            ? `${details.cultoTitle}${details.cultoTime ? ` (${details.cultoTime.slice(0, 5)})` : ''}`
+            : '';
+        const cultoDesc = cultoName ? `${cultoName} (${dateFormatted})` : `culto de ${dateFormatted}`;
+        const songsText = `${details.songsCount} ${details.songsCount === 1 ? 'música' : 'músicas'}`;
+        const addedByName = details.addedBy || 'Ministro de Louvor';
+
+        // 1. Notificação única para o ministério de Louvor
+        await sendNotificationSQL(ministryId, orgId, {
+            title: '🎵 Playlist do Culto Postada!',
+            message: `A playlist para o ${cultoDesc} foi publicada no repertório com ${songsText}.`,
+            type: 'info',
+            actionLink: 'repertoire'
+        }).catch(() => {});
+
+        // 2. Localizar ministérios de Projeção e Dança da organização
+        const { data: orgMinistries } = await sb
+            .from('organization_ministries')
+            .select('id, label, code')
+            .eq('organization_id', orgId);
+
+        const isProjectionMinistry = (m: any) => {
+            if (!m || m.id === ministryId) return false;
+            const text = `${m.label || ''} ${m.code || ''}`.toLowerCase();
+            return (
+                text.includes('comunic') ||
+                text.includes('projec') ||
+                text.includes('projeç') ||
+                text.includes('mídia') ||
+                text.includes('midia') ||
+                text.includes('transmiss') ||
+                text.includes('multimidia') ||
+                text.includes('multimídia') ||
+                text.includes('som')
+            );
+        };
+
+        const isDanceMinistry = (m: any) => {
+            if (!m || m.id === ministryId) return false;
+            const text = `${m.label || ''} ${m.code || ''}`.toLowerCase();
+            return (
+                text.includes('dança') ||
+                text.includes('danca') ||
+                text.includes('coreograf') ||
+                text.includes('teatro') ||
+                text.includes('artes') ||
+                text.includes('dance')
+            );
+        };
+
+        const projectionMinistries = (orgMinistries || []).filter(isProjectionMinistry);
+        const danceMinistries = (orgMinistries || []).filter(isDanceMinistry);
+
+        // Notificar ministérios de Projeção
+        for (const targetMin of projectionMinistries) {
+            sendNotificationSQL(targetMin.id, orgId, {
+                title: '🎵 Playlist para Projeção Disponível!',
+                message: `O louvor postou a playlist para o ${cultoDesc} com ${songsText}. Disponível no repertório para preparar a projeção!`,
+                type: 'info',
+                actionLink: 'repertoire'
+            }).catch(() => {});
+        }
+
+        // Notificar ministérios de Dança
+        for (const targetDance of danceMinistries) {
+            sendNotificationSQL(targetDance.id, orgId, {
+                title: '💃 Repertório de Louvor para Dança!',
+                message: `O louvor postou a playlist para o ${cultoDesc} com ${songsText}. Playlist disponível no repertório para ensaio de coreografia!`,
+                type: 'info',
+                actionLink: 'repertoire'
+            }).catch(() => {});
+        }
+
+        // 3. Notificar voluntários com funções de Projeção e Dança
         const { data: profiles } = await sb
             .from('profiles')
             .select('id, name, ministry_functions')
             .eq('organization_id', orgId);
 
-        // Notificar voluntários de Projeção
         const projectionProfiles = (profiles || []).filter((p: any) => {
             const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
             return funcs.some((f: string) => 
@@ -150,39 +308,45 @@ export const replicateRepertoireToProjectionAndDance = async (
         });
 
         for (const p of projectionProfiles) {
-            sendNotificationSQL(sourceMinistryId, orgId, {
+            sendNotificationSQL(ministryId, orgId, {
                 title: '🎵 Playlist para Projeção Disponível!',
-                message: `Olá ${p.name || ''}, o louvor postou a música "${item.title}" para o culto de ${dateFormatted}. Acesse o repertório para preparar a projeção!`,
+                message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para preparar a projeção!`,
                 type: 'info',
                 actionLink: 'repertoire',
                 targetUserId: p.id
             }).catch(() => {});
         }
 
-        // Notificar voluntárias de Dança
         const danceProfiles = (profiles || []).filter((p: any) => {
             const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
             return funcs.some((f: string) => 
                 f.includes('dança') || 
                 f.includes('danca') || 
-                f.includes('coreograf') ||
-                f.includes('teatro') ||
-                f.includes('artes') ||
+                f.includes('coreograf') || 
+                f.includes('teatro') || 
+                f.includes('artes') || 
                 f.includes('dance')
             );
         });
 
         for (const p of danceProfiles) {
-            sendNotificationSQL(sourceMinistryId, orgId, {
-                title: '💃 Playlist de Louvor para Dança!',
-                message: `Olá ${p.name || ''}, o louvor adicionou a música "${item.title}" para o culto de ${dateFormatted}. Acesse o repertório para saber os louvores e ensaiar a coreografia!`,
+            sendNotificationSQL(ministryId, orgId, {
+                title: '💃 Repertório de Louvor para Dança!',
+                message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para o ensaio!`,
                 type: 'info',
                 actionLink: 'repertoire',
                 targetUserId: p.id
             }).catch(() => {});
         }
+
+        // 4. Notificar Super Admins apenas UMA vez
+        await notifySuperAdmins(
+            'Nova Playlist no Repertório',
+            `${addedByName} publicou a playlist para o ${cultoDesc} com ${songsText}.`,
+            'repertoire'
+        ).catch(() => {});
     } catch (err) {
-        console.warn("[replicateRepertoireToProjectionAndDance] Falha ao sincronizar com Projeção e Dança:", err);
+        console.warn("[notifyRepertoirePlaylistPublished] Erro ao enviar notificações consolidadas de repertório:", err);
     }
 };
 
@@ -303,7 +467,12 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
     });
 };
 
-export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
+export const addToRepertoire = async (
+    ministryId: string, 
+    orgId: string, 
+    item: any,
+    skipNotification: boolean = false
+) => {
     const sb = getSupabase();
     if (!sb) return false;
 
@@ -345,14 +514,20 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
     }
 
     if (!error) {
-        // Replicar automaticamente para equipes de Projeção / Comunicação e Dança
-        replicateRepertoireToProjectionAndDance(item, ministryId, orgId, eventRuleId).catch(() => {});
+        // Replicar dados no banco para Projeção / Comunicação e Dança (sem spam de notificações por música)
+        replicateRepertoireToProjectionAndDance(item, ministryId, orgId, eventRuleId, false).catch(() => {});
 
-        await notifySuperAdmins(
-            'Nova Música no Repertório',
-            `A música "${item.title}" foi adicionada ao repertório por ${item.addedBy}.`,
-            'repertoire'
-        );
+        // Apenas notifica se for inserção avulsa direta (fora de lote/playlist)
+        if (!skipNotification) {
+            void notifyRepertoirePlaylistPublished(ministryId, orgId, {
+                cultoTitle: item.eventRuleTitle || item.cultoTitle,
+                cultoTime: item.eventRuleTime || item.cultoTime,
+                date: item.date,
+                songsCount: 1,
+                addedBy: item.addedBy,
+                eventRuleId
+            });
+        }
     }
 
     return !error;
