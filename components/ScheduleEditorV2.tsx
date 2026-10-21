@@ -835,9 +835,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const alertas = detailedAlerts.length;
 
     return (
-        <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-full">
+        <div className="flex flex-col w-full">
             {/* HEADER FIXO / STICKY */}
-            <div className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 shadow-sm rounded-t-lg">
+            <div className="sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md py-3.5 px-3 sm:px-5 border-b border-zinc-200/80 dark:border-zinc-800/80 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 shadow-sm mb-6 -mx-3 sm:-mx-5 lg:-mx-6">
                 <div className="flex items-center gap-3 w-full xl:w-auto">
                     <div className="bg-secondary/10 dark:bg-secondary/5 p-2.5 rounded-xl text-secondary shrink-0">
                         <Calendar size={24} />
@@ -953,20 +953,20 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
                 onClickCapture={handleClickCapture}
-                className={`flex-1 overflow-auto custom-scrollbar p-1 pb-40 md:max-h-[calc(100vh-230px)] min-h-[420px] ${
+                className={`w-full overflow-x-auto custom-scrollbar pb-16 ${
                     isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'
                 }`}
             > 
                 {/* Desktop View (Table) */}
                 <div className="hidden md:block">
                     <table className="w-full text-sm border-separate border-spacing-0">
-                        <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0 z-20 shadow-sm">
+                        <thead className="bg-zinc-100 dark:bg-zinc-800/80">
                             <tr>
-                                <th className="p-3 text-left font-semibold text-zinc-500 min-w-[150px] bg-zinc-50 dark:bg-zinc-900 sticky left-0 z-30">
+                                <th className="p-3 text-left font-semibold text-zinc-600 dark:text-zinc-400 min-w-[150px] bg-zinc-100 dark:bg-zinc-900 sticky left-0 z-20 border-b border-r border-zinc-200 dark:border-zinc-800">
                                     Data / Evento
                                 </th>
                                 {roles.map(role => (
-                                    <th key={role} className="p-3 text-center font-semibold text-zinc-500 min-w-[160px] bg-zinc-50 dark:bg-zinc-900">
+                                    <th key={role} className="p-3 text-center font-semibold text-zinc-600 dark:text-zinc-400 min-w-[160px] bg-zinc-100 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
                                         {role.toUpperCase()}
                                     </th>
                                 ))}
@@ -974,9 +974,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                         </thead>
                         <tbody className="">
                             {visibleOccurrences.map((occurrence: OccurrenceV2) => (
-                                <tr key={`${occurrence.date}-${occurrence.time}-${occurrence.ruleId}`} className="group hover:bg-zinc-50/80 dark:hover:bg-zinc-800/20 even:bg-zinc-50/30 dark:even:bg-zinc-800/10">
+                                <tr key={`${occurrence.date}-${occurrence.time}-${occurrence.ruleId}`} className="group hover:bg-zinc-100/60 dark:hover:bg-zinc-800/30 even:bg-zinc-50/50 dark:even:bg-zinc-900/30">
                                     {/* Coluna Fixa de Data */}
-                                    <td className="p-3 bg-white dark:bg-zinc-900 group-hover:bg-zinc-50/80 dark:group-hover:bg-zinc-800/20 sticky left-0 z-10 border-r border-zinc-200 dark:border-zinc-800">
+                                    <td className="p-3 bg-white dark:bg-slate-950 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-900 sticky left-0 z-10 border-b border-r border-zinc-200 dark:border-zinc-800">
                                         <div className="flex items-center justify-between group/row-header">
                                             <div className="flex flex-col">
                                                 <span className="font-medium text-zinc-700 dark:text-zinc-200">
@@ -1005,7 +1005,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     
                                     {roles.map(role => {
                                         return (
-                                            <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="p-2 relative">
+                                            <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="p-2 relative border-b border-zinc-100 dark:border-zinc-800/50">
                                                 <MemoizedEditorCell 
                                                     occurrence={occurrence}
                                                     role={role}

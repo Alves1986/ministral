@@ -519,7 +519,7 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
+        <div className={`flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 ${currentTab === 'schedule-editor' ? 'p-3 sm:p-5 lg:p-6' : 'p-4 lg:p-10'} custom-scrollbar relative`}>
             <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
                 {/* Banner de Comunicado Global / Manutenção do Sistema */}
                 {(() => {
