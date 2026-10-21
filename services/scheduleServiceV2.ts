@@ -563,26 +563,7 @@ export const fetchNextEventCardData = async (
     const sb = getSupabase();
     if (!sb || !ministryId || !orgId) return null;
 
-    // 1. Ampliar a janela de busca
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = localDateString(sevenDaysAgo);
-
-    // Buscar assignments a partir de 7 dias atrás
-    const { data: assignmentsData } = await sb
-        .from("schedule_assignments")
-        .select("id, event_rule_id, event_date, role, member_id, confirmed")
-        .eq("ministry_id", ministryId)
-        .eq("organization_id", orgId)
-        .gte("event_date", sevenDaysAgoStr);
-
-    const exclusions = new Set(
-        assignmentsData
-            ?.filter(a => a.role === '__EVENT_EXCLUDED__')
-            .map(a => `${a.event_rule_id}|${a.event_date?.slice(0, 10)}`) || []
-    );
-
-    // Buscar regras para saber o horário e título
+    // 1. Buscar regras de eventos ativas do ministério
     const { data: rules } = await sb.from('event_rules')
         .select('id, title, type, weekday, date, time')
         .eq('organization_id', orgId)
@@ -592,113 +573,112 @@ export const fetchNextEventCardData = async (
     if (!rules || rules.length === 0) return null;
     const rulesMap = new Map(rules.map(r => [r.id, r]));
 
-    const publishedMonths = new Set<string>(
-        assignmentsData
-            ?.filter(a => a.role === '__PUBLISHED__')
-            .map(a => a.event_date?.slice(0, 7)) || []
+    // 2. Buscar exclusões de eventos (__EVENT_EXCLUDED__)
+    const { data: exclusionsData } = await sb
+        .from("schedule_assignments")
+        .select("event_rule_id, event_date")
+        .eq("ministry_id", ministryId)
+        .eq("organization_id", orgId)
+        .eq("role", "__EVENT_EXCLUDED__");
+
+    const exclusions = new Set(
+        exclusionsData?.map(a => `${a.event_rule_id}|${a.event_date?.slice(0, 10)}`) || []
     );
 
-    // Agrupar por evento
-    const groups: Record<string, any> = {};
-    assignmentsData?.forEach(a => {
-        const dateStr = a.event_date?.slice(0, 10);
-        const monthKey = dateStr?.slice(0, 7);
-        const key = `${a.event_rule_id}|${dateStr}`;
-        if (!groups[key]) {
-            const rule = rulesMap.get(a.event_rule_id);
-            if (rule) {
-                const iso = `${dateStr}T${rule.time}`;
-                groups[key] = {
-                    rule,
-                    date: dateStr,
-                    iso,
-                    dateObj: new Date(iso),
-                    assignments: [],
-                    excluded: false
-                };
-            }
-        }
-        if (groups[key]) {
-            if (a.role === '__EVENT_EXCLUDED__') {
-                groups[key].excluded = true;
-            } else if (a.role === '__PUBLISHED__') {
-                // marcador de publicação, não adiciona como membro
-            } else if (monthKey && publishedMonths.has(monthKey)) {
-                groups[key].assignments.push(a);
-            }
-        }
+    // 3. Gerar ocorrências para o mês atual, próximo mês e mês subsequente
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    const occurrencesCurrent = generateOccurrencesV2(rules as any, currentYear, currentMonth);
+    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+    const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+    const occurrencesNext = generateOccurrencesV2(rules as any, nextYear, nextMonth);
+
+    const monthAfter = nextMonth === 12 ? 1 : nextMonth + 1;
+    const yearAfter = nextMonth === 12 ? nextYear + 1 : nextYear;
+    const occurrencesAfter = generateOccurrencesV2(rules as any, yearAfter, monthAfter);
+
+    const allOccurrences = [...occurrencesCurrent, ...occurrencesNext, ...occurrencesAfter]
+        .sort((a, b) => a.iso.localeCompare(b.iso));
+
+    // 4. Encontrar o próximo evento cronológico que não foi excluído
+    // Considera evento ativo até 2 horas após o horário de início
+    const nowTime = now.getTime();
+    const nextOcc = allOccurrences.find(occ => {
+        const key = `${occ.ruleId}|${occ.date}`;
+        if (exclusions.has(key)) return false;
+
+        const [y, m, d] = occ.date.split("-").map(Number);
+        const [hh, mm] = (occ.time || "00:00").split(":").map(Number);
+        const eventTimestamp = new Date(y, m - 1, d, hh || 0, mm || 0, 0).getTime();
+        return eventTimestamp >= nowTime - 2 * 60 * 60 * 1000;
     });
 
-    const now = Date.now();
-    const candidates = Object.values(groups)
-        .filter((c: any) => !c.excluded && c.dateObj.getTime() >= now - 1 * 60 * 60 * 1000)
-        .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
+    if (!nextOcc) return null;
 
-    let nextEvent = candidates[0];
+    // 5. Verificar se o mês deste evento está liberado/publicado
+    const eventMonthStr = nextOcc.date.slice(0, 7);
+    const { data: publishedRows } = await sb
+        .from("schedule_assignments")
+        .select("id")
+        .eq("ministry_id", ministryId)
+        .eq("organization_id", orgId)
+        .eq("role", "__PUBLISHED__")
+        .gte("event_date", `${eventMonthStr}-01`)
+        .lte("event_date", `${eventMonthStr}-31`)
+        .limit(1);
 
-    // 4. Se ainda retornar null (nenhum assignment futuro), buscar o próximo evento pelas event_rules
-    if (!nextEvent) {
-        const year = new Date().getFullYear();
-        const month = new Date().getMonth() + 1;
-        const occurrences = generateOccurrencesV2(rules as any, year, month);
-        
-        const nextMonth = month === 12 ? 1 : month + 1;
-        const nextYear = month === 12 ? year + 1 : year;
-        const occurrencesNext = generateOccurrencesV2(rules as any, nextYear, nextMonth);
-        
-        const allOccurrences = [...occurrences, ...occurrencesNext];
-        const sortedOccurrences = allOccurrences.sort((a, b) => a.iso.localeCompare(b.iso));
-        
-        const nextOcc = sortedOccurrences.find(occ => {
-            const eventTime = new Date(occ.iso).getTime();
-            const key = `${occ.ruleId}|${occ.date}`;
-            return !exclusions.has(key) && eventTime >= now - 1 * 60 * 60 * 1000;
-        });
+    const isPublished = Boolean(publishedRows && publishedRows.length > 0);
 
-        if (!nextOcc) return null;
+    // 6. Buscar atribuições reais deste evento
+    const { data: assignments } = await sb
+        .from("schedule_assignments")
+        .select("id, event_rule_id, event_date, role, member_id, confirmed")
+        .eq("ministry_id", ministryId)
+        .eq("organization_id", orgId)
+        .eq("event_rule_id", nextOcc.ruleId)
+        .eq("event_date", nextOcc.date)
+        .neq("role", "__EVENT_EXCLUDED__")
+        .neq("role", "__PUBLISHED__");
 
-        nextEvent = {
-            rule: rulesMap.get(nextOcc.ruleId),
-            date: nextOcc.date,
-            iso: nextOcc.iso,
-            assignments: []
-        };
+    // 7. Se a escala estiver liberada, carregar os membros escalados
+    let members: any[] = [];
+    if (isPublished && assignments && assignments.length > 0) {
+        const memberIds = assignments.map(a => a.member_id).filter(Boolean);
+        if (memberIds.length > 0) {
+            const { data: profilesData } = await sb
+                .from('profiles')
+                .select('id, name, avatar_url')
+                .in('id', memberIds);
+
+            const profilesMap = new Map(profilesData?.map(p => [p.id, p]));
+
+            members = assignments
+                .filter(a => a.member_id)
+                .map(a => {
+                    const profile = profilesMap.get(a.member_id);
+                    return {
+                        role: a.role,
+                        memberId: a.member_id,
+                        name: profile?.name || 'Membro',
+                        avatarUrl: profile?.avatar_url,
+                        confirmed: a.confirmed,
+                        key: `${nextOcc.ruleId}|${nextOcc.date}|${a.role}`
+                    };
+                });
+        }
     }
 
-    // 3. Corrigir o join de profiles
-    const membersData = nextEvent.assignments;
-    const memberIds = membersData?.map((m: any) => m.member_id).filter(Boolean) || [];
-    const { data: profilesData } = await sb
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .in('id', memberIds);
-    const profilesMap = new Map(profilesData?.map((p: any) => [p.id, p]));
-
-    const nextEventCompat = {
-        ...nextEvent,
-        assignment: nextEvent.assignments[0] || { event_rule_id: nextEvent.rule.id, event_date: nextEvent.date }
-    };
-
-    const members = (membersData || []).map((m: any) => {
-        const profile = profilesMap.get(m.member_id);
-        return {
-            role: m.role,
-            memberId: m.member_id,
-            name: profile?.name || 'Membro',
-            avatarUrl: profile?.avatar_url,
-            confirmed: m.confirmed,
-            key: `${nextEventCompat.assignment.event_rule_id}|${nextEventCompat.assignment.event_date}|${m.role}`
-        };
-    });
-
+    const rule = rulesMap.get(nextOcc.ruleId);
     return {
         event: {
-            id: nextEvent.rule.id,
-            title: nextEvent.rule.title,
-            date: nextEvent.date,
-            time: nextEvent.rule.time,
-            iso: nextEvent.iso,
-            type: nextEvent.rule.type
+            id: nextOcc.ruleId,
+            title: nextOcc.title,
+            date: nextOcc.date,
+            time: nextOcc.time,
+            iso: nextOcc.iso,
+            type: rule?.type || 'weekly'
         },
         members
     };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   CalendarClock,
   CheckCircle2,
@@ -62,7 +62,40 @@ export const NextEventCard: React.FC<Props> = ({
   // We need to handle both cases if the parent hasn't updated yet, but assuming App.tsx passes `nextEvent` as `event`.
 
   const eventData = propEvent?.event ? propEvent.event : propEvent; // Handle structure
-  const eventMembers = propEvent?.members || [];
+  const rawEventMembers = propEvent?.members || [];
+
+  const eventMembers = useMemo(() => {
+    if (rawEventMembers && rawEventMembers.length > 0) {
+      return rawEventMembers;
+    }
+    // Fallback: se eventData existir e o schedule do App tiver escalados para esta data
+    if (!eventData || !schedule) return [];
+
+    const datePrefix = eventData.date;
+    const ruleId = eventData.id || eventData.ruleId;
+    const fallbackList: any[] = [];
+
+    for (const [key, memberName] of Object.entries(schedule)) {
+      if (!memberName || memberName === "__EXCLUDED__" || memberName === "__PUBLISHED__") continue;
+      const parts = key.split("|");
+      if (parts.length >= 3) {
+        const [kRuleId, kDate, ...kRoleParts] = parts;
+        const kRole = kRoleParts.join("|");
+        if (kDate === datePrefix && (!ruleId || kRuleId === ruleId)) {
+          const foundProfile = (members || []).find((m) => m.name === memberName);
+          fallbackList.push({
+            role: kRole,
+            memberId: foundProfile?.id || "",
+            name: memberName,
+            avatarUrl: (foundProfile as any)?.avatarUrl || foundProfile?.avatar_url,
+            confirmed: Boolean(attendance && attendance[key]),
+            key,
+          });
+        }
+      }
+    }
+    return fallbackList;
+  }, [rawEventMembers, eventData, schedule, members, attendance]);
 
   const checkTimeWindow = () => {
     if (!eventData) return;
