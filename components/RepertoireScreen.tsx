@@ -355,7 +355,7 @@ export const RepertoireScreen: React.FC<Props> = ({
           addToast("Spotify conectado com sucesso!", "success");
         }
         setIsSpotifyLoggedIn(true);
-        setActiveTab('playlists');
+        // setActiveTab('playlists'); // Ocultado até solicitação do usuário
         loadUserProfile();
       } else {
         setIsSpotifyLoggedIn(false);
@@ -844,13 +844,12 @@ export const RepertoireScreen: React.FC<Props> = ({
           <div className="flex flex-col lg:flex-row gap-6">
               <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in w-full overflow-hidden">
                   
-                  {/* Tabs de Fontes de Músicas */}
+                  {/* Tabs de Fontes de Músicas - Apenas YouTube ativo conforme solicitado */}
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
-                      <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
-                      <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-accent border-accent bg-accent/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras / Letras</button>
-                      <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-[#1DB954] border-[#1DB954] bg-green-50 dark:bg-green-950/20' : 'text-zinc-500 border-transparent'}`}><Music size={14}/> Spotify</button>
-                      {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-secondary border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Minhas Playlists</button>}
-                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-zinc-800 dark:text-zinc-200 border-zinc-800 dark:border-zinc-200' : 'text-zinc-500 border-transparent'}`}><Plus size={14}/> Manual</button>
+                      <button onClick={() => setActiveTab('youtube')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10">
+                          <Youtube size={14}/> YouTube
+                      </button>
+                      {/* As opções Cifras / Letras, Spotify e Manual foram ocultadas conforme solicitado pelo usuário */}
                   </div>
 
                   {activeTab === 'spotify' && (
