@@ -181,14 +181,31 @@ export const ServiceSchedule: React.FC<Props> = ({
                             key={song.id}
                             className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm hover:border-[#c9a84c]/50 transition-colors"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-[#c9a84c]/10 flex items-center justify-center shrink-0">
-                                <Music size={14} className="text-[#c9a84c]" />
+                            {song.link ? (
+                              <a
+                                href={song.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 min-w-0 flex-1 hover:text-[#c9a84c] transition-colors group/title cursor-pointer"
+                                title="Abrir no YouTube / Link"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-[#c9a84c]/10 flex items-center justify-center shrink-0">
+                                  <Music size={14} className="text-[#c9a84c]" />
+                                </div>
+                                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 group-hover/title:text-[#c9a84c] truncate">
+                                  {song.title}
+                                </span>
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-full bg-[#c9a84c]/10 flex items-center justify-center shrink-0">
+                                  <Music size={14} className="text-[#c9a84c]" />
+                                </div>
+                                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                                  {song.title}
+                                </span>
                               </div>
-                              <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 truncate">
-                                {song.title}
-                              </span>
-                            </div>
+                            )}
                             {song.link && (
                               <a
                                 href={song.link}

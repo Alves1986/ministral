@@ -1297,28 +1297,91 @@ export const RepertoireScreen: React.FC<Props> = ({
                       <div className={`rounded-xl border overflow-hidden shadow-sm ${group.isNext ? 'bg-white dark:bg-zinc-800 border-secondary/40' : group.isPast ? 'bg-zinc-50/70 dark:bg-zinc-900/40 border-dashed border-zinc-300 dark:border-zinc-700' : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700'}`}>
                           {group.items.map((item, idx) => (
                               <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== group.items.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
-                                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => setSelectedChordItem(item)}>
-                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.link?.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link?.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
-                                          {item.link?.includes('youtu') ? <Youtube size={20}/> : (item.link?.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
-                                      </div>
-                                      <div className="min-w-0">
-                                          <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
-                                          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
-                                              {item.isFromWorship ? (
-                                                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
-                                                      <Music size={10} /> Louvor
-                                                  </span>
-                                              ) : (
-                                                  <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
-                                              )}
-                                              {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
-                                              {item.content && <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600">CIFRA</span>}
+                                  {item.link ? (
+                                      <a 
+                                          href={item.link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer group/song"
+                                          title="Abrir no YouTube / Link"
+                                      >
+                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/song:scale-105 ${item.link?.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link?.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                              {item.link?.includes('youtu') ? <Youtube size={20}/> : (item.link?.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
+                                          </div>
+                                          <div className="min-w-0">
+                                              <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2 group-hover/song:text-red-600 dark:group-hover/song:text-red-400 transition-colors">
+                                                  {item.title}
+                                              </h4>
+                                              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
+                                                  {item.isFromWorship ? (
+                                                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                                                          <Music size={10} /> Louvor
+                                                      </span>
+                                                  ) : (
+                                                      <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                                                  )}
+                                                  {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
+                                                  {item.content && (
+                                                      <button 
+                                                          type="button"
+                                                          onClick={(e) => {
+                                                              e.preventDefault();
+                                                              e.stopPropagation();
+                                                              setSelectedChordItem(item);
+                                                          }}
+                                                          className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
+                                                          title="Ver cifra"
+                                                      >
+                                                          CIFRA
+                                                      </button>
+                                                  )}
+                                              </div>
+                                          </div>
+                                      </a>
+                                  ) : (
+                                      <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1">
+                                          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                                              {item.content ? <FileText size={20}/> : <Music size={20} />}
+                                          </div>
+                                          <div className="min-w-0">
+                                              <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
+                                              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
+                                                  {item.isFromWorship ? (
+                                                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                                                          <Music size={10} /> Louvor
+                                                      </span>
+                                                  ) : (
+                                                      <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                                                  )}
+                                                  {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
+                                                  {item.content && (
+                                                      <button 
+                                                          type="button"
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              setSelectedChordItem(item);
+                                                          }}
+                                                          className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
+                                                          title="Ver cifra"
+                                                      >
+                                                          CIFRA
+                                                      </button>
+                                                  )}
+                                              </div>
                                           </div>
                                       </div>
-                                  </div>
+                                  )}
                                   <div className="flex items-center gap-2 shrink-0">
-                                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><ExternalLink size={18} /></a>
-                                      {mode === 'manage' && <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 size={18} /></button>}
+                                      {item.link && (
+                                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Abrir no YouTube">
+                                              <ExternalLink size={18} />
+                                          </a>
+                                      )}
+                                      {mode === 'manage' && (
+                                          <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir música">
+                                              <Trash2 size={18} />
+                                          </button>
+                                      )}
                                   </div>
                               </div>
                           ))}

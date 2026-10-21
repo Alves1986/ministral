@@ -362,7 +362,19 @@ export const EventDetailsModal: React.FC<Props> = ({
                             {eventSongs.map((s) => (
                                 <div key={s.id} className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-800/80 rounded-xl border border-zinc-100 dark:border-zinc-700/60">
                                     <div className="min-w-0 flex-1 pr-2">
-                                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">{s.title}</p>
+                                        {s.link ? (
+                                            <a
+                                                href={s.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-bold text-zinc-800 dark:text-zinc-100 hover:text-red-500 transition-colors truncate block"
+                                                title="Abrir no YouTube / Link"
+                                            >
+                                                {s.title}
+                                            </a>
+                                        ) : (
+                                            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">{s.title}</p>
+                                        )}
                                         <div className="flex items-center gap-2 mt-0.5">
                                             {s.key && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 rounded">Tom: {s.key}</span>}
                                             <span className="text-[10px] text-zinc-400">{s.isFromWorship || s.observation?.includes('Louvor') ? 'Equipe de Louvor' : 'Repertório'}</span>
