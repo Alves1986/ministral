@@ -100,8 +100,20 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
           await markNotificationsReadSQL([notification.id], currentUser.id, orgId);
       }
 
-      // 0. Se for solicitação de entrada, troca de ministério se necessário e vai direto para a aba de membros
-      if (notification.type === 'join_request' || notification.title?.toLowerCase().includes('solicita')) {
+      // 0. Se for solicitação de entrada PENDENTE (não desfecho de aprovação/recusa), troca de ministério se necessário e vai direto para a aba de membros
+      const titleLower = (notification.title || '').toLowerCase();
+      const msgLower = (typeof notification.message === 'string' ? notification.message : '').toLowerCase();
+      const isOutcome = 
+        titleLower.includes('aprovad') || 
+        titleLower.includes('recusad') || 
+        titleLower.includes('rejeitad') || 
+        titleLower.includes('cancelad') ||
+        msgLower.includes('foi aprovada') || 
+        msgLower.includes('foi recusada') || 
+        msgLower.includes('recusada pelos') ||
+        msgLower.includes('recusada por');
+
+      if (!isOutcome && (notification.type === 'join_request' || titleLower.includes('solicita') || msgLower.includes('solicitou entrada'))) {
           if (notification.ministryId && onSwitchMinistry && notification.ministryId !== ministryId) {
               onSwitchMinistry(notification.ministryId);
           }
@@ -232,16 +244,22 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                                             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
                                                 {n.message}
                                             </p>
-                                            {n.type === 'join_request' && (
-                                                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                                                    <span className="px-2 py-0.5 bg-amber-500/15 rounded-md">
-                                                        Solicitação de Entrada
-                                                    </span>
-                                                    <span className="text-secondary dark:text-white font-semibold">
-                                                        Clique para aprovar em Membros →
-                                                    </span>
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const titleL = (n.title || '').toLowerCase();
+                                                const msgL = (typeof n.message === 'string' ? n.message : '').toLowerCase();
+                                                const isOut = titleL.includes('aprovad') || titleL.includes('recusad') || msgL.includes('foi aprovada') || msgL.includes('foi recusada');
+                                                if (n.type !== 'join_request' || isOut) return null;
+                                                return (
+                                                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                                                        <span className="px-2 py-0.5 bg-amber-500/15 rounded-md">
+                                                            Solicitação de Entrada
+                                                        </span>
+                                                        <span className="text-secondary dark:text-white font-semibold">
+                                                            Clique para aprovar em Membros →
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })()}
                                             <span className="text-[10px] text-zinc-400 mt-2 block">
                                                 {new Date(n.timestamp).toLocaleString('pt-BR')}
                                             </span>

@@ -340,12 +340,18 @@ export const approveJoinRequest = async (
       .eq("id", userId);
   }
 
-  // 3. Mark notification as read/cleared or delete it
+  // 3. Mark notification as read/cleared and delete all pending join requests for this user in this ministry
   await sb.from("notifications").delete().eq("id", notificationId);
+  if (userId) {
+    await sb.from("notifications").delete()
+      .eq("organization_id", orgId)
+      .eq("ministry_id", ministryId)
+      .or(`target_user_id.eq.${userId},message.ilike.%${userId}%`);
+  }
 
-  // 4. Notify user (optional, but good practice via resilient sender)
+  // 4. Notify user com título que não colide com solicitações pendentes
   await sendNotificationSQL(ministryId, orgId, {
-    title: "Solicitação Aprovada",
+    title: "Entrada Aprovada",
     message: "Sua solicitação para entrar no ministério foi aprovada!",
     type: "success",
     targetUserId: userId,
@@ -360,6 +366,9 @@ export const approveJoinRequest = async (
     targetType: 'member',
     targetId: userId,
   });
+
+  // 6. Limpar quaisquer notificações obsoletas no banco
+  void cleanupStaleJoinNotifications(ministryId, orgId);
 };
 
 export const rejectJoinRequest = async (
@@ -373,10 +382,16 @@ export const rejectJoinRequest = async (
 
   // 1. Delete the request notification
   await sb.from("notifications").delete().eq("id", notificationId);
+  if (userId) {
+    await sb.from("notifications").delete()
+      .eq("organization_id", orgId)
+      .eq("ministry_id", ministryId)
+      .or(`target_user_id.eq.${userId},message.ilike.%${userId}%`);
+  }
 
-  // 2. Notify user via resilient sender
+  // 2. Notify user com título que não colide com solicitações pendentes
   await sendNotificationSQL(ministryId, orgId, {
-    title: "Solicitação Recusada",
+    title: "Entrada Não Aprovada",
     message:
       "Sua solicitação para entrar no ministério foi recusada pelos administradores.",
     type: "error",
@@ -392,6 +407,124 @@ export const rejectJoinRequest = async (
     targetType: 'member',
     targetId: userId,
   });
+
+  // 4. Limpar quaisquer notificações obsoletas no banco
+  void cleanupStaleJoinNotifications(ministryId, orgId);
+};
+
+export const cleanupStaleJoinNotifications = async (
+  ministryId: string,
+  orgId: string,
+) => {
+  const sb = getSupabase();
+  if (!sb || !orgId || !ministryId) return;
+
+  try {
+    // 1. Obter membros atuais deste ministério via consulta direta
+    const { data: currentMembers, error: memErr } = await sb
+      .from("ministry_members")
+      .select("profile_id, profiles(id, name, email)")
+      .eq("ministry_id", ministryId);
+
+    if (memErr) {
+      console.warn("[cleanupStaleJoinNotifications] Erro ao buscar membros do ministério:", memErr);
+    }
+
+    const memberIds = new Set<string>();
+    const memberEmails = new Set<string>();
+    const memberNames = new Set<string>();
+
+    (currentMembers || []).forEach((cm: any) => {
+      if (cm.profile_id) memberIds.add(cm.profile_id);
+      const prof = Array.isArray(cm.profiles) ? cm.profiles[0] : cm.profiles;
+      if (prof?.id) memberIds.add(prof.id);
+      if (prof?.email) memberEmails.add(prof.email.toLowerCase().trim());
+      if (prof?.name && prof.name.trim().length >= 3) {
+        memberNames.add(prof.name.toLowerCase().trim());
+      }
+    });
+
+    // 2. Buscar notificações da organização vinculadas ao ministério ou gerais
+    const { data: notifs, error: notifErr } = await sb
+      .from("notifications")
+      .select("id, title, message, type, target_user_id, action_link")
+      .eq("organization_id", orgId)
+      .or(`ministry_id.eq.${ministryId},ministry_id.is.null`);
+
+    if (notifErr || !notifs || notifs.length === 0) return;
+
+    const notifIdsToDelete: string[] = [];
+
+    for (const n of notifs) {
+      const title = (n.title || "").toLowerCase();
+      const msg = (n.message || "").toLowerCase();
+
+      // Notificações de desfecho que já foram tratadas (ex: "Sua solicitação ... foi aprovada", "foi recusada")
+      const isOutcome =
+        title.includes("aprovad") ||
+        title.includes("recusad") ||
+        title.includes("rejeitad") ||
+        title.includes("cancelad") ||
+        msg.includes("foi aprovada") ||
+        msg.includes("foi recusada") ||
+        msg.includes("recusada pelos") ||
+        msg.includes("recusada por");
+
+      if (isOutcome) {
+        notifIdsToDelete.push(n.id);
+        continue;
+      }
+
+      const isJoinCandidate =
+        n.type === "join_request" ||
+        title.includes("solicita") ||
+        title.includes("novo integrante") ||
+        msg.includes("solicitou entrada") ||
+        msg.includes("entrou diretamente");
+
+      if (!isJoinCandidate) continue;
+
+      // Se pertencer a alguém que já é membro ativo do ministério
+      const targetUid = n.target_user_id;
+      if (targetUid && memberIds.has(targetUid)) {
+        notifIdsToDelete.push(n.id);
+        continue;
+      }
+
+      // Checar por email
+      let matched = false;
+      for (const email of memberEmails) {
+        if (msg.includes(email) || (n.action_link && n.action_link.includes(email))) {
+          notifIdsToDelete.push(n.id);
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+
+      // Checar por nome completo (com pelo menos 4 caracteres)
+      for (const name of memberNames) {
+        if (name.length >= 4 && msg.includes(name)) {
+          notifIdsToDelete.push(n.id);
+          break;
+        }
+      }
+    }
+
+    if (notifIdsToDelete.length > 0) {
+      const { error: delErr } = await sb
+        .from("notifications")
+        .delete()
+        .in("id", notifIdsToDelete);
+      if (delErr) {
+        console.warn("[cleanupStaleJoinNotifications] Erro ao deletar notificações obsoletas:", delErr);
+      } else {
+        console.log(`[cleanupStaleJoinNotifications] Limpas ${notifIdsToDelete.length} notificações obsoletas no Supabase.`);
+      }
+    }
+  } catch (err) {
+    console.warn("[cleanupStaleJoinNotifications] Erro inesperado:", err);
+  }
 };
 
 export const saveMinistrySettings = async (

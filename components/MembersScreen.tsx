@@ -7,6 +7,7 @@ import { useToast } from './Toast';
 import { useSession } from '../context/SessionContext';
 import { fetchAuditLogs, AuditLogEntry, AUDIT_ACTION_LABELS, AUDIT_ACTION_COLORS, AuditAction } from '../services/supabase/audit';
 import { getSupabase } from '../services/supabase/client';
+import { cleanupStaleJoinNotifications } from '../services/supabase/ministries';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -210,6 +211,7 @@ export const MembersScreen: React.FC<Props> = ({
 
 
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [dismissedRequestIds, setDismissedRequestIds] = useState<string[]>([]);
   const [resolvedProfiles, setResolvedProfiles] = useState<Record<string, {
     userId: string;
     name: string;
@@ -218,6 +220,13 @@ export const MembersScreen: React.FC<Props> = ({
   }>>({});
   const [orgCandidates, setOrgCandidates] = useState<Array<{ id: string; name: string; email: string; avatar_url?: string }>>([]);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+
+  // Limpeza automática de notificações de solicitações obsoletas no Supabase via consulta aos membros
+  useEffect(() => {
+    if (currentUser.ministryId && currentUser.organizationId && isAdmin) {
+      cleanupStaleJoinNotifications(currentUser.ministryId, currentUser.organizationId);
+    }
+  }, [currentUser.ministryId, currentUser.organizationId, isAdmin]);
 
   // Carrega voluntários da organização para resolver perfil e permitir vinculação direta
   useEffect(() => {
@@ -242,17 +251,34 @@ export const MembersScreen: React.FC<Props> = ({
     return () => { isMounted = false; };
   }, [currentUser.organizationId, isAdmin]);
 
-  // Filter join requests from notifications — blindado contra schemas sem action_link
+  // Filter join requests from notifications — blindado com verificação de membros existentes e desfechos
   const joinRequests = useMemo(() => {
       const isAdmin = currentUser.access_role === 'admin' || currentUser.isSuperAdmin || currentUser.isOrgAdmin;
       if (!isAdmin) return [];
 
       return (notifications || [])
         .filter(n => {
+            const titleLower = (n.title || '').toLowerCase();
+            const msgLower = (typeof n.message === 'string' ? n.message : '').toLowerCase();
+
+            // 1. Excluir notificações de desfecho (aprovação / recusa / cancelamento já concluídos)
+            const isOutcome = 
+                titleLower.includes('aprovad') || 
+                titleLower.includes('recusad') || 
+                titleLower.includes('rejeitad') || 
+                titleLower.includes('cancelad') ||
+                msgLower.includes('foi aprovada') || 
+                msgLower.includes('foi recusada') || 
+                msgLower.includes('recusada pelos') ||
+                msgLower.includes('recusada por');
+
+            if (isOutcome) return false;
+
             const isJoinType = n.type === 'join_request' || 
-                               n.title?.toLowerCase().includes('solicita') || 
-                               n.title?.toLowerCase().includes('novo integrante') ||
-                               (typeof n.message === 'string' && (n.message.includes('solicitou entrada') || n.message.includes('entrou diretamente')));
+                               titleLower.includes('solicita') || 
+                               titleLower.includes('novo integrante') ||
+                               msgLower.includes('solicitou entrada') ||
+                               msgLower.includes('entrou diretamente');
             const hasJoinData = typeof n.actionLink === 'string' && (n.actionLink.includes('"userId"') || n.actionLink.includes('join'));
             const nMinId = n.ministryId || (n as any).ministry_id;
             
@@ -263,6 +289,20 @@ export const MembersScreen: React.FC<Props> = ({
         .map(n => {
             try {
                 const parsed = parseNotificationDetails(n);
+
+                // 2. REGRA COM CONSULTA: Se o membro já faz parte da equipe deste ministério, NUNCA exibir em solicitações
+                const reqUserId = parsed.userId;
+                const reqEmail = parsed.userEmail ? parsed.userEmail.toLowerCase().trim() : '';
+                const reqName = parsed.userName ? parsed.userName.toLowerCase().trim() : '';
+
+                const alreadyInMinistry = members.some(m => {
+                    if (reqUserId && m.id === reqUserId) return true;
+                    if (reqEmail && m.email && m.email.toLowerCase().trim() === reqEmail) return true;
+                    if (reqName && reqName.length >= 3 && m.name && m.name.toLowerCase().trim() === reqName) return true;
+                    return false;
+                });
+
+                if (alreadyInMinistry) return null;
 
                 return {
                     id: n.id,
@@ -281,7 +321,7 @@ export const MembersScreen: React.FC<Props> = ({
             }
         })
         .filter(Boolean) as any[];
-  }, [notifications, currentUser.ministryId, currentUser.access_role, currentUser.isSuperAdmin, currentUser.isOrgAdmin]);
+  }, [notifications, currentUser.ministryId, currentUser.access_role, currentUser.isSuperAdmin, currentUser.isOrgAdmin, members]);
 
   // Resolução inteligente de perfis para cada solicitação
   useEffect(() => {
@@ -341,6 +381,29 @@ export const MembersScreen: React.FC<Props> = ({
     }
   }, [joinRequests, orgCandidates]);
 
+  // Lista visível final: oculta solicitações dispensadas ou cujos perfis já estejam integrados à equipe
+  const visibleRequests = useMemo(() => {
+    return joinRequests.filter(req => {
+      if (dismissedRequestIds.includes(req.id)) return false;
+
+      // Resolução inteligente: se o perfil resolvido ou manual já faz parte dos membros, oculta imediatamente
+      const resolved = resolvedProfiles[req.id];
+      const manualId = manualSelections[req.id];
+      const effectiveUid = manualId || req.userId || resolved?.userId;
+      const effectiveEmail = (resolved?.email || req.userEmail || '').toLowerCase().trim();
+      const effectiveName = (resolved?.name || req.userName || '').toLowerCase().trim();
+
+      const alreadyInMinistry = members.some(m => {
+        if (effectiveUid && m.id === effectiveUid) return true;
+        if (effectiveEmail && m.email && m.email.toLowerCase().trim() === effectiveEmail) return true;
+        if (effectiveName && effectiveName.length >= 3 && m.name && m.name.toLowerCase().trim() === effectiveName) return true;
+        return false;
+      });
+
+      return !alreadyInMinistry;
+    });
+  }, [joinRequests, dismissedRequestIds, resolvedProfiles, manualSelections, members]);
+
   const handleApproveJoin = async (req: any) => {
     setApprovingId(req.id);
     try {
@@ -368,6 +431,9 @@ export const MembersScreen: React.FC<Props> = ({
         return;
       }
 
+      // Otimista: remove imediatamente da lista na interface para não ficar travado na tela
+      setDismissedRequestIds(prev => [...prev, req.id]);
+
       await onApproveJoin?.(req.id, targetUserId, req.roles, req.ministryId);
     } catch (e: any) {
       console.error('[MembersScreen] Erro ao aprovar solicitação:', e);
@@ -380,6 +446,9 @@ export const MembersScreen: React.FC<Props> = ({
   const handleRejectJoin = async (req: any) => {
     setApprovingId(req.id);
     try {
+      // Otimista: remove imediatamente da lista na interface
+      setDismissedRequestIds(prev => [...prev, req.id]);
+
       await onRejectJoin?.(req.id, req.userId || '', req.ministryId);
     } catch (e: any) {
       console.error('[MembersScreen] Erro ao recusar solicitação:', e);
@@ -562,13 +631,13 @@ export const MembersScreen: React.FC<Props> = ({
         {activeTab === 'members' && (
         <div id="panel-members" role="tabpanel">
 
-        {joinRequests.length > 0 && (
+        {visibleRequests.length > 0 && (
             <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30 rounded-2xl p-6 mb-8 shadow-sm animate-fade-in">
                 <div className="flex items-center justify-between gap-2 mb-4">
                     <div className="flex items-center gap-2">
                         <UserPlus className="text-amber-600 dark:text-amber-400" size={20}/>
                         <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
-                            Solicitações de Entrada ({joinRequests.length})
+                            Solicitações de Entrada ({visibleRequests.length})
                         </h3>
                     </div>
                     <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">
@@ -576,7 +645,7 @@ export const MembersScreen: React.FC<Props> = ({
                     </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {joinRequests.map((req: any) => {
+                    {visibleRequests.map((req: any) => {
                         const isOtherMinistry = req.ministryId && req.ministryId !== currentUser.ministryId;
                         const isProcessing = approvingId === req.id;
                         const manualId = manualSelections[req.id];

@@ -732,10 +732,44 @@ const InnerApp = () => {
 
   const pendingJoinRequestsCount = useMemo(() => {
     if (!isAdmin || !notifications) return 0;
-    return notifications.filter(
-      (n) => n.type === "join_request" || n.title?.toLowerCase().includes("solicita") || (typeof n.message === "string" && n.message.includes("solicitou entrada"))
-    ).length;
-  }, [isAdmin, notifications]);
+    return notifications.filter((n) => {
+      const titleLower = (n.title || "").toLowerCase();
+      const msgLower = (typeof n.message === "string" ? n.message : "").toLowerCase();
+
+      // Excluir desfechos (aprovação, recusa, cancelamento)
+      const isOutcome =
+        titleLower.includes("aprovad") ||
+        titleLower.includes("recusad") ||
+        titleLower.includes("rejeitad") ||
+        titleLower.includes("cancelad") ||
+        msgLower.includes("foi aprovada") ||
+        msgLower.includes("foi recusada") ||
+        msgLower.includes("recusada pelos") ||
+        msgLower.includes("recusada por");
+
+      if (isOutcome) return false;
+
+      const isCandidate =
+        n.type === "join_request" ||
+        titleLower.includes("solicita") ||
+        titleLower.includes("novo integrante") ||
+        msgLower.includes("solicitou entrada") ||
+        msgLower.includes("entrou diretamente");
+
+      if (!isCandidate) return false;
+
+      // Excluir membros que já estão na equipe pública (publicMembers)
+      const targetUid = n.targetUserId || (n as any).target_user_id;
+      const alreadyMember = (publicMembers || []).some((m) => {
+        if (targetUid && m.id === targetUid) return true;
+        if (m.email && msgLower.includes(m.email.toLowerCase())) return true;
+        if (m.name && m.name.length >= 3 && msgLower.includes(m.name.toLowerCase())) return true;
+        return false;
+      });
+
+      return !alreadyMember;
+    }).length;
+  }, [isAdmin, notifications, publicMembers]);
 
   const RAW_MANAGEMENT_NAV = useMemo(
     () => [

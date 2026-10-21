@@ -590,11 +590,28 @@ export const DashboardLayout: React.FC<Props> = ({
                 {(() => {
                   const isAdmin = currentUser?.access_role === 'admin' || currentUser?.isSuperAdmin || currentUser?.isOrgAdmin;
                   if (!isAdmin || !notifications || currentTab === 'members') return null;
-                  const pendingCount = notifications.filter(
-                    n => n.type === 'join_request' || 
-                         n.title?.toLowerCase().includes('solicita') || 
-                         (typeof n.message === 'string' && n.message.includes('solicitou entrada'))
-                  ).length;
+                  const pendingCount = notifications.filter(n => {
+                    const titleLower = (n.title || '').toLowerCase();
+                    const msgLower = (typeof n.message === 'string' ? n.message : '').toLowerCase();
+
+                    const isOutcome = 
+                      titleLower.includes('aprovad') || 
+                      titleLower.includes('recusad') || 
+                      titleLower.includes('rejeitad') || 
+                      titleLower.includes('cancelad') ||
+                      msgLower.includes('foi aprovada') || 
+                      msgLower.includes('foi recusada') || 
+                      msgLower.includes('recusada pelos') ||
+                      msgLower.includes('recusada por');
+
+                    if (isOutcome) return false;
+
+                    return (
+                      n.type === 'join_request' || 
+                      titleLower.includes('solicita') || 
+                      (typeof n.message === 'string' && n.message.includes('solicitou entrada'))
+                    );
+                  }).length;
                   if (pendingCount === 0) return null;
                   return (
                     <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4 animate-slide-up shadow-sm">
