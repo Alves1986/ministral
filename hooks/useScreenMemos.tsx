@@ -190,11 +190,35 @@ export function useScreenMemos(props: ScreenMemosProps) {
     const canManage = isAdmin || isMinister;
     return (
     <>
-      {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="view" ministryId={ministryId} integrations={integrations} />}
-      {(currentTab === 'repertoire-manager' && canManage && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={activeUser!} mode="manage" ministryId={ministryId} integrations={integrations} />}
+      {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && (
+        <RepertoireScreen 
+          repertoire={repertoire} 
+          setRepertoire={async () => { refreshData(); }} 
+          currentUser={activeUser!} 
+          mode="view" 
+          ministryId={ministryId} 
+          integrations={integrations} 
+          events={events}
+          currentMonth={currentMonth}
+          onMonthChange={setCurrentMonth}
+        />
+      )}
+      {(currentTab === 'repertoire-manager' && canManage && safeEnabledTabs.includes('repertoire-manager')) && (
+        <RepertoireScreen 
+          repertoire={repertoire} 
+          setRepertoire={async () => { refreshData(); }} 
+          currentUser={activeUser!} 
+          mode="manage" 
+          ministryId={ministryId} 
+          integrations={integrations} 
+          events={events}
+          currentMonth={currentMonth}
+          onMonthChange={setCurrentMonth}
+        />
+      )}
     </>
     );
-  }, [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations]);
+  }, [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations, events, currentMonth, setCurrentMonth]);
 
   return { availabilityScreen, swapsScreen, announcementsScreen, repertoireScreen };
 }

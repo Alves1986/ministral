@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, AlignLeft, ListPlus, Clock, Sun, Moon } from 'lucide-react';
+import { 
+  Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, 
+  Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, 
+  FileText, AlignLeft, ListPlus, Clock, Sun, Moon, ChevronLeft, 
+  ChevronRight, Eye, EyeOff, Sparkles, Check, CheckCircle2
+} from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
@@ -10,6 +15,8 @@ import { searchCifraClub, getVagalumeLyrics } from '../services/cifraClubService
 import { ChordViewer } from './ChordViewer';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSystemLogo } from '../utils/branding';
+import { getLocalDateISOString, getMonthName, adjustMonth } from '../utils/dateUtils';
+import { generateEvents } from '../domain/events/generateEvents';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -19,9 +26,23 @@ interface Props {
   onItemAdd?: (title: string) => void;
   ministryId?: string | null;
   integrations?: any;
+  events?: any[];
+  currentMonth?: string;
+  onMonthChange?: (month: string) => void;
 }
 
-export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd, ministryId, integrations }) => {
+export const RepertoireScreen: React.FC<Props> = ({ 
+  repertoire, 
+  setRepertoire, 
+  currentUser, 
+  mode, 
+  onItemAdd, 
+  ministryId, 
+  integrations,
+  events = [],
+  currentMonth,
+  onMonthChange
+}) => {
   const { addToast, confirmAction } = useToast();
   const queryClient = useQueryClient();
   
@@ -35,12 +56,69 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   // Staging / Draft State
   const [draftItems, setDraftItems] = useState<{title: string, link: string, content?: string}[]>([]);
 
+  // Mês vigente e referências de data
+  const todayIso = useMemo(() => getLocalDateISOString(), []);
+  const realCurrentMonth = useMemo(() => todayIso.slice(0, 7), [todayIso]);
+  const viewMonth = currentMonth || realCurrentMonth;
+
+  const handlePrevMonth = () => {
+    if (onMonthChange) {
+      onMonthChange(adjustMonth(viewMonth, -1));
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (onMonthChange) {
+      onMonthChange(adjustMonth(viewMonth, 1));
+    }
+  };
+
+  const handleResetMonth = () => {
+    if (onMonthChange) {
+      onMonthChange(realCurrentMonth);
+    }
+  };
+
+  // Nomes de dias da semana em português
+  const WEEKDAY_NAMES_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const WEEKDAY_NAMES_FULL = [
+    'Domingo',
+    'Segunda-feira',
+    'Terça-feira',
+    'Quarta-feira',
+    'Quinta-feira',
+    'Sexta-feira',
+    'Sábado'
+  ];
+
+  // Helper para verificar se um culto já passou
+  const isEventPast = (dateStr: string, timeStr?: string | null): boolean => {
+    if (!dateStr) return false;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    if (dateStr < todayStr) return true;
+    if (dateStr > todayStr) return false;
+
+    if (timeStr) {
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const nowTimeStr = `${hours}:${minutes}`;
+      const cleanTime = timeStr.slice(0, 5);
+      return cleanTime < nowTimeStr;
+    }
+    return false;
+  };
+
   // Persist Date
   const [date, setDate] = useState(() => {
-      if (typeof window !== 'undefined') {
-          return localStorage.getItem('repertoire_draft_date') || "";
-      }
-      return "";
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('repertoire_draft_date') || "";
+    }
+    return "";
   });
 
   // Persist Culto Selection
@@ -58,6 +136,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     return "";
   });
 
+  // Controle de exibição dos cultos anteriores no seletor ("nem mostra" por padrão)
+  const [showPastCultos, setShowPastCultos] = useState(false);
+
+  // Filtro de listagem das playlists do repertório
+  const [playlistFilter, setPlaylistFilter] = useState<'upcoming' | 'all' | 'past'>('upcoming');
+
   const orgId = currentUser?.organizationId;
 
   // Buscar regras de cultos da organização/ministério
@@ -66,12 +150,17 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     queryFn: async () => {
       const sb = getSupabase();
       if (!sb || !orgId) return [];
-      const { data, error } = await sb
+      let query = sb
         .from('event_rules')
         .select('*')
         .eq('organization_id', orgId)
-        .eq('active', true)
-        .order('time', { ascending: true });
+        .eq('active', true);
+      
+      if (ministryId && ministryId.length === 36) {
+        query = query.eq('ministry_id', ministryId);
+      }
+      
+      const { data, error } = await query.order('time', { ascending: true });
       if (error) {
         console.warn('Erro ao carregar regras de culto:', error);
         return [];
@@ -82,91 +171,152 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     staleTime: 5 * 60 * 1000,
   });
 
-  // Dia da semana selecionado (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
-  const selectedWeekday = useMemo(() => {
-    if (!date) return -1;
-    const [y, m, d] = date.split('-').map(Number);
-    return new Date(y, m - 1, d).getDay();
-  }, [date]);
+  // Replicar os cultos existentes do calendário com precisão absoluta
+  const allCalendarCultos = useMemo(() => {
+    const cultosMap = new Map<string, {
+      key: string;
+      id: string;
+      ruleId?: string | null;
+      title: string;
+      date: string;
+      time: string;
+      iso: string;
+      weekday: number;
+      weekdayShort: string;
+      weekdayFull: string;
+      dateDisplay: string;
+      isPast: boolean;
+      isNext?: boolean;
+    }>();
 
-  // Formata o dia da semana em texto (ex: "Domingo", "Quarta-feira")
-  const weekdayName = useMemo(() => {
-    if (!date) return '';
-    const [y, m, d] = date.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString('pt-BR', { weekday: 'long' });
-  }, [date]);
+    const addEventItem = (e: any) => {
+      if (!e || !e.date || !e.title) return;
+      const ruleId = e.ruleId || (typeof e.id === 'string' && e.id.includes('|') ? e.id.split('|')[0] : null);
+      const time = e.time ? e.time.slice(0, 5) : '19:30';
+      const [y, m, d] = e.date.split('-').map(Number);
+      const dt = new Date(y, m - 1, d, 12, 0, 0);
+      const weekday = dt.getDay();
+      const weekdayShort = WEEKDAY_NAMES_SHORT[weekday];
+      const weekdayFull = WEEKDAY_NAMES_FULL[weekday];
+      const dateDisplay = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+      const isPast = isEventPast(e.date, time);
+      // Chave única para o culto específico naquele dia e horário
+      const key = `${e.date}_${ruleId || e.title.trim().toLowerCase()}_${time}`;
 
-  // Filtra as regras cadastradas que combinam com a data selecionada
-  const matchingRules = useMemo(() => {
-    if (!date || !eventRules.length) return [];
-    return eventRules.filter((r: any) => {
-      if (r.type === 'single' && r.date === date) return true;
-      if (r.type === 'weekly' && r.weekday === selectedWeekday) return true;
-      return false;
+      if (!cultosMap.has(key)) {
+        cultosMap.set(key, {
+          key,
+          id: e.id || key,
+          ruleId,
+          title: e.title,
+          date: e.date,
+          time,
+          iso: `${e.date}T${time}`,
+          weekday,
+          weekdayShort,
+          weekdayFull,
+          dateDisplay,
+          isPast,
+        });
+      }
+    };
+
+    // 1. Prioridade para os eventos reais sincronizados do calendário da aplicação (com exclusões aplicadas)
+    if (events && Array.isArray(events)) {
+      events.forEach(addEventItem);
+    }
+
+    // 2. Geração determinística de cultos a partir das regras cadastradas (cobre transição de meses)
+    if (eventRules && eventRules.length > 0) {
+      const prevMonthStr = adjustMonth(viewMonth, -1);
+      const nextMonthStr = adjustMonth(viewMonth, 2);
+      const gen = generateEvents(eventRules as any, `${prevMonthStr}-01`, `${nextMonthStr}-28`);
+      gen.forEach(addEventItem);
+    }
+
+    const sorted = Array.from(cultosMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
+
+    // Identificar determinísticamente o "Próximo Culto da Agenda Sempre"
+    let foundNext = false;
+    return sorted.map(c => {
+      if (!foundNext && !c.isPast) {
+        foundNext = true;
+        return { ...c, isNext: true };
+      }
+      return { ...c, isNext: false };
     });
-  }, [eventRules, date, selectedWeekday]);
+  }, [events, eventRules, viewMonth]);
 
-  // Presets inteligentes para quando não houver regras cadastradas ou para seleção rápida
-  const smartPresets = useMemo(() => {
-    if (!date) return [];
-    if (selectedWeekday === 0) {
-      return [
-        { key: 'dom_manha', title: 'Domingo - Manhã', time: '09:00', icon: '☀️' },
-        { key: 'dom_noite', title: 'Domingo - Noite', time: '18:00', icon: '🌙' },
-        { key: 'dom_noite_19', title: 'Domingo - Noite', time: '19:00', icon: '🌙' },
-        { key: 'dom_ebd', title: 'Escola Bíblica (EBD)', time: '09:30', icon: '📖' },
-      ];
-    } else if (selectedWeekday === 3) {
-      return [
-        { key: 'qua_noite', title: 'Culto de Quarta', time: '19:30', icon: '🙏' },
-      ];
-    } else if (selectedWeekday === 6) {
-      return [
-        { key: 'sab_jovens', title: 'Culto de Jovens', time: '19:30', icon: '🔥' },
-        { key: 'sab_tarde', title: 'Culto de Sábado', time: '18:00', icon: '✨' },
-      ];
+  // Próximo culto da agenda sempre
+  const nextCulto = useMemo(() => {
+    return allCalendarCultos.find(c => c.isNext) || allCalendarCultos.find(c => !c.isPast) || null;
+  }, [allCalendarCultos]);
+
+  // Cultos do mês vigente/exibido
+  const monthCultos = useMemo(() => {
+    return allCalendarCultos.filter(c => c.date.startsWith(viewMonth));
+  }, [allCalendarCultos, viewMonth]);
+
+  const upcomingMonthCultos = useMemo(() => {
+    return monthCultos.filter(c => !c.isPast);
+  }, [monthCultos]);
+
+  const pastMonthCultos = useMemo(() => {
+    return monthCultos.filter(c => c.isPast);
+  }, [monthCultos]);
+
+  // Pré-selecionar o próximo culto da agenda automaticamente se nada estiver selecionado ou se o item salvo não existir mais
+  useEffect(() => {
+    if (!selectedCultoKey && nextCulto) {
+      setSelectedCultoKey(nextCulto.key);
+      setDate(nextCulto.date);
+      localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
+      localStorage.setItem('repertoire_draft_date', nextCulto.date);
     }
-    return [
-      { key: 'culto_manha', title: 'Culto da Manhã', time: '09:00', icon: '☀️' },
-      { key: 'culto_tarde', title: 'Culto da Tarde', time: '15:00', icon: '🌤️' },
-      { key: 'culto_noite', title: 'Culto da Noite', time: '19:30', icon: '🌙' },
-    ];
-  }, [date, selectedWeekday]);
+  }, [selectedCultoKey, nextCulto]);
 
+  // Informações completas do culto selecionado
   const selectedCultoInfo = useMemo(() => {
-    if (!selectedCultoKey) {
-      return { id: null, title: '', time: '', isCustom: false };
-    }
     if (selectedCultoKey === 'custom') {
-      return { id: null, title: customCultoTitle.trim(), time: '', isCustom: true };
+      return {
+        id: null,
+        title: customCultoTitle.trim(),
+        time: '',
+        date: date,
+        isCustom: true,
+        culto: null
+      };
     }
-    if (selectedCultoKey.startsWith('rule_')) {
-      const ruleId = selectedCultoKey.replace('rule_', '');
-      const rule = eventRules.find((r: any) => r.id === ruleId);
-      if (rule) {
-        return {
-          id: rule.id,
-          title: rule.title,
-          time: rule.time ? rule.time.slice(0, 5) : '',
-          isCustom: false
-        };
-      }
+    const found = allCalendarCultos.find(c => c.key === selectedCultoKey);
+    if (found) {
+      return {
+        id: found.ruleId || null,
+        title: found.title,
+        time: found.time,
+        date: found.date,
+        isCustom: false,
+        culto: found
+      };
     }
-    if (selectedCultoKey.startsWith('preset_')) {
-      const presetKey = selectedCultoKey.replace('preset_', '');
-      const preset = smartPresets.find(p => p.key === presetKey);
-      if (preset) {
-        return {
-          id: null,
-          title: preset.title,
-          time: preset.time,
-          isCustom: false
-        };
-      }
-    }
-    return { id: null, title: '', time: '', isCustom: false };
-  }, [selectedCultoKey, customCultoTitle, eventRules, smartPresets]);
+    return { id: null, title: '', time: '', date: '', isCustom: false, culto: null };
+  }, [selectedCultoKey, customCultoTitle, allCalendarCultos, date]);
+
+  const handleSelectCulto = (cultoItem: any) => {
+    setSelectedCultoKey(cultoItem.key);
+    setDate(cultoItem.date);
+    localStorage.setItem('repertoire_draft_culto_key', cultoItem.key);
+    localStorage.setItem('repertoire_draft_date', cultoItem.date);
+  };
+
+  const handleDateChange = (val: string) => {
+    setDate(val);
+    localStorage.setItem('repertoire_draft_date', val);
+  };
+
+  const handleCustomCultoChange = (val: string) => {
+    setCustomCultoTitle(val);
+    localStorage.setItem('repertoire_draft_culto_custom', val);
+  };
 
   // Manual Form
   const [title, setTitle] = useState("");
@@ -197,188 +347,171 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   // Init
   useEffect(() => {
-      const checkConnection = () => {
-          const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
-          if (justConnected || isUserLoggedIn()) {
-              if (justConnected) {
-                  localStorage.removeItem('spotify_just_connected');
-                  addToast("Spotify conectado com sucesso!", "success");
-              }
-              setIsSpotifyLoggedIn(true);
-              setActiveTab('playlists');
-              loadUserProfile();
-          } else {
-              setIsSpotifyLoggedIn(false);
-              setSpotifyUser(null);
-          }
-      };
+    const checkConnection = () => {
+      const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
+      if (justConnected || isUserLoggedIn()) {
+        if (justConnected) {
+          localStorage.removeItem('spotify_just_connected');
+          addToast("Spotify conectado com sucesso!", "success");
+        }
+        setIsSpotifyLoggedIn(true);
+        setActiveTab('playlists');
+        loadUserProfile();
+      } else {
+        setIsSpotifyLoggedIn(false);
+        setSpotifyUser(null);
+      }
+    };
 
-      checkConnection();
+    checkConnection();
 
-      // Monitora o login feito em outra aba/janela
-      const onStorage = (e: StorageEvent) => {
-          if (e.key === 'spotify_just_connected' && e.newValue === 'true') {
-              checkConnection();
-          }
-      };
-      
-      window.addEventListener('storage', onStorage);
-      return () => window.removeEventListener('storage', onStorage);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'spotify_just_connected' && e.newValue === 'true') {
+        checkConnection();
+      }
+    };
+    
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const handleDateChange = (val: string) => {
-      setDate(val);
-      localStorage.setItem('repertoire_draft_date', val);
-  };
-
-  const handleCultoKeyChange = (val: string) => {
-      setSelectedCultoKey(val);
-      localStorage.setItem('repertoire_draft_culto_key', val);
-  };
-
-  const handleCustomCultoChange = (val: string) => {
-      setCustomCultoTitle(val);
-      localStorage.setItem('repertoire_draft_culto_custom', val);
-  };
-
   const loadUserProfile = async () => {
-      const profile = await getUserProfile();
-      if (profile) {
-          setSpotifyUser(profile);
-          setIsSpotifyLoggedIn(true);
-      } else {
-          // Curar estado de conexão travada caso o token seja inválido/expirado
-          logoutSpotify();
-          setIsSpotifyLoggedIn(false);
-          setSpotifyUser(null);
-          setUserPlaylists([]);
-          setPlaylistTracks([]);
-          setSelectedPlaylist(null);
-      }
+    const profile = await getUserProfile();
+    if (profile) {
+      setSpotifyUser(profile);
+      setIsSpotifyLoggedIn(true);
+    } else {
+      logoutSpotify();
+      setIsSpotifyLoggedIn(false);
+      setSpotifyUser(null);
+      setUserPlaylists([]);
+      setPlaylistTracks([]);
+      setSelectedPlaylist(null);
+    }
   };
 
   const handleSpotifyLogin = async () => {
-      if (!ministryId) {
-          addToast("Erro: ID do ministério não encontrado.", "error");
-          return;
+    if (!ministryId) {
+      addToast("Erro: ID do ministério não encontrado.", "error");
+      return;
+    }
+    if (date) localStorage.setItem('repertoire_draft_date', date);
+    localStorage.setItem('spotify_login_origin_tab', mode === 'manage' ? 'repertoire-manager' : 'repertoire');
+    try {
+      const url = await getLoginUrl(integrations?.spotifyClientId);
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
       }
-      if(date) localStorage.setItem('repertoire_draft_date', date);
-      localStorage.setItem('spotify_login_origin_tab', mode === 'manage' ? 'repertoire-manager' : 'repertoire');
-      try {
-          const url = await getLoginUrl(integrations?.spotifyClientId);
-          if (url) {
-              window.open(url, '_blank');
-          } else {
-              addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
-          }
-      } catch (err) {
-          addToast("Erro ao carregar link de conexão com o Spotify.", "error");
-      }
+    } catch (err) {
+      addToast("Erro ao carregar link de conexão com o Spotify.", "error");
+    }
   };
 
   const handleLoadPlaylists = async () => {
-      setIsLoadingPlaylists(true);
-      try {
-          const playlists = await getUserPlaylists();
-          setUserPlaylists(playlists);
-      } catch (e: any) {
-          addToast(e.message || "Erro ao carregar playlists.", "error");
-      }
-      setIsLoadingPlaylists(false);
+    setIsLoadingPlaylists(true);
+    try {
+      const playlists = await getUserPlaylists();
+      setUserPlaylists(playlists);
+    } catch (e: any) {
+      addToast(e.message || "Erro ao carregar playlists.", "error");
+    }
+    setIsLoadingPlaylists(false);
   };
 
   const handleOpenPlaylist = async (playlist: any) => {
-      setSelectedPlaylist(playlist);
-      setIsLoadingPlaylists(true);
-      try {
-          const tracks = await getPlaylistTracks(playlist.id);
-          setPlaylistTracks(tracks);
-      } catch (e: any) {
-          addToast(e.message || "Erro ao carregar faixas.", "error");
-      }
-      setIsLoadingPlaylists(false);
+    setSelectedPlaylist(playlist);
+    setIsLoadingPlaylists(true);
+    try {
+      const tracks = await getPlaylistTracks(playlist.id);
+      setPlaylistTracks(tracks);
+    } catch (e: any) {
+      addToast(e.message || "Erro ao carregar faixas.", "error");
+    }
+    setIsLoadingPlaylists(false);
   };
 
   const handleSpotifySearch = async () => {
-      if (!spotifyQuery.trim() || !ministryId) return;
-      setSpotifyLoading(true);
-      try {
-          const results = await searchSpotifyTracks(spotifyQuery, integrations?.spotifyClientId, integrations?.spotifyClientSecret);
-          setSpotifyResults(results);
-          if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
-      } catch (e: any) {
-          addToast(e.message || "Erro ao buscar no Spotify.", "error");
-      } finally {
-          setSpotifyLoading(false);
-      }
+    if (!spotifyQuery.trim() || !ministryId) return;
+    setSpotifyLoading(true);
+    try {
+      const results = await searchSpotifyTracks(spotifyQuery, integrations?.spotifyClientId, integrations?.spotifyClientSecret);
+      setSpotifyResults(results);
+      if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
+    } catch (e: any) {
+      addToast(e.message || "Erro ao buscar no Spotify.", "error");
+    } finally {
+      setSpotifyLoading(false);
+    }
   };
 
   const handleYouTubeSearch = async () => {
-      const query = youtubeQuery.trim();
-      if (!query) return;
-      const isPlaylist = !!extractPlaylistId(query);
-      setYoutubeLoading(true);
-      try {
-          const results = await searchYouTubeVideos(query);
-          setYoutubeResults(results);
-          if (results.length === 0) {
-              addToast(isPlaylist ? "Nenhum vídeo localizado nesta playlist do YouTube." : "Nenhum vídeo encontrado.", "warning");
-          } else if (isPlaylist) {
-              addToast(`Playlist carregada com sucesso! ${results.length} louvor(es) encontrado(s).`, "success");
-          }
-      } catch (e: any) {
-          addToast(e.message || "Erro ao buscar no YouTube.", "error");
-      } finally {
-          setYoutubeLoading(false);
+    const query = youtubeQuery.trim();
+    if (!query) return;
+    const isPlaylist = !!extractPlaylistId(query);
+    setYoutubeLoading(true);
+    try {
+      const results = await searchYouTubeVideos(query);
+      setYoutubeResults(results);
+      if (results.length === 0) {
+        addToast(isPlaylist ? "Nenhum vídeo localizado nesta playlist do YouTube." : "Nenhum vídeo encontrado.", "warning");
+      } else if (isPlaylist) {
+        addToast(`Playlist carregada com sucesso! ${results.length} louvor(es) encontrado(s).`, "success");
       }
+    } catch (e: any) {
+      addToast(e.message || "Erro ao buscar no YouTube.", "error");
+    } finally {
+      setYoutubeLoading(false);
+    }
   };
 
   const handleAddAllYouTubeToDraft = () => {
-      if (youtubeResults.length === 0) return;
-      let addedCount = 0;
-      setDraftItems(prev => {
-          const existing = new Set(prev.map(i => i.title.toLowerCase().trim()));
-          const next = [...prev];
-          for (const v of youtubeResults) {
-              if (v.title && !existing.has(v.title.toLowerCase().trim())) {
-                  next.push({
-                      title: v.title,
-                      link: v.link,
-                      content: ''
-                  });
-                  existing.add(v.title.toLowerCase().trim());
-                  addedCount++;
-              }
-          }
-          return next;
-      });
-      if (addedCount > 0) {
-          addToast(`${addedCount} músicas da playlist adicionadas à seleção!`, 'success');
-      } else {
-          addToast("Todas as músicas desta lista já foram adicionadas.", "info");
+    if (youtubeResults.length === 0) return;
+    let addedCount = 0;
+    setDraftItems(prev => {
+      const existing = new Set(prev.map(i => i.title.toLowerCase().trim()));
+      const next = [...prev];
+      for (const v of youtubeResults) {
+        if (v.title && !existing.has(v.title.toLowerCase().trim())) {
+          next.push({
+            title: v.title,
+            link: v.link,
+            content: ''
+          });
+          existing.add(v.title.toLowerCase().trim());
+          addedCount++;
+        }
       }
+      return next;
+    });
+    if (addedCount > 0) {
+      addToast(`${addedCount} músicas da playlist adicionadas à seleção!`, 'success');
+    } else {
+      addToast("Todas as músicas desta lista já foram adicionadas.", "info");
+    }
   };
 
   const handleCifraSearch = async () => {
-      if (!cifraQuery.trim()) return;
-      setCifraLoading(true);
-      const results = await searchCifraClub(cifraQuery);
-      setCifraResults(results);
-      setCifraLoading(false);
-      if (results.length === 0) addToast("Nenhum resultado encontrado no Vagalume.", "warning");
+    if (!cifraQuery.trim()) return;
+    setCifraLoading(true);
+    const results = await searchCifraClub(cifraQuery);
+    setCifraResults(results);
+    setCifraLoading(false);
+    if (results.length === 0) addToast("Nenhum resultado encontrado no Vagalume.", "warning");
   };
 
   const handleAddVagalumeToDraft = async (result: any, idx: number) => {
-      setAddingToDraftId(`vagalume-${idx}`);
-      try {
-          const lyrics = await getVagalumeLyrics(result.artist, result.title, result.url);
-          const overrideTitle = result.title + (result.key && result.key !== '-' ? ` (${result.key})` : '');
-          handleAddToDraft(overrideTitle, result.url, lyrics);
-      } catch (err) {
-          addToast("Erro ao buscar letra.", "error");
-      } finally {
-          setAddingToDraftId(null);
-      }
+    setAddingToDraftId(`vagalume-${idx}`);
+    try {
+      const lyrics = await getVagalumeLyrics(result.artist, result.title, result.url);
+      const overrideTitle = result.title + (result.key && result.key !== '-' ? ` (${result.key})` : '');
+      handleAddToDraft(overrideTitle, result.url, lyrics);
+    } catch (err) {
+      addToast("Erro ao buscar letra.", "error");
+    } finally {
+      setAddingToDraftId(null);
+    }
   };
 
   const handleAddToDraft = (overrideTitle?: string, overrideLink?: string, overrideContent?: string) => {
@@ -387,13 +520,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     const finalContent = overrideContent || content;
 
     if (!finalTitle) {
-        addToast("O título da música é obrigatório.", "error");
-        return;
+      addToast("O título da música é obrigatório.", "error");
+      return;
     }
 
     if (draftItems.some(i => i.title === finalTitle)) {
-        addToast("Essa música já está na lista de envio.", "warning");
-        return;
+      addToast("Essa música já está na lista de envio.", "warning");
+      return;
     }
 
     setDraftItems(prev => [...prev, { title: finalTitle, link: finalLink, content: finalContent }]);
@@ -402,29 +535,29 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const handleRemoveFromDraft = (idx: number) => {
-      setDraftItems(prev => prev.filter((_, i) => i !== idx));
+    setDraftItems(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleCommitDraft = async () => {
     if (!date) {
-        addToast("Selecione a Data do Culto antes de salvar!", "warning");
-        dateInputRef.current?.focus();
-        dateInputRef.current?.classList.add('ring-4', 'ring-red-500');
-        setTimeout(() => dateInputRef.current?.classList.remove('ring-4', 'ring-red-500'), 2000);
-        return;
+      addToast("Selecione o Culto antes de salvar!", "warning");
+      cultoSelectRef.current?.focus();
+      cultoSelectRef.current?.classList.add('ring-4', 'ring-red-500');
+      setTimeout(() => cultoSelectRef.current?.classList.remove('ring-4', 'ring-red-500'), 2000);
+      return;
     }
 
     if (!selectedCultoInfo.title) {
-        addToast("Selecione o Culto / Horário antes de salvar!", "warning");
-        cultoSelectRef.current?.focus();
-        cultoSelectRef.current?.classList.add('ring-4', 'ring-red-500');
-        setTimeout(() => cultoSelectRef.current?.classList.remove('ring-4', 'ring-red-500'), 2000);
-        return;
+      addToast("Selecione o Culto antes de salvar!", "warning");
+      cultoSelectRef.current?.focus();
+      cultoSelectRef.current?.classList.add('ring-4', 'ring-red-500');
+      setTimeout(() => cultoSelectRef.current?.classList.remove('ring-4', 'ring-red-500'), 2000);
+      return;
     }
 
     if (!ministryId || !orgId) {
-        addToast("Erro: Ministério ou Organização não identificados.", "error");
-        return;
+      addToast("Erro: Ministério ou Organização não identificados.", "error");
+      return;
     }
 
     setIsSubmitting(true);
@@ -438,94 +571,93 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     
     // Optimistic update
     const newItems: RepertoireItem[] = draftItems.map(item => ({
-        id: `temp-${Date.now()}-${crypto.randomUUID().split('-')[0]}`,
-        title: item.title,
-        link: item.link,
-        date,
-        addedBy: currentUser?.name || 'Admin',
-        createdAt: new Date().toISOString(),
-        content: item.content,
-        eventRuleId,
-        eventRuleTitle: cultoTitle,
-        eventRuleTime: cultoTime,
-        observation: observation || null
+      id: `temp-${Date.now()}-${crypto.randomUUID().split('-')[0]}`,
+      title: item.title,
+      link: item.link,
+      date,
+      addedBy: currentUser?.name || 'Admin',
+      createdAt: new Date().toISOString(),
+      content: item.content,
+      eventRuleId,
+      eventRuleTitle: cultoTitle,
+      eventRuleTime: cultoTime,
+      observation: observation || null
     }));
     queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
-        if (!old) return old;
-        return [...old, ...newItems];
+      if (!old) return old;
+      return [...old, ...newItems];
     });
 
     for (const item of draftItems) {
-        try {
-            const success = await addToRepertoire(ministryId, orgId, {
-                title: item.title,
-                link: item.link,
-                date,
-                addedBy: currentUser?.name || 'Admin',
-                content: item.content,
-                eventRuleId,
-                observation
-            });
-            if (success) successCount++;
-        } catch (err: any) {
-            console.error("Erro ao adicionar:", err);
-            lastErrorMsg = err?.message || err?.details || JSON.stringify(err);
-        }
+      try {
+        const success = await addToRepertoire(ministryId, orgId, {
+          title: item.title,
+          link: item.link,
+          date,
+          addedBy: currentUser?.name || 'Admin',
+          content: item.content,
+          eventRuleId,
+          observation
+        });
+        if (success) successCount++;
+      } catch (err: any) {
+        console.error("Erro ao adicionar:", err);
+        lastErrorMsg = err?.message || err?.details || JSON.stringify(err);
+      }
     }
 
     if (successCount > 0) {
-        if (onItemAdd) onItemAdd(`${successCount} músicas`);
-        await setRepertoire([]); 
-        setDraftItems([]); 
-        addToast(`${successCount} músicas salvas no repertório!`, "success");
+      if (onItemAdd) onItemAdd(`${successCount} músicas`);
+      await setRepertoire([]); 
+      setDraftItems([]); 
+      addToast(`${successCount} músicas salvas no repertório!`, "success");
 
-        if (ministryId) {
-            const dateFormatted = date?.split('-').reverse().join('/');
-            const cultoSuffix = cultoTitle ? ` (${cultoTitle}${cultoTime ? ` ${cultoTime}` : ''})` : '';
-            try {
-                await sendNotificationSQL(ministryId, orgId, {
-                    title: "Novo Repertório",
-                    message: `${successCount} músicas adicionadas para o culto de ${dateFormatted}${cultoSuffix}.`,
-                    type: 'info',
-                    actionLink: 'repertoire'
-                });
-            } catch (err) {
-                console.error("Erro ao enviar notificação de repertório:", err);
-            }
+      if (ministryId) {
+        const dateFormatted = date?.split('-').reverse().join('/');
+        const cultoSuffix = cultoTitle ? ` (${cultoTitle}${cultoTime ? ` ${cultoTime}` : ''})` : '';
+        try {
+          await sendNotificationSQL(ministryId, orgId, {
+            title: "Novo Repertório",
+            message: `${successCount} músicas adicionadas para o culto de ${dateFormatted}${cultoSuffix}.`,
+            type: 'info',
+            actionLink: 'repertoire'
+          });
+        } catch (err) {
+          console.error("Erro ao enviar notificação de repertório:", err);
         }
+      }
     } else {
-        addToast(`Erro ao salvar: ${lastErrorMsg}`, "error");
-        await setRepertoire([]); // Revert optimistic update
+      addToast(`Erro ao salvar: ${lastErrorMsg}`, "error");
+      await setRepertoire([]); // Revert optimistic update
     }
     setIsSubmitting(false);
   };
 
   const handleDelete = (id: string) => {
-      if (!orgId) {
-          console.error("Organization ID missing");
-          return;
-      }
-      confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
-          // Optimistic update
-          queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
-              if (!old) return old;
-              return old.filter((item: any) => item.id !== id);
-          });
-          
-          await deleteFromRepertoire(id, orgId);
-          await setRepertoire([]); 
-          addToast("Item removido.", "success");
+    if (!orgId) {
+      console.error("Organization ID missing");
+      return;
+    }
+    confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
+      queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
+        if (!old) return old;
+        return old.filter((item: any) => item.id !== id);
       });
+      
+      await deleteFromRepertoire(id, orgId);
+      await setRepertoire([]); 
+      addToast("Item removido.", "success");
+    });
   };
 
   const handleSaveChordPreference = async (newKey: string, newContent: string) => {
-      if (selectedChordItem && orgId) {
-          await updateRepertoireItem(selectedChordItem.id, orgId, { content: newContent, key: newKey });
-          // No need to refresh full list instantly, keeps UI smooth
-          addToast("Cifra atualizada!", "success");
-      }
+    if (selectedChordItem && orgId) {
+      await updateRepertoireItem(selectedChordItem.id, orgId, { content: newContent, key: newKey });
+      addToast("Cifra atualizada!", "success");
+    }
   };
 
+  // Agrupamento de repertório com indicação de Próximo Culto e status de Culto Passado
   const groupedRepertoire = useMemo(() => {
     const groupsMap = new Map<string, {
       groupKey: string;
@@ -534,6 +666,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       cultoTitle: string;
       cultoTime?: string | null;
       items: RepertoireItem[];
+      isPast: boolean;
+      isNext: boolean;
     }>();
 
     for (const item of repertoire) {
@@ -558,13 +692,21 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       const groupKey = `${itemDate}_${ruleId || displayTitle.toLowerCase().trim()}_${displayTime}`;
 
       if (!groupsMap.has(groupKey)) {
+        const isPast = isEventPast(itemDate, displayTime);
+        const isNext = !!nextCulto && itemDate === nextCulto.date && (
+          (ruleId && ruleId === nextCulto.ruleId) ||
+          displayTitle.toLowerCase().trim() === nextCulto.title.toLowerCase().trim()
+        );
+
         groupsMap.set(groupKey, {
           groupKey,
           date: itemDate,
           eventRuleId: item.eventRuleId || null,
           cultoTitle: displayTitle,
           cultoTime: displayTime,
-          items: []
+          items: [],
+          isPast,
+          isNext
         });
       }
 
@@ -572,24 +714,43 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     }
 
     return Array.from(groupsMap.values()).sort((a, b) => {
+      // 1. Próximo culto da agenda sempre ganha destaque no topo absoluto
+      if (a.isNext && !b.isNext) return -1;
+      if (!a.isNext && b.isNext) return 1;
+
+      // 2. Cultos futuros vêm antes dos cultos passados
+      if (!a.isPast && b.isPast) return -1;
+      if (a.isPast && !b.isPast) return 1;
+
+      // 3. Entre futuros: cronológico crescente (mais próximo primeiro)
+      if (!a.isPast && !b.isPast) {
+        const dComp = a.date.localeCompare(b.date);
+        if (dComp !== 0) return dComp;
+        return (a.cultoTime || '').localeCompare(b.cultoTime || '');
+      }
+
+      // 4. Entre passados: mais recente primeiro (decrescente)
       const dateCompare = b.date.localeCompare(a.date);
       if (dateCompare !== 0) return dateCompare;
-
-      const getSortTime = (g: { cultoTitle: string; cultoTime?: string | null }) => {
-        if (g.cultoTime) return g.cultoTime;
-        const lower = g.cultoTitle.toLowerCase();
-        if (lower.includes('manh') || lower.includes('ebd')) return '09:00';
-        if (lower.includes('tarde')) return '15:00';
-        if (lower.includes('noite') || lower.includes('jovens')) return '19:00';
-        return '12:00';
-      };
-
-      return getSortTime(a).localeCompare(getSortTime(b));
+      return (b.cultoTime || '').localeCompare(a.cultoTime || '');
     });
-  }, [repertoire]);
+  }, [repertoire, nextCulto]);
+
+  // Lista filtrada para exibição conforme a aba selecionada
+  const filteredRepertoire = useMemo(() => {
+    if (playlistFilter === 'upcoming') {
+      // Mostra os próximos cultos e cultos vigentes do mês atual; cultos anteriores de outros meses são filtrados
+      return groupedRepertoire.filter(g => !g.isPast || g.date.startsWith(viewMonth));
+    }
+    if (playlistFilter === 'past') {
+      return groupedRepertoire.filter(g => g.isPast);
+    }
+    return groupedRepertoire;
+  }, [groupedRepertoire, playlistFilter, viewMonth]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
+      {/* Header com Navegador de Mês Vigente */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -597,18 +758,99 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             {mode === 'manage' ? 'Gerenciar Repertório' : 'Repertório Musical'}
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            {mode === 'manage' ? 'Selecione as músicas e envie para o repertório do culto.' : 'Lista de louvores integrados com a equipe de Louvor para os cultos e ensaios.'}
+            {mode === 'manage' ? 'Selecione o culto da agenda e monte o repertório oficial.' : 'Lista de louvores integrados com a equipe de Louvor para os cultos e ensaios.'}
           </p>
         </div>
+
+        {/* Mês Vigente & Navegação de Calendário */}
+        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 p-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-xs">
+          <button
+            onClick={handlePrevMonth}
+            title="Mês Anterior"
+            className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 transition-colors active:scale-95"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          
+          <div className="flex items-center gap-1.5 px-2">
+            <Calendar size={14} className="text-secondary" />
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 whitespace-nowrap">
+              {getMonthName(viewMonth)}
+            </span>
+            {viewMonth === realCurrentMonth && (
+              <span className="text-[10px] font-black uppercase tracking-wider bg-secondary/15 text-secondary px-1.5 py-0.5 rounded-md">
+                Mês Vigente
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={handleNextMonth}
+            title="Próximo Mês"
+            className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 transition-colors active:scale-95"
+          >
+            <ChevronRight size={16} />
+          </button>
+
+          {viewMonth !== realCurrentMonth && (
+            <button
+              onClick={handleResetMonth}
+              className="text-[10px] font-bold text-secondary hover:underline px-1.5 ml-1 border-l border-zinc-300 dark:border-zinc-600"
+            >
+              Mês Atual
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Banner de Destaque: PRÓXIMO CULTO DA AGENDA SEMPRE */}
+      {nextCulto && (
+        <div className="p-4 bg-gradient-to-r from-secondary/15 via-secondary/5 to-transparent border border-secondary/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-secondary text-white flex items-center justify-center font-bold shadow-md shadow-secondary/25 shrink-0">
+              <Sparkles size={22} className="animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black tracking-wider uppercase bg-secondary text-white px-2 py-0.5 rounded-full shadow-xs">
+                  ⭐ Próximo Culto da Agenda
+                </span>
+                <span className="text-xs font-bold text-secondary capitalize">
+                  {nextCulto.weekdayFull}
+                </span>
+              </div>
+              <h3 className="font-extrabold text-base text-zinc-900 dark:text-white mt-0.5">
+                {nextCulto.title}
+              </h3>
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 mt-0.5">
+                <Clock size={12} className="text-secondary" />
+                <span>{nextCulto.dateDisplay} às {nextCulto.time}</span>
+              </p>
+            </div>
+          </div>
+
+          {mode === 'manage' && (
+            <button
+              onClick={() => handleSelectCulto(nextCulto)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shrink-0 shadow-md ${selectedCultoKey === nextCulto.key ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20' : 'bg-secondary hover:bg-secondaryHover text-white shadow-secondary/25 active:scale-95'}`}
+            >
+              {selectedCultoKey === nextCulto.key ? <><Check size={14} /> Culto Selecionado</> : 'Selecionar Próximo Culto'}
+            </button>
+          )}
+        </div>
+      )}
 
       {mode === 'manage' && (
           <div className="flex flex-col lg:flex-row gap-6">
               <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in w-full overflow-hidden">
                   
-                  {/* Full Bleed Mobile Tabs */}
+                  {/* Tabs de Fontes de Músicas */}
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
+                      <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-accent border-accent bg-accent/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras / Letras</button>
+                      <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-[#1DB954] border-[#1DB954] bg-green-50 dark:bg-green-950/20' : 'text-zinc-500 border-transparent'}`}><Music size={14}/> Spotify</button>
+                      {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-secondary border-secondary bg-secondary/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Minhas Playlists</button>}
+                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-zinc-800 dark:text-zinc-200 border-zinc-800 dark:border-zinc-200' : 'text-zinc-500 border-transparent'}`}><Plus size={14}/> Manual</button>
                   </div>
 
                   {activeTab === 'spotify' && (
@@ -656,11 +898,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal max-w-md">
                                           Você pode buscar músicas públicas de imediato. Conecte sua conta do Spotify se quiser sincronizar e adicionar músicas de suas <strong>Playlists particulares</strong>.
                                       </p>
-                                      {typeof window !== 'undefined' && window.self !== window.top && (
-                                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1 bg-amber-500/10 p-2 rounded border border-amber-500/20 max-w-md leading-relaxed animate-pulse">
-                                              ⚠️ <strong>Aviso de Pré-visualização:</strong> No sandbox do estúdio, por favor clique no botão <strong>"Abrir em nova aba"</strong> no topo direito da tela antes de conectar seu Spotify para evitar que o navegador bloqueie o redirecionamento.
-                                          </p>
-                                      )}
                                   </div>
                                   <button 
                                       onClick={handleSpotifyLogin} 
@@ -701,7 +938,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                               </button>
                           </div>
 
-                          {/* Barra de resumo e adição em massa para Playlists e Múltiplos Vídeos */}
                           {youtubeResults.length > 0 && (
                               <div className="flex items-center justify-between p-2.5 bg-red-500/10 dark:bg-red-900/20 border border-red-500/20 rounded-xl">
                                   <div className="flex items-center gap-2 text-xs font-bold text-red-700 dark:text-red-400">
@@ -796,30 +1032,16 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   )}
               </div>
 
+              {/* Sidebar: Seletor de Culto Real do Calendário & Músicas Selecionadas */}
               <div className="w-full lg:w-80 bg-zinc-50 dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 h-fit sticky top-4 shadow-sm">
                   <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
                       <ListMusic size={14}/> Músicas Selecionadas
                   </h3>
 
-                  {/* Campo Data do Culto */}
-                  <div className="mb-3">
-                      <label className="text-[10px] uppercase text-zinc-500 dark:text-zinc-400 font-bold mb-1 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5"><Calendar size={12} className="text-secondary" /> Data do Culto</span>
-                          {weekdayName && <span className="text-[10px] text-secondary font-semibold capitalize">{weekdayName}</span>}
-                      </label>
-                      <input 
-                          ref={dateInputRef} 
-                          type="date" 
-                          value={date} 
-                          onChange={e => handleDateChange(e.target.value)} 
-                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
-                      />
-                  </div>
-
-                  {/* Campo Selecionar Culto / Horário */}
+                  {/* Campo Selecionar Culto do Calendário */}
                   <div className="mb-4">
                       <label className="text-[10px] uppercase text-zinc-500 dark:text-zinc-400 font-bold mb-1 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5"><Clock size={12} className="text-secondary" /> Culto / Horário</span>
+                          <span className="flex items-center gap-1.5"><Calendar size={12} className="text-secondary" /> Culto do Calendário</span>
                           {selectedCultoInfo.time && (
                               <span className="text-[10px] font-mono font-bold text-secondary bg-secondary/10 px-1.5 py-0.5 rounded">
                                   {selectedCultoInfo.time}
@@ -829,72 +1051,128 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <select
                           ref={cultoSelectRef}
                           value={selectedCultoKey}
-                          onChange={e => handleCultoKeyChange(e.target.value)}
-                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (val === 'custom') {
+                              setSelectedCultoKey('custom');
+                              localStorage.setItem('repertoire_draft_culto_key', 'custom');
+                            } else {
+                              const c = allCalendarCultos.find(item => item.key === val);
+                              if (c) handleSelectCulto(c);
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
                       >
                           <option value="">Selecione o Culto...</option>
 
-                          {matchingRules.length > 0 && (
-                              <optgroup label={`Cultos Agendados (${weekdayName || 'Data Selecionada'})`}>
-                                  {matchingRules.map((rule: any) => (
-                                      <option key={`rule_${rule.id}`} value={`rule_${rule.id}`}>
-                                          ⭐ {rule.title} {rule.time ? `(${rule.time.slice(0, 5)})` : ''}
-                                      </option>
-                                  ))}
+                          {/* Próximo Culto da Agenda Sempre no Topo */}
+                          {nextCulto && (
+                              <optgroup label="⭐ Próximo Culto da Agenda">
+                                  <option value={nextCulto.key}>
+                                      ⭐ [PRÓXIMO] {nextCulto.weekdayFull}, {nextCulto.dateDisplay} às {nextCulto.time} - {nextCulto.title}
+                                  </option>
                               </optgroup>
                           )}
 
-                          {smartPresets.length > 0 && (
-                              <optgroup label="Opções Rápidas (Manhã / Noite)">
-                                  {smartPresets.map(preset => (
-                                      <option key={`preset_${preset.key}`} value={`preset_${preset.key}`}>
-                                          {preset.icon} {preset.title} ({preset.time})
-                                      </option>
-                                  ))}
-                              </optgroup>
-                          )}
-
-                          {eventRules.filter((r: any) => !matchingRules.some((m: any) => m.id === r.id)).length > 0 && (
-                              <optgroup label="Outros Cultos Cadastrados">
-                                  {eventRules
-                                      .filter((r: any) => !matchingRules.some((m: any) => m.id === r.id))
-                                      .map((rule: any) => (
-                                          <option key={`rule_${rule.id}`} value={`rule_${rule.id}`}>
-                                              ⛪ {rule.title} {rule.time ? `(${rule.time.slice(0, 5)})` : ''}
+                          {/* Cultos Agendados do Mês Vigente */}
+                          {upcomingMonthCultos.filter(c => !nextCulto || c.key !== nextCulto.key).length > 0 && (
+                              <optgroup label={`📅 Cultos Agendados de ${getMonthName(viewMonth)}`}>
+                                  {upcomingMonthCultos
+                                      .filter(c => !nextCulto || c.key !== nextCulto.key)
+                                      .map(c => (
+                                          <option key={c.key} value={c.key}>
+                                              {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title}
                                           </option>
                                       ))}
                               </optgroup>
                           )}
 
-                          <optgroup label="Personalizado">
-                              <option value="custom">✏️ Outro (digitar nome)</option>
+                          {/* Cultos Anteriores (Exibidos apenas se showPastCultos for true, com estilo apagado/dimmed) */}
+                          {showPastCultos && pastMonthCultos.length > 0 && (
+                              <optgroup label="⏳ Cultos Anteriores do Mês (Já Realizados)">
+                                  {pastMonthCultos.map(c => (
+                                      <option key={c.key} value={c.key} className="text-zinc-400">
+                                          ⏳ {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title} (Realizado)
+                                      </option>
+                                  ))}
+                              </optgroup>
+                          )}
+
+                          {/* Opção para culto avulso se necessário */}
+                          <optgroup label="Outro">
+                              <option value="custom">✏️ Culto Avulso / Extra (Data personalizada)</option>
                           </optgroup>
                       </select>
 
+                      {/* Toggle para mostrar/ocultar cultos anteriores ("nem mostra" por padrão) */}
+                      {pastMonthCultos.length > 0 && (
+                          <div className="mt-1.5 flex justify-end">
+                              <button
+                                  type="button"
+                                  onClick={() => setShowPastCultos(prev => !prev)}
+                                  className="text-[10px] text-zinc-500 hover:text-secondary flex items-center gap-1 transition-colors"
+                              >
+                                  {showPastCultos ? <EyeOff size={11} /> : <Eye size={11} />}
+                                  <span>{showPastCultos ? 'Ocultar cultos anteriores' : `Ver cultos anteriores (${pastMonthCultos.length})`}</span>
+                              </button>
+                          </div>
+                      )}
+
+                      {/* Se for culto avulso/customizado, exibe os campos de título e data manual */}
                       {selectedCultoKey === 'custom' && (
-                          <input
-                              type="text"
-                              placeholder="Ex: Culto Especial, Vigília..."
-                              value={customCultoTitle}
-                              onChange={e => handleCustomCultoChange(e.target.value)}
-                              className="w-full mt-2 bg-white dark:bg-zinc-800 border border-secondary/50 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 animate-fade-in shadow-sm"
-                              autoFocus
-                          />
+                          <div className="mt-3 space-y-2 p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
+                              <div>
+                                  <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
+                                  <input
+                                      type="text"
+                                      placeholder="Ex: Culto de Vigília, Ensaio Geral..."
+                                      value={customCultoTitle}
+                                      onChange={e => handleCustomCultoChange(e.target.value)}
+                                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                      autoFocus
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data</label>
+                                  <input
+                                      ref={dateInputRef}
+                                      type="date"
+                                      value={date}
+                                      onChange={e => handleDateChange(e.target.value)}
+                                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                  />
+                              </div>
+                          </div>
                       )}
                   </div>
 
-                  {/* Prévia da playlist sendo montada */}
+                  {/* Prévia da playlist sendo montada com identificação de próximo culto / realizado */}
                   {date && selectedCultoInfo.title && (
-                      <div className="mb-4 p-2.5 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs flex items-center justify-between text-secondary">
-                          <div className="flex items-center gap-2 truncate">
-                              {selectedCultoInfo.title.toLowerCase().includes('manh') ? <Sun size={15}/> : selectedCultoInfo.title.toLowerCase().includes('noite') ? <Moon size={15}/> : <Music size={15}/>}
-                              <span className="font-bold truncate">{selectedCultoInfo.title}</span>
-                          </div>
-                          {selectedCultoInfo.time && (
-                              <span className="font-mono text-[11px] font-bold shrink-0 bg-white/70 dark:bg-zinc-800/80 px-1.5 py-0.5 rounded shadow-xs">
-                                  {selectedCultoInfo.time}
+                      <div className="mb-4 p-3 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs space-y-1">
+                          <div className="flex items-center justify-between text-secondary">
+                              <span className="font-extrabold truncate text-sm flex items-center gap-1.5">
+                                  {selectedCultoInfo.title.toLowerCase().includes('manh') ? <Sun size={15}/> : selectedCultoInfo.title.toLowerCase().includes('noite') ? <Moon size={15}/> : <Music size={15}/>}
+                                  {selectedCultoInfo.title}
                               </span>
-                          )}
+                              {selectedCultoInfo.time && (
+                                  <span className="font-mono text-[11px] font-bold bg-white/70 dark:bg-zinc-800/80 px-2 py-0.5 rounded shadow-xs">
+                                      {selectedCultoInfo.time}
+                                  </span>
+                              )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300 flex-wrap">
+                              <span className="font-semibold">{date.split('-').reverse().join('/')}</span>
+                              {selectedCultoInfo.culto?.isNext && (
+                                  <span className="text-[10px] font-black text-secondary bg-secondary/15 px-1.5 py-0.2 rounded-full">
+                                      ⭐ PRÓXIMO CULTO
+                                  </span>
+                              )}
+                              {selectedCultoInfo.culto?.isPast && (
+                                  <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full">
+                                      ⏳ Culto Realizado
+                                  </span>
+                              )}
+                          </div>
                       </div>
                   )}
 
@@ -930,30 +1208,74 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           </div>
       )}
 
-      {/* Listagem do Repertório Separada por Culto e Data */}
-      <div className="space-y-8 mt-8">
-          {groupedRepertoire.length === 0 ? (
+      {/* Listagem do Repertório com Filtros e Destaque Visual */}
+      <div className="space-y-6 mt-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-700 pb-3">
+              <div className="flex items-center gap-2">
+                  <ListMusic size={18} className="text-secondary" />
+                  <h3 className="text-base font-bold text-zinc-800 dark:text-white">
+                      Playlists de Culto
+                  </h3>
+              </div>
+
+              {/* Filtro: Próximos & Vigentes, Todos, Anteriores */}
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl text-xs">
+                  <button
+                      onClick={() => setPlaylistFilter('upcoming')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'upcoming' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                  >
+                      Próximos & Vigentes
+                  </button>
+                  <button
+                      onClick={() => setPlaylistFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'all' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                  >
+                      Todos ({groupedRepertoire.length})
+                  </button>
+                  <button
+                      onClick={() => setPlaylistFilter('past')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'past' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                  >
+                      Anteriores ({groupedRepertoire.filter(g => g.isPast).length})
+                  </button>
+              </div>
+          </div>
+
+          {filteredRepertoire.length === 0 ? (
               <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
                   <Music className="mx-auto mb-3 opacity-20" size={48}/>
-                  <p>Nenhum louvor cadastrado ainda.</p>
+                  <p>Nenhuma playlist encontrada para o filtro selecionado.</p>
               </div>
-          ) : groupedRepertoire.map(group => {
+          ) : filteredRepertoire.map(group => {
               const [y, m, d] = (group.date || '').split('-');
               const isMorning = group.cultoTitle.toLowerCase().includes('manh');
               const isNight = group.cultoTitle.toLowerCase().includes('noite');
 
               return (
-                  <div key={group.groupKey} className="animate-slide-up">
+                  <div 
+                      key={group.groupKey} 
+                      className={`animate-slide-up transition-all ${group.isNext ? 'p-1 rounded-2xl ring-2 ring-secondary/40 shadow-md' : ''} ${group.isPast ? 'opacity-65 grayscale-[15%] hover:opacity-100 transition-opacity' : ''}`}
+                  >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 px-1 border-b border-zinc-100 dark:border-zinc-700 pb-2">
                           <div className="flex items-center gap-3 flex-wrap">
-                              <div className={`p-2 rounded-xl flex items-center justify-center shadow-xs ${isMorning ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-700/40' : isNight ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-700/40' : 'bg-secondary/10 dark:bg-secondary/20 text-secondary dark:text-white border border-secondary/20'}`}>
-                                  {isMorning ? <Sun size={18} /> : isNight ? <Moon size={18} /> : <Calendar size={18} />}
+                              <div className={`p-2 rounded-xl flex items-center justify-center shadow-xs ${group.isNext ? 'bg-secondary text-white shadow-md shadow-secondary/30' : isMorning ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-700/40' : isNight ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-700/40' : 'bg-secondary/10 dark:bg-secondary/20 text-secondary dark:text-white border border-secondary/20'}`}>
+                                  {group.isNext ? <Sparkles size={18} /> : isMorning ? <Sun size={18} /> : isNight ? <Moon size={18} /> : <Calendar size={18} />}
                               </div>
                               <div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                       <h3 className="font-bold text-zinc-800 dark:text-zinc-100 text-lg">
                                           {group.cultoTitle}
                                       </h3>
+                                      {group.isNext && (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-secondary text-white shadow-xs">
+                                              ⭐ PRÓXIMO CULTO
+                                          </span>
+                                      )}
+                                      {group.isPast && (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                                              ⏳ Realizado
+                                          </span>
+                                      )}
                                       {group.cultoTime && (
                                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-zinc-100 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-200 border border-zinc-200/60 dark:border-zinc-600">
                                               <Clock size={11} /> {group.cultoTime}
@@ -972,7 +1294,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           </div>
                       </div>
 
-                      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
+                      <div className={`rounded-xl border overflow-hidden shadow-sm ${group.isNext ? 'bg-white dark:bg-zinc-800 border-secondary/40' : group.isPast ? 'bg-zinc-50/70 dark:bg-zinc-900/40 border-dashed border-zinc-300 dark:border-zinc-700' : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700'}`}>
                           {group.items.map((item, idx) => (
                               <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== group.items.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
                                   <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => setSelectedChordItem(item)}>
