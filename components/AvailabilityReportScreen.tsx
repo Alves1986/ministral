@@ -42,7 +42,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("Todos");
-  const [statusFilter, setStatusFilter] = useState<'all' | 'absent' | 'free' | 'blocked' | 'pending'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'pending' | 'absent' | 'free' | 'blocked'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleManualRefresh = async () => {
@@ -120,10 +120,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     });
 
     const total = rawData.length;
+    const answered = rawData.filter(i => i.hasAnswered).length;
+    const pending = rawData.filter(i => !i.hasAnswered).length;
     const absent = rawData.filter(i => i.count > 0 && !i.isBlocked).length;
     const free = rawData.filter(i => i.isFreeMonth && !i.isBlocked && i.count === 0).length;
     const blocked = rawData.filter(i => i.isBlocked).length;
-    const pending = rawData.filter(i => !i.hasAnswered).length;
 
     const filtered = rawData
       .filter(item => {
@@ -131,10 +132,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         const matchesRole = selectedRole === "Todos" || item.ministry_functions.includes(selectedRole);
         const matchesStatus = 
           statusFilter === 'all' ||
+          (statusFilter === 'answered' && item.hasAnswered) ||
+          (statusFilter === 'pending' && !item.hasAnswered) ||
           (statusFilter === 'absent' && item.count > 0 && !item.isBlocked) ||
           (statusFilter === 'free' && item.isFreeMonth && !item.isBlocked && item.count === 0) ||
-          (statusFilter === 'blocked' && item.isBlocked) ||
-          (statusFilter === 'pending' && !item.hasAnswered);
+          (statusFilter === 'blocked' && item.isBlocked);
 
         return matchesSearch && matchesRole && matchesStatus;
       })
@@ -142,7 +144,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
     return {
       items: filtered,
-      stats: { total, absent, free, blocked, pending }
+      stats: { total, answered, pending, absent, free, blocked }
     };
   }, [registeredMembers, availability, availabilityNotes, currentMonth, membersMap, searchTerm, selectedRole, statusFilter]);
 
@@ -179,65 +181,50 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       </div>
 
       {/* CARDS DE RESUMO RÁPIDO */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           onClick={() => setStatusFilter('all')}
-          className={`p-3 rounded-xl border text-left transition-all ${
+          className={`p-4 rounded-2xl border text-left transition-all ${
             statusFilter === 'all'
-              ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-transparent shadow-sm'
+              ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-transparent shadow-md'
               : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">Total</span>
-          <span className="text-xl font-black">{stats.total}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider block opacity-75">Total de Membros</span>
+            <Users size={18} className="opacity-60" />
+          </div>
+          <span className="text-2xl font-black mt-1 block">{stats.total}</span>
         </button>
 
         <button
-          onClick={() => setStatusFilter('free')}
-          className={`p-3 rounded-xl border text-left transition-all ${
-            statusFilter === 'free'
-              ? 'bg-emerald-600 text-white border-transparent shadow-sm'
+          onClick={() => setStatusFilter('answered')}
+          className={`p-4 rounded-2xl border text-left transition-all ${
+            statusFilter === 'answered'
+              ? 'bg-emerald-600 text-white border-transparent shadow-md shadow-emerald-600/20'
               : 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 hover:border-emerald-400'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">Disponíveis</span>
-          <span className="text-xl font-black">{stats.free}</span>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('absent')}
-          className={`p-3 rounded-xl border text-left transition-all ${
-            statusFilter === 'absent'
-              ? 'bg-red-600 text-white border-transparent shadow-sm'
-              : 'bg-red-50/60 dark:bg-red-950/20 border-red-200 dark:border-red-800/40 text-red-800 dark:text-red-300 hover:border-red-400'
-          }`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">Com Ausências</span>
-          <span className="text-xl font-black">{stats.absent}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider block opacity-75">Já Apontou</span>
+            <CheckCircle2 size={18} className="opacity-80" />
+          </div>
+          <span className="text-2xl font-black mt-1 block">{stats.answered}</span>
         </button>
 
         <button
           onClick={() => setStatusFilter('pending')}
-          className={`p-3 rounded-xl border text-left transition-all ${
+          className={`p-4 rounded-2xl border text-left transition-all ${
             statusFilter === 'pending'
-              ? 'bg-amber-600 text-white border-transparent shadow-sm'
+              ? 'bg-amber-600 text-white border-transparent shadow-md shadow-amber-600/20'
               : 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 hover:border-amber-400'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">Não Apontou</span>
-          <span className="text-xl font-black">{stats.pending}</span>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('blocked')}
-          className={`col-span-2 sm:col-span-1 p-3 rounded-xl border text-left transition-all ${
-            statusFilter === 'blocked'
-              ? 'bg-zinc-700 text-white border-transparent shadow-sm'
-              : 'bg-zinc-100 dark:bg-zinc-800/70 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400'
-          }`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">Bloqueados</span>
-          <span className="text-xl font-black">{stats.blocked}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider block opacity-75">Não Apontou</span>
+            <Clock size={18} className="opacity-80" />
+          </div>
+          <span className="text-2xl font-black mt-1 block">{stats.pending}</span>
         </button>
       </div>
 
@@ -273,10 +260,8 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ministral-500 text-zinc-700 dark:text-zinc-200 font-medium"
           >
             <option value="all">Todas as Situações</option>
-            <option value="free">Disponíveis (Confirmados)</option>
-            <option value="absent">Com Ausências Apontadas</option>
+            <option value="answered">Já Realizou Apontamento</option>
             <option value="pending">Ainda Não Apontou (Pendente)</option>
-            <option value="blocked">Mês Bloqueado</option>
           </select>
         </div>
       </div>
