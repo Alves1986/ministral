@@ -1,5 +1,6 @@
 import { getSupabase } from "./client";
 import { notifySuperAdmins } from "./notifications";
+import { AuditAction, AUDIT_ACTION_LABELS } from "./audit";
 
 export const fetchOrganizationsWithStats = async () => {
   const sb = getSupabase();
@@ -346,3 +347,163 @@ export const deleteOrganizationMinistry = async (
     ? { success: false, message: error.message }
     : { success: true, message: "Removido" };
 };
+
+export interface SystemTelemetryLog {
+  id: string;
+  created_at: string;
+  organization_id: string;
+  ministry_id: string | null;
+  action: string;
+  actor_name: string;
+  details?: string;
+  status: string;
+  status_type: "success" | "warning" | "info" | "neutral";
+}
+
+export const fetchSystemTelemetry = async (): Promise<SystemTelemetryLog[]> => {
+  const sb = getSupabase();
+  if (!sb) return [];
+
+  // 1. Verificar privilégio de Super Admin
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return [];
+
+  const { data: profile } = await sb
+    .from("profiles")
+    .select("is_super_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile?.is_super_admin) {
+    console.error(
+      "[fetchSystemTelemetry] Acesso negado: Requer privilégios de Super Admin.",
+    );
+    return [];
+  }
+
+  const items: SystemTelemetryLog[] = [];
+
+  // 2. Buscar mapa de nomes de perfis para resolução rápida e resiliente
+  const { data: profilesData } = await sb
+    .from("profiles")
+    .select("id, name, email")
+    .limit(2000);
+
+  const profileMap = new Map<string, string>();
+  (profilesData || []).forEach((p: any) => {
+    if (p.id) {
+      profileMap.set(p.id, p.name || p.email?.split("@")[0] || "Membro");
+    }
+  });
+
+  // 3. Buscar escalas (schedule_assignments) - atividade operacional central
+  const { data: assignments } = await sb
+    .from("schedule_assignments")
+    .select(
+      `
+      id,
+      created_at,
+      organization_id,
+      ministry_id,
+      event_date,
+      role,
+      member_id,
+      confirmed,
+      profiles ( name )
+    `,
+    )
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  if (assignments) {
+    assignments.forEach((a: any) => {
+      const memberName =
+        profileMap.get(a.member_id) ||
+        (Array.isArray(a.profiles) ? a.profiles[0]?.name : a.profiles?.name) ||
+        (a.member_id ? "Membro escalado" : "—");
+
+      let actionName = "Escalação";
+      let status = a.confirmed ? "Confirmado" : "Escalado";
+      let statusType: "success" | "warning" | "info" | "neutral" = a.confirmed
+        ? "success"
+        : "info";
+
+      if (a.role === "__EVENT_EXCLUDED__") {
+        actionName = "Evento Ajustado / Excluído";
+        status = "Ajustado";
+        statusType = "warning";
+      } else if (a.role === "__PUBLISHED__") {
+        actionName = "Escala Publicada";
+        status = "Publicado";
+        statusType = "success";
+      } else if (a.role) {
+        actionName = `Escala: ${a.role}`;
+      }
+
+      items.push({
+        id: a.id,
+        created_at: a.created_at || a.event_date || new Date().toISOString(),
+        organization_id: a.organization_id,
+        ministry_id: a.ministry_id,
+        action: actionName,
+        actor_name: memberName,
+        details: a.event_date ? `Data do evento: ${a.event_date}` : undefined,
+        status,
+        status_type: statusType,
+      });
+    });
+  }
+
+  // 4. Buscar logs de auditoria administrativa (ministry_audit_logs)
+  const { data: auditLogs } = await sb
+    .from("ministry_audit_logs")
+    .select(
+      `
+      id,
+      created_at,
+      organization_id,
+      ministry_id,
+      actor_name,
+      action,
+      target_type,
+      target_name,
+      metadata
+    `,
+    )
+    .order("created_at", { ascending: false })
+    .limit(300);
+
+  if (auditLogs) {
+    auditLogs.forEach((audit: any) => {
+      const actionLabel =
+        AUDIT_ACTION_LABELS[audit.action as AuditAction] ||
+        audit.action ||
+        "Ação Administrativa";
+
+      items.push({
+        id: audit.id,
+        created_at: audit.created_at,
+        organization_id: audit.organization_id,
+        ministry_id: audit.ministry_id,
+        action: actionLabel,
+        actor_name: audit.actor_name || "Administrador",
+        details: audit.target_name
+          ? `${audit.target_type || "Alvo"}: ${audit.target_name}`
+          : undefined,
+        status: "Registrado",
+        status_type: "info",
+      });
+    });
+  }
+
+  // 5. Ordenar cronologicamente decrescente
+  items.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  return items;
+};
+

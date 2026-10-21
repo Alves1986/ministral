@@ -21,6 +21,47 @@ export interface Organization {
   access_locked?: boolean;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // AI Quotas & Control
+  ai_enabled?: boolean;
+  ai_tier?: "free" | "pro" | "enterprise" | "custom";
+  ai_weekly_limit?: number;
+  ai_bonus_credits?: number;
+  ai_allowed_models?: "basic" | "all";
+}
+
+export type AIPlanTier = "free" | "pro" | "enterprise" | "custom";
+
+export interface OrganizationAIQuotaConfig {
+  organizationId: string;
+  organizationName?: string;
+  enabled: boolean;
+  tier: AIPlanTier;
+  weeklyLimit: number;
+  bonusCredits: number;
+  allowedModels: "basic" | "all";
+  updatedAt?: string;
+}
+
+export interface OrganizationAIQuotaStatus extends OrganizationAIQuotaConfig {
+  usedThisWeek: number;
+  totalLimit: number;
+  percentUsed: number;
+  remaining: number;
+  isExceeded: boolean;
+  status: "normal" | "warning" | "exceeded" | "disabled";
+}
+
+export interface GlobalAIQuotaOverview {
+  totalOrganizations: number;
+  activeWithAI: number;
+  freeTierCount: number;
+  proTierCount: number;
+  enterpriseTierCount: number;
+  totalGlobalLimit: number;
+  totalGlobalUsedThisWeek: number;
+  globalPercentUsed: number;
+  exceededOrgsCount: number;
+  warningOrgsCount: number;
 }
 
 export interface MinistryDef {
@@ -186,13 +227,16 @@ export interface RepertoireItem {
   title: string;
   link: string;
   date: string;
-  observation?: string;
+  observation?: string | null;
   addedBy: string;
-  createdAt: string;
+  createdAt?: string;
   content?: string;
   key?: string;
   organizationId?: string;
   isFromWorship?: boolean;
+  eventRuleId?: string | null;
+  eventRuleTitle?: string | null;
+  eventRuleTime?: string | null;
 }
 
 export interface User {

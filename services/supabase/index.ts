@@ -11,3 +11,4 @@ export * from './admin';
 export * from './misc';
 export * from '../scheduleServiceV2';
 export * from './audit';
+export * from './aiQuotaService';

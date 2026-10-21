@@ -55,14 +55,19 @@ export const replicateRepertoireToProjectionAndDance = async (
 
         // Sincronizar para Projeção / Comunicação
         for (const targetMin of projectionMinistries) {
-            const { data: existing } = await sb
+            let query = sb
                 .from('repertoire_items')
                 .select('id')
                 .eq('organization_id', orgId)
                 .eq('ministry_id', targetMin.id)
                 .eq('date', item.date)
-                .eq('title', itemTitle)
-                .maybeSingle();
+                .eq('title', itemTitle);
+            
+            if (eventRuleId) {
+                query = query.eq('event_rule_id', eventRuleId);
+            }
+
+            const { data: existing } = await query.maybeSingle();
 
             if (!existing) {
                 await sb.from('repertoire_items').insert({
@@ -73,7 +78,7 @@ export const replicateRepertoireToProjectionAndDance = async (
                     date: item.date,
                     added_by: `${item.addedBy || 'Ministro de Louvor'} (Louvor)`,
                     content: item.content,
-                    observation: 'Sincronizado automaticamente da equipe de Louvor para Projeção',
+                    observation: item.observation || 'Sincronizado automaticamente da equipe de Louvor para Projeção',
                     event_rule_id: eventRuleId
                 });
 
@@ -88,14 +93,19 @@ export const replicateRepertoireToProjectionAndDance = async (
 
         // Sincronizar para Dança / Coreografia
         for (const targetDance of danceMinistries) {
-            const { data: existing } = await sb
+            let query = sb
                 .from('repertoire_items')
                 .select('id')
                 .eq('organization_id', orgId)
                 .eq('ministry_id', targetDance.id)
                 .eq('date', item.date)
-                .eq('title', itemTitle)
-                .maybeSingle();
+                .eq('title', itemTitle);
+            
+            if (eventRuleId) {
+                query = query.eq('event_rule_id', eventRuleId);
+            }
+
+            const { data: existing } = await query.maybeSingle();
 
             if (!existing) {
                 await sb.from('repertoire_items').insert({
@@ -106,7 +116,7 @@ export const replicateRepertoireToProjectionAndDance = async (
                     date: item.date,
                     added_by: `${item.addedBy || 'Ministro de Louvor'} (Louvor)`,
                     content: item.content,
-                    observation: 'Sincronizado automaticamente da equipe de Louvor para Dança',
+                    observation: item.observation || 'Sincronizado automaticamente da equipe de Louvor para Dança',
                     event_rule_id: eventRuleId
                 });
 
@@ -184,7 +194,7 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
 
     // 1. Buscar os itens do ministério atual
     const { data: ownItems } = await sb.from('repertoire_items')
-        .select('*')
+        .select('*, event_rules(id, title, time)')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .order('date', { ascending: false });
@@ -222,18 +232,18 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
             if (worshipIds.length > 0) {
                 const { data: worshipItems } = await sb
                     .from('repertoire_items')
-                    .select('*')
+                    .select('*, event_rules(id, title, time)')
                     .eq('organization_id', orgId)
                     .in('ministry_id', worshipIds)
                     .order('date', { ascending: false });
 
                 if (worshipItems && worshipItems.length > 0) {
                     const existingKeys = new Set(
-                        allRawItems.map((i: any) => `${(i.date || i.event_date || '').trim()}_${(i.title || '').trim().toLowerCase()}`)
+                        allRawItems.map((i: any) => `${(i.date || i.event_date || '').trim()}_${(i.event_rule_id || i.observation || '')}_${(i.title || '').trim().toLowerCase()}`)
                     );
 
                     for (const wItem of worshipItems) {
-                        const key = `${(wItem.date || wItem.event_date || '').trim()}_${(wItem.title || '').trim().toLowerCase()}`;
+                        const key = `${(wItem.date || wItem.event_date || '').trim()}_${(wItem.event_rule_id || wItem.observation || '')}_${(wItem.title || '').trim().toLowerCase()}`;
                         if (!existingKeys.has(key)) {
                             existingKeys.add(key);
                             allRawItems.push({
@@ -257,41 +267,64 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
         return dateB.localeCompare(dateA);
     });
         
-    return allRawItems.map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        link: r.link,
-        date: r.date || r.event_date,
-        observation: r.observation,
-        addedBy: r.added_by,
-        createdAt: r.created_at,
-        content: r.content,
-        key: r.key,
-        organizationId: r.organization_id,
-        isFromWorship: !!r.isFromWorship || (typeof r.observation === 'string' && r.observation.toLowerCase().includes('louvor'))
-    }));
+    return allRawItems.map((r: any) => {
+        const rule = Array.isArray(r.event_rules) ? r.event_rules[0] : r.event_rules;
+        
+        let cultoTitle = rule?.title || null;
+        let cultoTime = rule?.time ? rule.time.slice(0, 5) : null;
+        
+        if (!cultoTitle && typeof r.observation === 'string' && r.observation.startsWith('Culto: ')) {
+            const raw = r.observation.replace('Culto: ', '').trim();
+            const timeMatch = raw.match(/\((\d{2}:\d{2})\)$/);
+            if (timeMatch) {
+                cultoTime = timeMatch[1];
+                cultoTitle = raw.replace(/\s*\(\d{2}:\d{2}\)$/, '').trim();
+            } else {
+                cultoTitle = raw;
+            }
+        }
+
+        return {
+            id: r.id,
+            title: r.title,
+            link: r.link,
+            date: r.date || r.event_date,
+            observation: r.observation,
+            addedBy: r.added_by,
+            createdAt: r.created_at,
+            content: r.content,
+            key: r.key,
+            organizationId: r.organization_id,
+            isFromWorship: !!r.isFromWorship || (typeof r.observation === 'string' && r.observation.toLowerCase().includes('louvor')),
+            eventRuleId: r.event_rule_id || null,
+            eventRuleTitle: cultoTitle,
+            eventRuleTime: cultoTime
+        };
+    });
 };
 
 export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
     const sb = getSupabase();
     if (!sb) return false;
 
-    // Tenta resolver event_rule_id a partir de schedule_assignments na mesma data
-    let eventRuleId: string | null = null;
-    try {
-        const { data: ass } = await sb
-            .from('schedule_assignments')
-            .select('event_rule_id')
-            .eq('organization_id', orgId)
-            .eq('ministry_id', ministryId)
-            .eq('event_date', item.date)
-            .limit(1)
-            .maybeSingle();
-        if (ass?.event_rule_id) {
-            eventRuleId = ass.event_rule_id;
+    // Se eventRuleId foi fornecido diretamente, utilize-o; senão tenta resolver de schedule_assignments
+    let eventRuleId = item.eventRuleId || item.event_rule_id || null;
+    if (!eventRuleId) {
+        try {
+            const { data: ass } = await sb
+                .from('schedule_assignments')
+                .select('event_rule_id')
+                .eq('organization_id', orgId)
+                .eq('ministry_id', ministryId)
+                .eq('event_date', item.date)
+                .limit(1)
+                .maybeSingle();
+            if (ass?.event_rule_id) {
+                eventRuleId = ass.event_rule_id;
+            }
+        } catch (e) {
+            console.error("Erro ao resolver event_rule_id:", e);
         }
-    } catch (e) {
-        console.error("Erro ao resolver event_rule_id:", e);
     }
 
     const { error } = await sb.from('repertoire_items').insert({
@@ -302,6 +335,7 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
         date: item.date,
         added_by: item.addedBy ? item.addedBy.substring(0, 100) : 'Admin',
         content: item.content,
+        observation: item.observation || null,
         event_rule_id: eventRuleId
     });
 
@@ -331,7 +365,7 @@ export const deleteFromRepertoire = async (id: string, orgId: string) => {
     try {
         const { data: item } = await sb
             .from('repertoire_items')
-            .select('title, date, observation')
+            .select('title, date, observation, event_rule_id')
             .eq('id', id)
             .eq('organization_id', orgId)
             .maybeSingle();
@@ -340,12 +374,16 @@ export const deleteFromRepertoire = async (id: string, orgId: string) => {
 
         // Se foi um item original (não sincronizado), limpar também réplicas automáticas
         if (item && (!item.observation || !item.observation.includes('Sincronizado automaticamente'))) {
-            await sb.from('repertoire_items')
+            let delQuery = sb.from('repertoire_items')
                 .delete()
                 .eq('organization_id', orgId)
                 .eq('date', item.date)
                 .eq('title', item.title)
                 .ilike('observation', '%Sincronizado automaticamente%');
+            if (item.event_rule_id) {
+                delQuery = delQuery.eq('event_rule_id', item.event_rule_id);
+            }
+            await delQuery;
         }
     } catch (e) {
         await sb.from('repertoire_items').delete().eq('id', id).eq('organization_id', orgId);

@@ -1,4 +1,4 @@
-﻿// services/aiOrchestrator.ts
+// services/aiOrchestrator.ts
 // ─── Gemini API — nativa e otimizada ───────────────────────
 
 function getApiKey(): string {
@@ -364,6 +364,27 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
   let modelUsed = preferredModel || 'default';
 
   try {
+    const targetOrgId =
+      context?.organization_id ||
+      (typeof window !== 'undefined' ? localStorage.getItem('current_org_id') : undefined);
+
+    if (targetOrgId) {
+      try {
+        const { checkAIQuota } = await import('./supabase/aiQuotaService');
+        const quotaCheck = await checkAIQuota(targetOrgId);
+        if (!quotaCheck.allowed) {
+          throw new Error(quotaCheck.reason || 'Limite de uso da Inteligência Artificial atingido para esta organização.');
+        }
+      } catch (qErr: any) {
+        if (
+          qErr.message?.includes('Limite semanal') ||
+          qErr.message?.includes('desativado') ||
+          qErr.message?.includes('atingido')
+        ) {
+          throw qErr;
+        }
+      }
+    }
     if (typeof window !== 'undefined') {
     // Estamos no navegador: chamar nosso backend ao invés de ligar diretamente (esconde API Key)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -394,7 +415,18 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
         throw new Error(`Erro na API (${res.status}): ${text}`);
       }
     }
-    return res.json();
+    const jsonResult = await res.json();
+    if (targetOrgId) {
+      import('./supabase/aiQuotaService').then(({ recordAIRequestUsage }) => {
+        recordAIRequestUsage(targetOrgId, {
+          taskType: String(taskType),
+          modelUsed: preferredModel || 'default',
+          durationMs: Date.now() - startTime,
+          status: 'success'
+        });
+      }).catch(() => {});
+    }
+    return jsonResult;
   }
 
   if (taskType === AI_TASKS.SCALE_GENERATION) {

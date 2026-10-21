@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink, ArrowRightLeft, X } from 'lucide-react';
+import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink, ArrowRightLeft, X, Megaphone } from 'lucide-react';
 import { AppNotification } from '../types';
 import { markNotificationsReadSQL, clearAllNotificationsSQL, clearNotificationsSQL } from '../services/supabaseService';
 import { getSupabase } from '../services/supabase/client';
@@ -208,6 +208,14 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                                                 {isDifferent ? (
                                                     <span className="text-[9px] uppercase font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded flex items-center gap-1">
                                                         <ArrowRightLeft size={8} /> {n.ministryName || n.ministryId?.slice(0, 8).toUpperCase()}
+                                                    </span>
+                                                ) : !n.ministryId ? (
+                                                    <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border ${
+                                                        n.actionLink?.includes('admin')
+                                                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                                                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                                    }`}>
+                                                        <Megaphone size={8} /> {n.ministryName || 'Comunicado'}
                                                     </span>
                                                 ) : n.actionLink && (
                                                     <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />

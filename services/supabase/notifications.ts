@@ -27,6 +27,9 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     const validMinistryIds = (ministryIds || []).filter(Boolean);
     const orConditions: string[] = [];
 
+    // Comunicados Globais / Avisos da Organização (ministry_id nulo)
+    orConditions.push('ministry_id.is.null');
+
     if (validMinistryIds.length > 0) {
         const idsList = validMinistryIds.join(',');
         if (isAdmin) {
@@ -85,15 +88,17 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                 .select('*')
                 .eq('organization_id', orgId);
 
+            const retryOr: string[] = ['ministry_id.is.null'];
             if (validMinistryIds.length > 0) {
-                if (isAdmin) {
-                    retryQuery = retryQuery.or(`ministry_id.in.(${validMinistryIds.join(',')}),type.eq.join_request`);
-                } else {
-                    retryQuery = retryQuery.in('ministry_id', validMinistryIds);
-                }
-            } else if (isAdmin) {
-                retryQuery = retryQuery.eq('type', 'join_request');
+                retryOr.push(`ministry_id.in.(${validMinistryIds.join(',')})`);
             }
+            if (isAdmin) {
+                retryOr.push(`type.eq.join_request`);
+            }
+            if (userId && targetUserIdSupported) {
+                retryOr.push(`target_user_id.eq.${userId}`);
+            }
+            retryQuery = retryQuery.or(retryOr.join(','));
 
             const { data: retryData, error: retryErr } = await retryQuery
                 .order('created_at', { ascending: false })
@@ -102,7 +107,7 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
             if (!retryErr && retryData) {
                 globalNotifs = retryData.map((n: any) => ({
                     ...n,
-                    organization_ministries: { label: 'Aviso' }
+                    organization_ministries: { label: !n.ministry_id ? (n.action_link?.includes('admin') ? 'Aviso Admin' : 'Comunicado Geral') : 'Aviso' }
                 }));
             } else {
                 globalNotifs = [];
@@ -113,6 +118,14 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     }
 
     let finalNotifs = globalNotifs || [];
+
+    // Se o usuário não for administrador, filtra notificações restritas aos administradores
+    if (!isAdmin) {
+        finalNotifs = finalNotifs.filter((n: any) => 
+            n.action_link !== 'super-admin-message' && 
+            n.action_link !== 'super-admin-broadcast-admins'
+        );
+    }
         
     const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
@@ -146,10 +159,15 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         .filter((n: any) => !clearSet.has(n.id))
         .map((n: any) => {
             const m = Array.isArray(n.organization_ministries) ? n.organization_ministries[0] : n.organization_ministries;
+            const isGlobal = !n.ministry_id;
+            const globalLabel = n.action_link === 'super-admin-message' || n.action_link === 'super-admin-broadcast-admins'
+                ? 'Aviso Admin'
+                : 'Comunicado Geral';
+
             return {
                 id: n.id,
                 ministryId: n.ministry_id,
-                ministryName: m?.label,
+                ministryName: m?.label || (isGlobal ? globalLabel : undefined),
                 organizationId: n.organization_id,
                 title: n.title,
                 message: n.message,
@@ -548,25 +566,43 @@ export const fetchGlobalBroadcasts = async () => {
     const sb = getSupabase();
     if (!sb) return [];
     
-    const { data, error } = await sb.from('notifications')
-        .select('title, message, type, created_at')
-        .eq('action_link', 'super-admin-message')
+    try {
+        const { data, error } = await sb.from('notifications')
+            .select('title, message, type, created_at, action_link')
+            .or('action_link.eq.super-admin-message,action_link.eq.super-admin-broadcast-admins,action_link.eq.super-admin-broadcast-all,action_link.eq.super-admin-broadcast')
+            .order('created_at', { ascending: false })
+            .limit(300);
+            
+        if (!error && data && data.length > 0) {
+            const unique: any[] = [];
+            const seen = new Set();
+            for (const item of data) {
+                const key = `${item.title}-${item.message}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    unique.push(item);
+                }
+            }
+            return unique;
+        }
+    } catch {}
+
+    // Fallback: se action_link não filtrar, busca registros sem ministry_id
+    const { data: fallbackData } = await sb.from('notifications')
+        .select('title, message, type, created_at, action_link')
+        .is('ministry_id', null)
         .order('created_at', { ascending: false })
         .limit(300);
         
-    if (error || !data) return [];
-    
-    const unique = [];
+    const unique: any[] = [];
     const seen = new Set();
-    
-    for (const item of data) {
+    for (const item of fallbackData || []) {
         const key = `${item.title}-${item.message}`;
         if (!seen.has(key)) {
             seen.add(key);
             unique.push(item);
         }
     }
-    
     return unique;
 };
 
@@ -577,76 +613,136 @@ export const deleteGlobalBroadcast = async (title: string, message: string) => {
     const { error } = await sb.from('notifications')
         .delete()
         .eq('title', title)
-        .eq('message', message)
-        .eq('action_link', 'super-admin-message');
+        .eq('message', message);
         
     return { error };
 };
 
-export const notifyAllOrganizationAdmins = async (title: string, message: string, type: string = 'info') => {
+export type BroadcastTargetAudience = 'all' | 'admins';
+
+export const sendGlobalBroadcast = async (
+    title: string, 
+    message: string, 
+    type: string = 'info',
+    targetAudience: BroadcastTargetAudience = 'all'
+) => {
     const sb = getSupabase();
     if (!sb) return { error: new Error('Sem conexão com o banco.') };
 
-    // Busca todos os admins de organizações
-    const { data: admins, error: fetchError } = await sb
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('is_admin', true)
-      .not('organization_id', 'is', null);
+    const cleanRawMessage = stripHtml(message);
+    const isAdminsOnly = targetAudience === 'admins';
+    const actionLink = isAdminsOnly ? 'super-admin-broadcast-admins' : 'super-admin-broadcast-all';
 
-    if (fetchError) {
-        console.error("[Notifications] Erro ao buscar admins:", fetchError);
-        return { error: fetchError };
+    let targetProfiles: { id: string; organization_id?: string }[] = [];
+
+    if (isAdminsOnly) {
+        // Busca todos os administradores com organização vinculada
+        const { data: admins, error: fetchError } = await sb
+            .from('profiles')
+            .select('id, organization_id')
+            .eq('is_admin', true)
+            .not('organization_id', 'is', null);
+
+        if (fetchError) {
+            console.error("[Notifications] Erro ao buscar admins:", fetchError);
+            return { error: fetchError };
+        }
+        targetProfiles = admins || [];
+    } else {
+        // Busca todos os usuários com organização vinculada
+        const { data: allProfiles, error: fetchError } = await sb
+            .from('profiles')
+            .select('id, organization_id')
+            .not('organization_id', 'is', null);
+
+        if (fetchError) {
+            console.error("[Notifications] Erro ao buscar perfis:", fetchError);
+            return { error: fetchError };
+        }
+        targetProfiles = allProfiles || [];
     }
 
-    if (!admins || admins.length === 0) return { data: null, error: null };
+    if (!targetProfiles || targetProfiles.length === 0) {
+        if (isAdminsOnly) {
+            return { data: null, error: null };
+        }
+    }
 
-    // Agrupa org_ids únicos para inserir apenas UMA notificação por org
-    const orgIds = [...new Set(admins.map(a => a.organization_id))];
+    // Agrupa org_ids únicos
+    const profileOrgIds = targetProfiles
+        .map(p => p.organization_id)
+        .filter(Boolean) as string[];
 
-    // Monta notificações no painel (uma por organização, apenas admins verão pois ministry_id = nulo)
-    const cleanRawMessage = stripHtml(message);
+    let orgIds = [...new Set(profileOrgIds)];
+
+    // Se for para Geral, também garante que todas as organizações cadastradas no banco recebam
+    if (!isAdminsOnly) {
+        try {
+            const { data: orgs } = await sb.from('organizations').select('id');
+            if (orgs && orgs.length > 0) {
+                orgIds = [...new Set([...orgIds, ...orgs.map((o: any) => o.id)])];
+            }
+        } catch (e) {
+            console.warn('[Notifications] Erro ao buscar organizations:', e);
+        }
+    }
+
+    if (orgIds.length === 0) {
+        return { data: null, error: null };
+    }
+
+    // Monta notificações no painel (uma por organização, ministry_id = null para nível global/organização)
     const notificationsToInsert: any[] = orgIds.map(orgId => ({
         organization_id: orgId,
+        ministry_id: null,
         title,
         message: cleanRawMessage,
         type,
-        action_link: 'super-admin-message'
+        action_link: actionLink
     }));
 
-    if (notificationsToInsert.length > 0) {
-        // Dispara Web Push Notifications não-bloqueante para TODOS os admins (individualmente)
+    // Dispara Web Push Notifications não-bloqueante para os usuários alvos em lotes
+    const recipientUserIds = targetProfiles.map(p => p.id).filter(Boolean);
+    if (recipientUserIds.length > 0) {
         setTimeout(() => {
-            admins.forEach(admin => {
+            const batchSize = 50;
+            for (let i = 0; i < recipientUserIds.length; i += batchSize) {
+                const batch = recipientUserIds.slice(i, i + batchSize);
                 sb.functions.invoke('push-notification', {
                     body: {
-                        userId: admin.id,
-                        title: title,
+                        ministryId: 'global',
+                        userIds: batch,
+                        title,
                         message: cleanRawMessage,
-                        type: type,
-                        actionLink: 'super-admin-message'
+                        type,
+                        actionLink: 'dashboard'
                     }
-                }).catch((err) => { console.warn("[notifications] push-notification (super admin) falhou:", err); });
-            });
+                }).catch((err) => { 
+                    console.warn("[notifications] push-notification (super admin broadcast) falhou:", err); 
+                });
+            }
         }, 50);
-
-        // Insere em lotes 
-        const { data, error } = await sb.from('notifications').insert(notificationsToInsert);
-        if (error) {
-             // Fallback se action_link der erro
-             if(error.code === 'PGRST204' || error.message?.includes('action_link')) {
-                 const fallbackInserts = notificationsToInsert.map(n => {
-                     const copy = { ...n };
-                     delete copy.action_link;
-                     return copy;
-                 });
-                 return await sb.from('notifications').insert(fallbackInserts);
-             }
-             return { error };
-        }
-        return { data, error: null };
     }
-    return { data: null, error: null };
+
+    // Insere notificações in-app
+    const { data, error } = await sb.from('notifications').insert(notificationsToInsert);
+    if (error) {
+        // Fallback se action_link der erro
+        if (error.code === 'PGRST204' || error.message?.includes('action_link')) {
+            const fallbackInserts = notificationsToInsert.map(n => {
+                const copy = { ...n };
+                delete copy.action_link;
+                return copy;
+            });
+            return await sb.from('notifications').insert(fallbackInserts);
+        }
+        return { error };
+    }
+    return { data, error: null };
+};
+
+export const notifyAllOrganizationAdmins = async (title: string, message: string, type: string = 'info') => {
+    return sendGlobalBroadcast(title, message, type, 'admins');
 };
 
 export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {

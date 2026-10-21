@@ -3,6 +3,7 @@ import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
+import { markNotificationsReadSQL } from '../services/supabaseService';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { useSession } from '../context/SessionContext';
@@ -520,6 +521,71 @@ export const DashboardLayout: React.FC<Props> = ({
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:block print:p-0 p-4 lg:p-10 custom-scrollbar relative">
             <div className={`mx-auto w-full min-h-full print:min-h-0 print:pb-0 pb-32 ${currentTab === 'schedule-editor' ? 'max-w-full' : 'max-w-6xl'}`}>
+                {/* Banner de Comunicado Global / Manutenção do Sistema */}
+                {(() => {
+                  const unreadBroadcast = (notifications || []).find(
+                    n => !n.read && (!n.ministryId || n.actionLink?.startsWith('super-admin'))
+                  );
+                  if (!unreadBroadcast) return null;
+
+                  const isError = (unreadBroadcast.type as string) === 'error' || unreadBroadcast.type === 'alert';
+                  const isWarning = unreadBroadcast.type === 'warning';
+                  const isSuccess = unreadBroadcast.type === 'success';
+
+                  const badgeColor = isError
+                    ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                    : isWarning
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                      : isSuccess
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400';
+
+                  const iconBg = isError
+                    ? 'bg-red-500/20 text-red-600 dark:text-red-400'
+                    : isWarning
+                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                      : isSuccess
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-blue-500/20 text-blue-600 dark:text-blue-400';
+
+                  const handleDismiss = async () => {
+                    const updated = (notifications || []).map(n => n.id === unreadBroadcast.id ? { ...n, read: true } : n);
+                    onNotificationsUpdate(updated);
+                    if (currentUser?.id && currentUser?.organizationId) {
+                      await markNotificationsReadSQL([unreadBroadcast.id], currentUser.id, currentUser.organizationId);
+                    }
+                  };
+
+                  return (
+                    <div className={`mb-6 p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up shadow-sm ${badgeColor}`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${iconBg}`}>
+                          <Megaphone size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-black/10 dark:bg-white/10">
+                              {unreadBroadcast.actionLink?.includes('admin') ? 'Aviso para Administradores' : 'Comunicado do Sistema'}
+                            </span>
+                            <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                              {unreadBroadcast.title}
+                            </h4>
+                          </div>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                            {unreadBroadcast.message}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleDismiss}
+                        className="self-end sm:self-center px-4 py-2 bg-white/80 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 shrink-0 border border-black/10 dark:border-white/10 flex items-center gap-1.5"
+                      >
+                        <Check size={14} /> Entendi
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 {/* Banner de Solicitações de Entrada para Administradores */}
                 {(() => {
                   const isAdmin = currentUser?.access_role === 'admin' || currentUser?.isSuperAdmin || currentUser?.isOrgAdmin;

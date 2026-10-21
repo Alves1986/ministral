@@ -23,13 +23,16 @@ import {
   Wand2,
   ShieldAlert,
   Settings,
-  Megaphone
+  Megaphone,
+  Zap
 } from 'lucide-react';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
 import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL } from '../services/aiOrchestrator';
 import { generateAISchedule } from '../services/aiScheduleService';
+import { getOrganizationAIStatus } from '../services/supabase/aiQuotaService';
+import type { OrganizationAIQuotaStatus } from '../types';
 import { FeedbackState } from './ui';
 
 interface Props {
@@ -71,7 +74,24 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const { addToast } = useToast();
 
+  const [quotaStatus, setQuotaStatus] = useState<OrganizationAIQuotaStatus | null>(null);
+
+  const fetchQuota = async () => {
+    if (!orgId) return;
+    try {
+      const q = await getOrganizationAIStatus(orgId, orgName);
+      setQuotaStatus(q);
+    } catch (e) {
+      console.warn("Could not load AI quota:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuota();
+  }, [orgId, orgName]);
+
   const getAIContext = () => ({
+    organization_id: orgId,
     organization_name: orgName,
     ministry_name: ministryName,
     total_members: members.length,
@@ -638,6 +658,43 @@ export const AdvancedAIScreen: React.FC<Props> = ({
               Utilize nossa inteligência artificial orquestrada para gerir seu ministério.
               Análise de saúde, geração de escalas e comunicação automatizada.
             </p>
+
+            {quotaStatus && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-white/15">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md ${
+                  !quotaStatus.enabled
+                    ? 'bg-rose-500/25 text-rose-100 border border-rose-400/40'
+                    : quotaStatus.isExceeded
+                    ? 'bg-amber-500/30 text-amber-100 border border-amber-400/40'
+                    : 'bg-white/15 text-white border border-white/20'
+                }`}>
+                  <Zap size={13} className={quotaStatus.isExceeded ? 'text-amber-300' : 'text-emerald-300'} />
+                  <span>
+                    Plano IA: <strong>{quotaStatus.tier === 'free' ? 'Gratuito' : quotaStatus.tier === 'pro' ? 'Pro / Turbo' : quotaStatus.tier === 'enterprise' ? 'Enterprise' : 'Personalizado'}</strong>
+                  </span>
+                  <span className="opacity-40">•</span>
+                  <span>
+                    Consumo semanal: <strong>{quotaStatus.usedThisWeek}</strong> / {quotaStatus.tier === 'enterprise' ? '∞' : quotaStatus.totalLimit} ({quotaStatus.percentUsed}%)
+                  </span>
+                  {quotaStatus.bonusCredits > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-400/30 text-emerald-100 text-[10px] font-bold">
+                      +{quotaStatus.bonusCredits} bônus
+                    </span>
+                  )}
+                </div>
+
+                {!quotaStatus.enabled && (
+                  <span className="text-xs text-rose-200 font-medium">
+                    (IA desativada para a organização)
+                  </span>
+                )}
+                {quotaStatus.isExceeded && (
+                  <span className="text-xs text-amber-200 font-medium">
+                    (Limite semanal esgotado — renova segunda-feira)
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           
           {onMonthChange && (
@@ -814,6 +871,11 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                 </div>
                 
                 <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Selecione o Modelo de IA</label>
+                {quotaStatus?.allowedModels === 'basic' && (
+                  <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 text-xs rounded-xl border border-blue-200 dark:border-blue-800/40">
+                    Sua organização está no plano <strong>Gratuito (Básico)</strong>. Os modelos recomendados de alta velocidade e economia (Gemini Flash) estão habilitados. Para modelos de raciocínio profundo e OpenRouter, solicite o plano <strong>Pro / Turbo</strong> ao Administrador Global.
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(provider === 'gemini' ? AI_MODELS : OPENROUTER_MODELS).map(model => (
                     <button key={model.id} onClick={() => setSelectedModel(model.id)} aria-pressed={selectedModel === model.id} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
