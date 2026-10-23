@@ -44,13 +44,21 @@ export const useAppStore = create<AppState>((set) => ({
           return state; // Retorna estado anterior, rejeita atualização inválida
       }
 
-      // Se já existe um ID no store, não deixamos o ID do objeto user (que pode vir de uma sessão lenta) 
-      // sobrescrever um ID ativo em memória, a menos que o store esteja vazio.
+      // Valida se o ID existente no store é permitido para este usuário
       const currentId = state.ministryId;
       const incomingId = user.ministryId;
-      const newMinistryId = currentId || incomingId || '';
-      
-      if (newMinistryId) {
+      const allowed = user.allowedMinistries || [];
+
+      let newMinistryId = '';
+      if (currentId && (allowed.length === 0 || allowed.includes(currentId))) {
+          newMinistryId = currentId;
+      } else if (incomingId && (allowed.length === 0 || allowed.includes(incomingId))) {
+          newMinistryId = incomingId;
+      } else if (allowed.length > 0) {
+          newMinistryId = allowed[0];
+      }
+
+      if (newMinistryId && typeof window !== 'undefined') {
           localStorage.setItem('ministry_id', newMinistryId);
       }
 

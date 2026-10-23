@@ -195,8 +195,8 @@ export const EventDetailsModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100 max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100 max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="bg-zinc-50 dark:bg-zinc-900 p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-start">
                 <div>
@@ -210,7 +210,8 @@ export const EventDetailsModal: React.FC<Props> = ({
                 </button>
             </div>
             
-            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                <div className="space-y-6 overflow-y-auto custom-scrollbar">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
                 {/* Form Section */}
                 <div className="space-y-4">
                     <div className="space-y-1.5">
@@ -291,7 +292,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                     <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-700 flex items-center gap-2">
                         <User size={14}/> Equipe Escalada
                     </h3>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {expandedRoles.map(roleObj => {
                             // Prioridade: Dados do Banco (assignmentMap) > Props Schedule (Legacy)
                             const dbAssignment = getMemberForRole(roleObj);
@@ -339,7 +340,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                 </div>
 
                 {/* Playlist / Louvores do Culto */}
-                <div className="pt-2">
+                <div className="pt-2 lg:col-span-2">
                     <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-700">
                         <h3 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
                             <Music size={14} className="text-secondary" /> Repertório & Louvores do Culto
@@ -398,7 +399,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                 </div>
 
                 {/* Actions */}
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 lg:col-span-2">
                     {canEdit && (
                         <button 
                             onClick={() => onSave(event.id || '', event.iso, title, time, applyToAll)} 
@@ -425,6 +426,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                 </div>
             </div>
         </div>
+      </div>
     </div>
-  )
+  );
 }

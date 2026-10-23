@@ -1836,6 +1836,16 @@ const InnerApp = () => {
               return;
             }
 
+            // SEGURANÇA: Verificar se o usuário realmente tem acesso a este ministério
+            const isPlatformSuperAdmin = !!(activeUser?.isSuperAdmin && !activeUser?.organizationId);
+            const isAllowed = isPlatformSuperAdmin || (activeUser?.allowedMinistries || []).includes(id);
+
+            if (!isAllowed) {
+              addToast("Você não faz parte deste ministério.", "error");
+              setIsRefreshing(false);
+              return;
+            }
+
             try {
               // 1. Atualiza imediatamente o store com o novo ID para que localStorage e estado reflitam a escolha
               setMinistryId(id);
@@ -1865,16 +1875,12 @@ const InnerApp = () => {
                   ? "admin"
                   : "member";
 
-              const updatedAllowed = Array.from(
-                new Set([...(activeUser?.allowedMinistries || []), id])
-              );
-
-              // 6. Atualiza store LOCALMENTE com os dados do novo ministério
+              // 6. Atualiza store LOCALMENTE com os dados do novo ministério mantendo estritamente os ministérios permitidos reais
               setCurrentUser({
                 ...activeUser!,
                 ministryId: id,
                 ministry_functions: access.functions,
-                allowedMinistries: updatedAllowed,
+                allowedMinistries: activeUser!.allowedMinistries,
                 access_role: newRole,
               });
 

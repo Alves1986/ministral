@@ -322,6 +322,21 @@ export const deleteMember = async (ministryId: string, orgId: string, memberId: 
         .delete()
         .eq('ministry_id', ministryId)
         .eq('profile_id', memberId);
+
+    try {
+        const { data: profile } = await sb
+            .from('profiles')
+            .select('allowed_ministries')
+            .eq('id', memberId)
+            .maybeSingle();
+
+        if (profile && Array.isArray(profile.allowed_ministries)) {
+            const newMinistries = profile.allowed_ministries.filter((id: string) => id !== ministryId);
+            await sb.from('profiles').update({ allowed_ministries: newMinistries }).eq('id', memberId);
+        }
+    } catch (e) {
+        console.warn('[deleteMember] Erro ao sincronizar allowed_ministries do perfil:', e);
+    }
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {

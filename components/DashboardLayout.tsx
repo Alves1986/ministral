@@ -68,15 +68,14 @@ export const DashboardLayout: React.FC<Props> = ({
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
   const selectableMinistries = React.useMemo(() => {
-      if (currentUser?.isOrgAdmin || currentUser?.isSuperAdmin) {
-          const ids = new Set([
-              ...(currentUser?.allowedMinistries || []),
-              ...availableMinistries.map(m => m.id)
-          ]);
-          return Array.from(ids).filter(isValidMinistryId);
+      const allowed = new Set(currentUser?.allowedMinistries || []);
+      if (availableMinistries.length > 0) {
+          return availableMinistries
+              .filter(m => allowed.has(m.id) && isValidMinistryId(m.id))
+              .map(m => m.id);
       }
       return (currentUser?.allowedMinistries || []).filter(isValidMinistryId);
-  }, [currentUser?.allowedMinistries, currentUser?.isOrgAdmin, currentUser?.isSuperAdmin, availableMinistries]);
+  }, [currentUser?.allowedMinistries, availableMinistries]);
 
   useClickOutside(ministryMenuRef, () => {
       if (ministryMenuOpen) setMinistryMenuOpen(false);

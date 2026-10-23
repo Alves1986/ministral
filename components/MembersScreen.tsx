@@ -282,8 +282,8 @@ export const MembersScreen: React.FC<Props> = ({
             const hasJoinData = typeof n.actionLink === 'string' && (n.actionLink.includes('"userId"') || n.actionLink.includes('join'));
             const nMinId = n.ministryId || (n as any).ministry_id;
             
-            // Permite ver solicitações do ministério ativo ou (para administradores) de qualquer ministério da org
-            const matchesMinistry = !nMinId || nMinId === currentUser.ministryId || currentUser.isSuperAdmin || currentUser.isOrgAdmin;
+            // Permite ver solicitações apenas do ministério ativo
+            const matchesMinistry = !nMinId || nMinId === currentUser.ministryId;
             return (isJoinType || hasJoinData) && matchesMinistry;
         })
         .map(n => {
@@ -844,7 +844,7 @@ export const MembersScreen: React.FC<Props> = ({
                 const isExpanded = expandedCards[member.id] !== false; // expanded by default
 
                 return (
-                <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 sm:p-3.5 flex flex-col relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up h-full">
+                <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 sm:p-4 flex flex-row relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up h-full gap-4">
                     {/* Row 1: Avatar + Full Name + Expander */}
                     <div className="flex items-center gap-2.5">
                         <div className="relative shrink-0">

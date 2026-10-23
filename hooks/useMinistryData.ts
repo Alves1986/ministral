@@ -90,13 +90,12 @@ export function useMinistryData(
   const { setMinistryId, availableMinistries } = useAppStore();
 
   useEffect(() => {
-    // Evita verificações se o usuário for superadmin, orgAdmin ou se não houver ID válido
+    // Evita verificações se não houver ID válido ou se for Super Admin global sem organização vinculada
     if (
       !mid ||
       mid.length !== 36 ||
       !currentUser ||
-      currentUser.isSuperAdmin ||
-      currentUser.isOrgAdmin
+      (currentUser.isSuperAdmin && !currentUser.organizationId)
     )
       return;
 
@@ -104,22 +103,21 @@ export function useMinistryData(
       const hasAccess = currentUser.allowedMinistries.includes(mid);
 
       if (!hasAccess && currentUser.allowedMinistries.length > 0) {
-        // Pequeno delay para permitir que o Profile/Store sincronize durante trocas rápidas
+        // Redireciona para o primeiro ministério que o usuário tem acesso legítimo
         const timeout = setTimeout(() => {
-          // Re-checa o estado atualizado do store
           const currentAllowed = currentUser?.allowedMinistries;
           if (currentAllowed && !currentAllowed.includes(mid)) {
             console.warn(
-              `[useMinistryData] Acesso restrito ao ministério ${mid}. Redirecionando...`,
+              `[useMinistryData] Acesso restrito ao ministério ${mid}. Redirecionando para ministério permitido...`,
             );
             const fallback = currentAllowed[0];
             if (fallback) setMinistryId(fallback);
           }
-        }, 800);
+        }, 300);
         return () => clearTimeout(timeout);
       }
     }
-  }, [mid, currentUser?.id, currentUser?.allowedMinistries, currentUser?.isOrgAdmin, currentUser?.isSuperAdmin, setMinistryId]);
+  }, [mid, currentUser?.id, currentUser?.allowedMinistries, currentUser?.isSuperAdmin, currentUser?.organizationId, setMinistryId]);
 
   const foundMinistry = availableMinistries.find((m) => m.id === mid);
   const rawDisplayName = settingsQuery.data?.displayName;

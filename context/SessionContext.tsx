@@ -3,7 +3,8 @@ import React, { createContext, useContext, useEffect, useState, useRef, ReactNod
 import { 
     fetchUserAllowedMinistries, 
     fetchUserMinistryAccess,
-    fetchOrganizationDetails
+    fetchOrganizationDetails,
+    updateProfileMinistry
 } from '../services/supabaseService';
 import { getSupabase, setServiceOrgContext, clearServiceOrgContext } from '../services/supabase/client';
 import { useAppStore } from '../store/appStore';
@@ -315,16 +316,29 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             try {
 
-                const currentMinistryId = useAppStore.getState().ministryId;
-                if (profile.ministry_id && !currentMinistryId) {
-                    useAppStore.getState().setMinistryId(profile.ministry_id);
-                }
-
-                const isPrivileged = !!(profile.is_admin || profile.is_super_admin);
-                if (guessedMinistry && (allowedMinistries.includes(guessedMinistry) || isPrivileged)) {
+                if (guessedMinistry && allowedMinistries.includes(guessedMinistry)) {
                     activeMinistry = guessedMinistry;
                 } else if (allowedMinistries.length > 0) {
                     activeMinistry = allowedMinistries[0];
+                } else if (guessedMinistry && profile.is_super_admin && !orgId) {
+                    activeMinistry = guessedMinistry;
+                }
+
+                // Sincronizar store e localStorage se o ministério ativo divergir do cache
+                if (activeMinistry) {
+                    const storeMid = useAppStore.getState().ministryId;
+                    if (storeMid !== activeMinistry) {
+                        useAppStore.getState().setMinistryId(activeMinistry);
+                    }
+                    if (typeof window !== 'undefined' && localStorage.getItem('ministry_id') !== activeMinistry) {
+                        localStorage.setItem('ministry_id', activeMinistry);
+                    }
+                    // Se o profiles.ministry_id no banco divergir de um ministério permitido válido, sincroniza silenciosamente
+                    if (profile.ministry_id !== activeMinistry && allowedMinistries.includes(activeMinistry)) {
+                        updateProfileMinistry(profile.id, activeMinistry, orgId).catch((err) => {
+                            console.warn("[SessionProvider] Failed to sync profile ministry:", err);
+                        });
+                    }
                 }
 
                 if (activeMinistry) {
