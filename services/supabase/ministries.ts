@@ -91,36 +91,50 @@ export const fetchUserAllowedMinistries = async (
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
-  // Se o usuário for OrgAdmin ou SuperAdmin, tem permissão em todos os ministérios da organização
-  const { data: profile } = await sb
-    .from("profiles")
-    .select("is_admin, is_super_admin")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profile?.is_super_admin || profile?.is_admin) {
-    const { data: allMin } = await sb
-      .from("organization_ministries")
-      .select("id")
-      .eq("organization_id", orgId);
-    return allMin?.map((m: any) => m.id) || [];
-  }
-
+  // Buscar ministérios onde o usuário é membro na tabela canônica ministry_members
   const { data: members, error } = await sb
     .from("ministry_members")
     .select("ministry_id")
     .eq("profile_id", userId);
 
-  if (error) throw error;
-  if (!members || members.length === 0) return [];
+  if (error) {
+    console.error("[fetchUserAllowedMinistries] Erro ao buscar ministry_members:", error);
+  }
 
-  const ministryIds = members.map((m: any) => m.ministry_id);
+  const memberMinistryIds = (members || [])
+    .map((m: any) => m.ministry_id)
+    .filter(Boolean);
 
-  const { data: validMinistries } = await sb
+  let candidateIds = memberMinistryIds;
+
+  // Fallback seguro: apenas se o usuário não possuir nenhum registro em ministry_members
+  // (ex: usuários antigos ou pendentes de sincronização), consulta o perfil
+  if (candidateIds.length === 0) {
+    const { data: profile } = await sb
+      .from("profiles")
+      .select("allowed_ministries, ministry_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const profileAllowed = Array.isArray(profile?.allowed_ministries)
+      ? profile.allowed_ministries.filter(Boolean)
+      : [];
+    const profileMinId = profile?.ministry_id ? [profile.ministry_id] : [];
+    candidateIds = Array.from(new Set([...profileAllowed, ...profileMinId]));
+  }
+
+  if (candidateIds.length === 0) return [];
+
+  const { data: validMinistries, error: validError } = await sb
     .from("organization_ministries")
     .select("id")
     .eq("organization_id", orgId)
-    .in("id", ministryIds);
+    .in("id", candidateIds);
+
+  if (validError) {
+    console.error("[fetchUserAllowedMinistries] Erro ao validar organization_ministries:", validError);
+    return [];
+  }
 
   return validMinistries?.map((m: any) => m.id) || [];
 };
@@ -134,7 +148,7 @@ export const fetchMinistrySettings = async (
 
   const { data: ministryDef } = await sb
     .from("organization_ministries")
-    .select("label, availability_start, availability_end, enabled_tabs")
+    .select("label, availability_start, availability_end, enabled_tabs, reminder_hour")
     .eq("id", ministryId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -170,6 +184,7 @@ export const fetchMinistrySettings = async (
     roles: settings?.roles || [],
     availabilityStart: ministryDef?.availability_start,
     availabilityEnd: ministryDef?.availability_end,
+    reminderHour: ministryDef?.reminder_hour ?? 8,
     organizationId: orgId,
     spotifyClientId: settings?.spotify_client_id,
     spotifyClientSecret: settings?.spotify_client_secret,

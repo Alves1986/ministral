@@ -145,16 +145,14 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const { addToast } = useToast();
 
-  const toLocalInput = (isoString?: string) => {
+    const toLocalInput = (isoString?: string) => {
     if (!isoString) return "";
     if (isoString.includes("1970")) return "";
     const d = new Date(isoString);
     if (d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
     try {
-      const date = new Date(isoString);
-      const offset = date.getTimezoneOffset() * 60000;
-      const localTime = new Date(date.getTime() - offset);
-      return localTime.toISOString().slice(0, 16);
+      // Evita deslocamento de fuso: mantém o horário exatamente como salvo
+      return new Date(isoString).toISOString().slice(0, 16);
     } catch (e) {
       return "";
     }
@@ -162,7 +160,8 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const fromLocalInput = (localString: string) => {
     if (!localString) return "";
-    return new Date(localString).toISOString();
+    // Trata o valor do input como UTC para não haver deslocamento de fuso
+    return new Date(localString + "Z").toISOString();
   };
 
   const validateField = (field: 'ministryName' | 'availStart' | 'availEnd', value: string) => {

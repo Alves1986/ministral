@@ -70,6 +70,15 @@ serve(async (req: Request) => {
     webpush.setVapidDetails("mailto:admin@ministral.app", publicKey, privateKey);
 
     const today = localDate(-3); // fuso Brasília aproximado (UTC-3)
+    const nowBr = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
+    const currentHour = nowBr.getUTCHours();
+    const { data: minHourRows } = await supabase
+      .from("organization_ministries")
+      .select("id, reminder_hour");
+    const reminderHourByMinistry = new Map<string, number>(
+      (minHourRows || []).map((m: any) => [m.id, m.reminder_hour ?? 8])
+    );
+
     const summary: Record<string, number> = { scale_day: 0, window_open: 0, window_close: 0 };
 
     // ── 1. LEMBRETE DO DIA DA ESCALA ──
@@ -81,8 +90,10 @@ serve(async (req: Request) => {
       .neq("role", "__EVENT_EXCLUDED__");
 
     if (assignments && assignments.length > 0) {
-      for (const a of assignments) {
+       for (const a of assignments) {
         if (!a.member_id) continue;
+        const rh = reminderHourByMinistry.get(a.ministry_id) ?? 8;
+        if (rh !== currentHour) continue;
         const rule = Array.isArray(a.event_rules) ? a.event_rules[0] : a.event_rules;
         const title = rule?.title || "Evento";
         const time = rule?.time ? String(rule.time).slice(0, 5) : "";
@@ -140,7 +151,7 @@ serve(async (req: Request) => {
     // ── 2. JANELA DE DISPONIBILIDADE (abertura / fechamento) ──
     const { data: ministries } = await supabase
       .from("organization_ministries")
-      .select("id, organization_id, availability_start, availability_end");
+      .select("id, organization_id, availability_start, availability_end, reminder_hour");
 
     if (ministries && ministries.length > 0) {
       for (const m of ministries) {
