@@ -60,7 +60,7 @@ export const DashboardLayout: React.FC<Props> = ({
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   
   const isEffectivelyCollapsed = isDesktopCollapsed && !isSidebarHovered;

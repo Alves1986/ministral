@@ -230,6 +230,7 @@ export function useMinistryData(
       socialLinkUrl: settingsQuery.data?.socialLinkUrl,
       quickAccessItems: settingsQuery.data?.quickAccessItems,
       reminderHour: settingsQuery.data?.reminderHour ?? 8,
+      notificationSettings: settingsQuery.data?.notificationSettings,
     }),
     [settingsQuery.data],
   );

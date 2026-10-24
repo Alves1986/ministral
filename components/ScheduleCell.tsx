@@ -297,13 +297,13 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     };
 
     return (
-        <div className="relative w-full h-full min-h-[42px] flex items-center gap-1" ref={dropdownRef}>
+        <div className="relative w-full min-w-0 h-full min-h-[42px] flex items-center gap-1" ref={dropdownRef}>
             {/* Main Button Trigger */}
             <button
                 type="button"
                 onClick={() => !processing && setIsOpen(!isOpen)}
                 disabled={processing}
-                className={`schedule-cell button flex-1 hover:scale-[1.02] duration-200 h-full px-2 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
+                className={`schedule-cell button flex-1 min-w-0 overflow-hidden duration-200 h-full px-1 py-1.5 flex flex-col items-center justify-center text-sm transition-all rounded-xl border-2 
                     ${currentMember 
                         ? hasAnyAlert
                             ? 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-300 dark:border-red-800/50 hover:bg-red-100 dark:hover:bg-red-900/20'
@@ -314,23 +314,23 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                     ${isOpen ? 'ring-2 ring-secondary/20 border-secondary z-10' : ''}
                 `}
             >
-                <div className="flex items-center justify-between w-full">
+                <div className="flex items-center justify-between w-full min-w-0">
                     {currentMember ? (
-                        <div className="flex items-center gap-2 overflow-hidden flex-1">
-                            <Avatar name={currentMember.name} avatarUrl={currentMember.avatar_url} />
-                            <span className="truncate text-xs font-bold">{currentMember.name.split(' ')[0]}</span>
+                        <div className="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0" title={currentMember.name}>
+                            <Avatar name={currentMember.name} avatarUrl={currentMember.avatar_url} size="sm" />
+                            <span className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-100">{currentMember.name.split(' ')[0]}</span>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2 opacity-40 group-hover:opacity-60 transition-opacity flex-1">
-                            <div className="w-6 h-6 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600 flex items-center justify-center">
+                        <div className="flex items-center justify-center gap-1.5 opacity-40 group-hover:opacity-60 transition-opacity flex-1 min-w-0 overflow-hidden">
+                            <div className="w-5 h-5 shrink-0 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600 flex items-center justify-center">
                                 <User size={10} className="text-zinc-400" />
                             </div>
-                            <span className="text-[10px] font-black uppercase tracking-widest">Vazio</span>
+                            <span className="truncate text-[10px] font-black uppercase tracking-wider">Vazio</span>
                         </div>
                     )}
                     
-                    <div className="flex items-center gap-1 shrink-0 ml-1">
-                        <ChevronDown size={12} className={`opacity-50 transition-transform ${isOpen ? 'rotate-180 text-secondary dark:text-white' : ''} ${hasAnyAlert ? 'text-red-500' : ''}`} />
+                    <div className="flex items-center shrink-0 ml-0.5">
+                        <ChevronDown size={11} className={`opacity-40 transition-transform ${isOpen ? 'rotate-180 text-secondary dark:text-white' : ''} ${hasAnyAlert ? 'text-red-500' : ''}`} />
                     </div>
                 </div>
                 {currentMemberStatus === 'unavailable' && (

@@ -25,10 +25,24 @@ import {
   Building2,
   AlertCircle,
   Clock,
+  Bell,
+  CalendarCheck,
+  CalendarX,
+  CalendarRange,
+  Send,
 } from "lucide-react";
+
 import { useToast } from "./Toast";
 import { LegalModal, LegalDocType } from "./LegalDocuments";
-import { ThemeMode, Organization, MinistryDef } from "../types";
+import {
+  ThemeMode,
+  Organization,
+  MinistryDef,
+  NotificationSettings,
+  DEFAULT_NOTIFICATION_SETTINGS,
+} from "../types";
+export type { NotificationSettings };
+export { DEFAULT_NOTIFICATION_SETTINGS };
 import { sendNotificationSQL, getSupabase } from "../services/supabaseService";
 import { getSystemLogo } from "../utils/branding";
 
@@ -63,6 +77,7 @@ interface Props {
   onSaveGuidelines?: (guidelines: string) => Promise<void>;
   onSaveOrgLogo?: (file: File | null) => Promise<string | null>;
   onSaveReminderHour?: (hour: number) => Promise<void>;
+  onSaveNotificationSettings?: (settings: NotificationSettings) => Promise<void>;
   ministries?: MinistryDef[];
   isOrgAdmin?: boolean;
   onRefreshMinistries?: () => Promise<void>;
@@ -107,6 +122,7 @@ export const SettingsScreen: React.FC<Props> = ({
   onSaveGuidelines,
   onSaveOrgLogo,
   onSaveReminderHour,
+  onSaveNotificationSettings,
   ministries = [],
   events,
   isOrgAdmin = false,
@@ -139,8 +155,17 @@ export const SettingsScreen: React.FC<Props> = ({
     useState<NotificationPermission>("default");
   
   const [activeTab, setActiveTab] = useState<
-    "geral" | "admin" | "ministries"
+    "geral" | "admin" | "notif" | "ministries"
   >("geral");
+
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(() => {
+    const cfg = ministryConfig?.notificationSettings;
+    if (cfg && typeof cfg === "object") {
+      return { ...DEFAULT_NOTIFICATION_SETTINGS, ...cfg };
+    }
+    return { ...DEFAULT_NOTIFICATION_SETTINGS };
+  });
+  const [isSavingNotif, setIsSavingNotif] = useState(false);
 
   const [isNewMinistryModalOpen, setIsNewMinistryModalOpen] = useState(false);
   const [newMinistryData, setNewMinistryData] = useState<NewMinistryData>({
@@ -205,6 +230,34 @@ export const SettingsScreen: React.FC<Props> = ({
       setSelectedReminderHour(ministryConfig.reminderHour);
     }
   }, [ministryConfig?.reminderHour]);
+
+  useEffect(() => {
+    const cfg = ministryConfig?.notificationSettings;
+    if (cfg && typeof cfg === "object") {
+      setNotifSettings((prev) => ({ ...prev, ...cfg }));
+    }
+  }, [ministryConfig?.notificationSettings]);
+
+  const handleSaveNotifSettings = async () => {
+    if (!onSaveNotificationSettings) return;
+    setIsSavingNotif(true);
+    try {
+      // Sync scale_day hour with the existing reminderHour so both stay aligned
+      const merged: NotificationSettings = {
+        ...notifSettings,
+        scale_day: { ...notifSettings.scale_day },
+      };
+      await onSaveNotificationSettings(merged);
+      if (onSaveReminderHour) {
+        await onSaveReminderHour(merged.scale_day.hour);
+      }
+      addToast("Configurações de notificações salvas!", "success");
+    } catch {
+      addToast("Erro ao salvar configurações de notificações.", "error");
+    } finally {
+      setIsSavingNotif(false);
+    }
+  };
 
   const handleSaveReminderHour = async () => {
     if (!onSaveReminderHour) return;
@@ -434,13 +487,13 @@ export const SettingsScreen: React.FC<Props> = ({
             <Settings className="text-zinc-500" /> Configurações
           </h2>
           {isAdmin && (
-            <div role="tablist" aria-label="Configurações" className="bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl flex items-center shadow-inner overflow-x-auto">
+            <div role="tablist" aria-label="Configurações" className="bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl flex items-center shadow-inner overflow-x-auto gap-0.5">
               <button
                 role="tab"
                 aria-selected={activeTab === "geral"}
                 aria-controls="panel-geral"
                 onClick={() => setActiveTab("geral")}
-                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === "geral" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${activeTab === "geral" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
               >
                 Geral
               </button>
@@ -449,9 +502,19 @@ export const SettingsScreen: React.FC<Props> = ({
                 aria-selected={activeTab === "admin"}
                 aria-controls="panel-admin"
                 onClick={() => setActiveTab("admin")}
-                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === "admin" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${activeTab === "admin" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
               >
                 Administrador
+              </button>
+              <button
+                role="tab"
+                aria-selected={activeTab === "notif"}
+                aria-controls="panel-notif"
+                onClick={() => setActiveTab("notif")}
+                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === "notif" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+              >
+                <Bell size={13} />
+                Notificações
               </button>
               {isOrgAdmin && (
                 <button
@@ -459,7 +522,7 @@ export const SettingsScreen: React.FC<Props> = ({
                   aria-selected={activeTab === "ministries"}
                   aria-controls="panel-ministries"
                   onClick={() => setActiveTab("ministries")}
-                  className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === "ministries" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                  className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${activeTab === "ministries" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                 >
                   Ministérios
                 </button>
@@ -596,121 +659,212 @@ export const SettingsScreen: React.FC<Props> = ({
         </div>
       )}
 
-      {activeTab === "admin" && isAdmin && (
-        <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-700/60 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 shadow-sm border border-amber-500/20">
-                <BellRing size={20} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-base sm:text-lg text-zinc-900 dark:text-zinc-100 tracking-tight">
-                    Lembrete do Dia da Escala
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    Push Automático
-                  </span>
-                </div>
-                <p className="text-zinc-500 dark:text-zinc-400 text-xs">
-                  Notifica automaticamente os membros escalados no dia do culto ou evento
-                </p>
-              </div>
+      {/* ═══════ ABA: NOTIFICAÇÕES ═══════ */}
+      {activeTab === "notif" && isAdmin && (
+        <div id="panel-notif" role="tabpanel" className="space-y-5 animate-fade-in">
+          {/* Header */}
+          <div className="flex items-start gap-4 p-4 bg-gradient-to-br from-secondary/10 via-secondary/5 to-transparent border border-secondary/20 rounded-2xl">
+            <div className="w-11 h-11 rounded-xl bg-secondary/15 flex items-center justify-center border border-secondary/20 shrink-0">
+              <Bell size={22} className="text-secondary" />
+            </div>
+            <div>
+              <h3 className="font-black text-zinc-900 dark:text-white text-base">Notificações Push Automáticas</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                Configure quais alertas automáticos seus membros recebem e em qual horário (fuso Brasília, UTC-3). O sistema roda automaticamente a cada hora.
+              </p>
             </div>
           </div>
 
-          <div className="p-4 sm:p-5 space-y-4">
-            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-              No dia de cada culto ou evento, o sistema dispara um alerta Push no dispositivo de cada voluntário escalado para lembrar do compromisso e solicitar confirmação de presença no app.
-            </p>
-
-            <div className="bg-zinc-50 dark:bg-zinc-900/60 rounded-xl p-3.5 border border-zinc-200 dark:border-zinc-700/70">
-              <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Clock size={14} className="text-secondary" /> Horário de Disparo (Horário de Brasília)
-              </label>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="relative flex-1">
-                  <select
-                    value={selectedReminderHour}
-                    onChange={(e) => setSelectedReminderHour(parseInt(e.target.value, 10))}
-                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 shadow-sm transition-all cursor-pointer"
-                  >
-                    {[
-                      { h: 5, label: "05:00 — Madrugada" },
-                      { h: 6, label: "06:00 — Início da Manhã" },
-                      { h: 7, label: "07:00 — Manhã Cedo" },
-                      { h: 8, label: "08:00 — Manhã (Padrão Recomendado)" },
-                      { h: 9, label: "09:00 — Manhã" },
-                      { h: 10, label: "10:00 — Meio da Manhã" },
-                      { h: 11, label: "11:00 — Final da Manhã" },
-                      { h: 12, label: "12:00 — Meio-dia / Almoço" },
-                      { h: 13, label: "13:00 — Início da Tarde" },
-                      { h: 14, label: "14:00 — Tarde" },
-                      { h: 15, label: "15:00 — Meio da Tarde" },
-                      { h: 16, label: "16:00 — Final da Tarde" },
-                      { h: 17, label: "17:00 — Fim de Tarde" },
-                      { h: 18, label: "18:00 — Início da Noite" },
-                      { h: 19, label: "19:00 — Noite" },
-                      { h: 20, label: "20:00 — Noite" },
-                    ].map((opt) => (
-                      <option key={opt.h} value={opt.h}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {onSaveReminderHour && (
+          {([
+            {
+              key: "scale_day" as const,
+              icon: <CalendarCheck size={20} />,
+              color: "amber",
+              title: "📅 Lembrete — Dia da Escala",
+              badge: "Diário | Por Membro",
+              desc: "Envia um push individual para cada voluntário escalado no próprio dia do culto ou evento, pedindo confirmação de presença.",
+              preview: (h: number) => ({ title: "Você está escalado hoje!", body: `Hoje às ${String(h).padStart(2,"0")}:00. Confirme sua presença no app.` }),
+              showDaysBefore: false,
+            },
+            {
+              key: "eve_reminder" as const,
+              icon: <CalendarRange size={20} />,
+              color: "blue",
+              title: "🔔 Lembrete — Véspera do Culto",
+              badge: "1-3 dias antes | Por Membro",
+              desc: "Notifica o voluntário alguns dias antes do evento para que possa se preparar (repertório, figurino, logística).",
+              preview: (h: number, d?: number) => ({ title: "Culto se aproxima!", body: `Você está escalado em ${d ?? 1} dia(s). Prepare-se e verifique o repertório.` }),
+              showDaysBefore: true,
+            },
+            {
+              key: "window_open" as const,
+              icon: <Unlock size={20} />,
+              color: "emerald",
+              title: "🗓️ Abertura — Janela de Ausências",
+              badge: "1× por mês | Toda Equipe",
+              desc: "Avisa todos os membros que o período para registrar ausências foi aberto, incentivando o preenchimento imediato.",
+              preview: (_h: number) => ({ title: "Disponibilidade Liberada!", body: `O período para apontar ausências abriu. Acesse o app e marque seus dias antes do prazo.` }),
+              showDaysBefore: false,
+            },
+            {
+              key: "window_close" as const,
+              icon: <CalendarX size={20} />,
+              color: "red",
+              title: "⏰ Alerta — Prazo de Ausências Encerrando",
+              badge: "1× por ciclo | Toda Equipe",
+              desc: "Lembra os membros que a janela de disponibilidade está se encerrando, incentivando quem ainda não respondeu.",
+              preview: (_h: number) => ({ title: "Prazo Encerrando!", body: `Último aviso: marque sua disponibilidade agora antes que a janela feche.` }),
+              showDaysBefore: false,
+            },
+            {
+              key: "schedule_publish" as const,
+              icon: <Send size={20} />,
+              color: "purple",
+              title: "📋 Publicação da Nova Escala",
+              badge: "Manual | Toda Equipe",
+              desc: "Quando o administrador publicar a escala do próximo período, todos os membros são notificados para consultar seus dias escalados.",
+              preview: (_h: number) => ({ title: "Nova Escala Publicada!", body: `A escala do próximo período foi publicada. Acesse o app e confira seus dias.` }),
+              showDaysBefore: false,
+            },
+          ] as const).map(({ key, icon, color, title, badge, desc, preview, showDaysBefore }) => {
+            const current = notifSettings[key];
+            const colorMap: Record<string, string> = {
+              amber:   "bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 border-amber-500/20",
+              blue:    "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 border-blue-500/20",
+              emerald: "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border-emerald-500/20",
+              red:     "bg-red-500/10 text-red-500 dark:bg-red-500/20 border-red-500/20",
+              purple:  "bg-purple-500/10 text-purple-500 dark:bg-purple-500/20 border-purple-500/20",
+            };
+            const HOURS = [
+              { h: 5, label: "05:00" }, { h: 6, label: "06:00" }, { h: 7, label: "07:00" },
+              { h: 8, label: "08:00 (Recomendado)" }, { h: 9, label: "09:00" }, { h: 10, label: "10:00" },
+              { h: 11, label: "11:00" }, { h: 12, label: "12:00" }, { h: 13, label: "13:00" },
+              { h: 14, label: "14:00" }, { h: 15, label: "15:00" }, { h: 16, label: "16:00" },
+              { h: 17, label: "17:00" }, { h: 18, label: "18:00" }, { h: 19, label: "19:00" },
+              { h: 20, label: "20:00" }, { h: 21, label: "21:00" },
+            ];
+            const daysBeforeVal = (current as any).days_before ?? 1;
+            const pv = preview(current.hour, daysBeforeVal);
+            return (
+              <div
+                key={key}
+                className={`bg-white dark:bg-zinc-800 rounded-xl border shadow-sm overflow-hidden transition-all ${
+                  current.enabled
+                    ? "border-zinc-200 dark:border-zinc-700"
+                    : "border-zinc-100 dark:border-zinc-800 opacity-60"
+                }`}
+              >
+                {/* Card Header */}
+                <div className="p-4 sm:p-5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${colorMap[color]}`}>
+                      {icon}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                        <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 leading-tight">{title}</span>
+                        <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{badge}</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">{desc}</p>
+                    </div>
+                  </div>
+                  {/* Toggle enable/disable */}
                   <button
-                    onClick={handleSaveReminderHour}
-                    disabled={isSavingReminderHour || selectedReminderHour === (ministryConfig?.reminderHour ?? 8)}
-                    className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md active:scale-95 ${
-                      selectedReminderHour === (ministryConfig?.reminderHour ?? 8)
-                        ? "bg-zinc-100 dark:bg-zinc-700/50 text-zinc-400 dark:text-zinc-500 cursor-not-allowed shadow-none"
-                        : "bg-secondary hover:bg-secondaryHover text-white shadow-secondary/20"
+                    role="switch"
+                    aria-checked={current.enabled}
+                    aria-label={`${title}: ${current.enabled ? "ativado" : "desativado"}`}
+                    onClick={() =>
+                      setNotifSettings((prev) => ({
+                        ...prev,
+                        [key]: { ...prev[key], enabled: !current.enabled },
+                      }))
+                    }
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-secondary/50 ${
+                      current.enabled ? "bg-secondary" : "bg-zinc-300 dark:bg-zinc-600"
                     }`}
                   >
-                    {isSavingReminderHour ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Salvando...
-                      </>
-                    ) : selectedReminderHour === (ministryConfig?.reminderHour ?? 8) ? (
-                      <>
-                        <Check size={16} className="text-emerald-500" />
-                        Salvo ({String(selectedReminderHour).padStart(2, "0")}:00)
-                      </>
-                    ) : (
-                      <>
-                        <Save size={16} />
-                        Salvar Horário
-                      </>
-                    )}
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                        current.enabled ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
                   </button>
+                </div>
+
+                {/* Card Body — shown only when enabled */}
+                {current.enabled && (
+                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3 border-t border-zinc-100 dark:border-zinc-700/60 pt-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                          <Clock size={11} /> Horário de Disparo (Brasília)
+                        </label>
+                        <select
+                          value={current.hour}
+                          onChange={(e) =>
+                            setNotifSettings((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], hour: parseInt(e.target.value, 10) },
+                            }))
+                          }
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 transition-all cursor-pointer"
+                        >
+                          {HOURS.map((opt) => (
+                            <option key={opt.h} value={opt.h}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {showDaysBefore && (
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                            <CalendarRange size={11} /> Dias de Antecedência
+                          </label>
+                          <select
+                            value={daysBeforeVal}
+                            onChange={(e) =>
+                              setNotifSettings((prev) => ({
+                                ...prev,
+                                [key]: { ...prev[key], days_before: parseInt(e.target.value, 10) },
+                              } as NotificationSettings))
+                            }
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 transition-all cursor-pointer"
+                          >
+                            {[1, 2, 3].map((d) => (
+                              <option key={d} value={d}>{d} dia{d > 1 ? "s" : ""} antes</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Push notification preview */}
+                    <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700/70 flex items-start gap-2.5">
+                      <div className="w-6 h-6 rounded-lg bg-secondary/10 flex items-center justify-center text-[11px] shrink-0">📱</div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100">{pv.title}</p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mt-0.5">{pv.body}</p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
+            );
+          })}
 
-            {/* Preview do Lembrete */}
-            <div className="p-3 bg-zinc-100/70 dark:bg-zinc-900/40 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 text-xs">
-              <span className="font-bold text-zinc-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-                <BellRing size={12} className="text-secondary" /> Prévia da Notificação ao Membro:
-              </span>
-              <div className="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700/80 shadow-sm flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary font-black shrink-0 text-xs">
-                  📅
-                </div>
-                <div>
-                  <p className="font-bold text-zinc-900 dark:text-zinc-100">
-                    Você está escalado hoje — Culto
-                  </p>
-                  <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    Disparado pontualmente às {String(selectedReminderHour).padStart(2, "0")}:00 solicitando a confirmação de presença no app.
-                  </p>
-                </div>
-              </div>
-            </div>
+          {/* Save button */}
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleSaveNotifSettings}
+              disabled={isSavingNotif || !onSaveNotificationSettings}
+              className="flex items-center gap-2 px-6 py-3 bg-secondary hover:bg-secondaryHover disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-secondary/20 active:scale-95"
+            >
+              {isSavingNotif ? (
+                <><Loader2 size={16} className="animate-spin" /> Salvando...</>
+              ) : (
+                <><Save size={16} /> Salvar Configurações de Notificações</>
+              )}
+            </button>
           </div>
         </div>
       )}

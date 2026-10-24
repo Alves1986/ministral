@@ -65,37 +65,94 @@ export const NextEventCard: React.FC<Props> = ({
   const rawEventMembers = propEvent?.members || [];
 
   const eventMembers = useMemo(() => {
+    let list: any[] = [];
     if (rawEventMembers && rawEventMembers.length > 0) {
-      return rawEventMembers;
-    }
-    // Fallback: se eventData existir e o schedule do App tiver escalados para esta data
-    if (!eventData || !schedule) return [];
+      list = [...rawEventMembers];
+    } else if (eventData && schedule) {
+      // Fallback: se eventData existir e o schedule do App tiver escalados para esta data
+      const datePrefix = eventData.date;
+      const ruleId = eventData.id || eventData.ruleId;
 
-    const datePrefix = eventData.date;
-    const ruleId = eventData.id || eventData.ruleId;
-    const fallbackList: any[] = [];
-
-    for (const [key, memberName] of Object.entries(schedule)) {
-      if (!memberName || memberName === "__EXCLUDED__" || memberName === "__PUBLISHED__") continue;
-      const parts = key.split("|");
-      if (parts.length >= 3) {
-        const [kRuleId, kDate, ...kRoleParts] = parts;
-        const kRole = kRoleParts.join("|");
-        if (kDate === datePrefix && (!ruleId || kRuleId === ruleId)) {
-          const foundProfile = (members || []).find((m) => m.name === memberName);
-          fallbackList.push({
-            role: kRole,
-            memberId: foundProfile?.id || "",
-            name: memberName,
-            avatarUrl: (foundProfile as any)?.avatarUrl || foundProfile?.avatar_url,
-            confirmed: Boolean(attendance && attendance[key]),
-            key,
-          });
+      for (const [key, memberName] of Object.entries(schedule)) {
+        if (!memberName || memberName === "__EXCLUDED__" || memberName === "__PUBLISHED__") continue;
+        const parts = key.split("|");
+        if (parts.length >= 3) {
+          const [kRuleId, kDate, ...kRoleParts] = parts;
+          const kRole = kRoleParts.join("|");
+          if (kDate === datePrefix && (!ruleId || kRuleId === ruleId)) {
+            const foundProfile = (members || []).find((m) => m.name === memberName);
+            list.push({
+              role: kRole,
+              memberId: foundProfile?.id || "",
+              name: memberName,
+              avatarUrl: (foundProfile as any)?.avatarUrl || foundProfile?.avatar_url,
+              confirmed: Boolean(attendance && attendance[key]),
+              key,
+            });
+          }
         }
       }
     }
-    return fallbackList;
-  }, [rawEventMembers, eventData, schedule, members, attendance]);
+
+    if (list.length === 0) return [];
+
+    const normalizeRole = (r: string) =>
+      (r || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+
+    const getRoleSortIndex = (roleName: string) => {
+      if (!roles || roles.length === 0) return 9999;
+      const normRole = normalizeRole(roleName);
+
+      // 1. Match exato
+      const exactIdx = roles.findIndex((r) => {
+        const rName = typeof r === "string" ? r : (r as any)?.name || (r as any)?.id || "";
+        return normalizeRole(rName) === normRole;
+      });
+      if (exactIdx !== -1) return exactIdx * 100;
+
+      // 2. Sinônimos conhecidos (ex: Áudio / Som <-> Mesa de Som)
+      const isAudio = normRole.includes("audio") || normRole.includes("som") || normRole.includes("sonoplastia");
+      if (isAudio) {
+        const audioIdx = roles.findIndex((r) => {
+          const rName = normalizeRole(typeof r === "string" ? r : (r as any)?.name || (r as any)?.id || "");
+          return rName.includes("audio") || rName.includes("som") || rName.includes("sonoplastia");
+        });
+        if (audioIdx !== -1) return audioIdx * 100;
+      }
+
+      // 3. Se tiver número (ex: "Vocal 2", "Dança 3"), busca a função base ("Vocal") e soma o número
+      const numMatch = normRole.match(/^(.*?)\s*(\d+)$/);
+      if (numMatch) {
+        const baseName = numMatch[1].trim();
+        const num = parseInt(numMatch[2], 10);
+        const baseIdx = roles.findIndex((r) => {
+          const rName = normalizeRole(typeof r === "string" ? r : (r as any)?.name || (r as any)?.id || "");
+          return rName === baseName || rName.startsWith(baseName);
+        });
+        if (baseIdx !== -1) return baseIdx * 100 + num;
+      }
+
+      // 4. Busca por prefixo (ex: "Ministro" em "Ministro de Louvor")
+      const partialIdx = roles.findIndex((r) => {
+        const rName = normalizeRole(typeof r === "string" ? r : (r as any)?.name || (r as any)?.id || "");
+        return normRole.startsWith(rName) || rName.startsWith(normRole);
+      });
+      if (partialIdx !== -1) return partialIdx * 100;
+
+      return 9999;
+    };
+
+    return list.sort((a, b) => {
+      const idxA = getRoleSortIndex(a.role);
+      const idxB = getRoleSortIndex(b.role);
+      if (idxA !== idxB) return idxA - idxB;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }, [rawEventMembers, eventData, schedule, members, attendance, roles]);
 
   const checkTimeWindow = () => {
     if (!eventData) return;

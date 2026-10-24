@@ -72,14 +72,30 @@ serve(async (req: Request) => {
     const today = localDate(-3); // fuso Brasília aproximado (UTC-3)
     const nowBr = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
     const currentHour = nowBr.getUTCHours();
-    const { data: minHourRows } = await supabase
+    const { data: minRows } = await supabase
       .from("organization_ministries")
-      .select("id, reminder_hour");
-    const reminderHourByMinistry = new Map<string, number>(
-      (minHourRows || []).map((m: any) => [m.id, m.reminder_hour ?? 8])
+      .select("id, reminder_hour, notification_settings, availability_start, availability_end, organization_id");
+
+    interface NotifSettings {
+      scale_day?: { enabled: boolean; hour: number };
+      eve_reminder?: { enabled: boolean; hour: number; days_before: number };
+      window_open?: { enabled: boolean; hour: number };
+      window_close?: { enabled: boolean; hour: number };
+      schedule_publish?: { enabled: boolean; hour: number };
+    }
+
+    const minSettingsMap = new Map<string, { reminderHour: number; settings: NotifSettings; ministry: any }>(
+      (minRows || []).map((m: any) => [
+        m.id,
+        {
+          reminderHour: m.reminder_hour ?? 8,
+          settings: m.notification_settings || {},
+          ministry: m,
+        },
+      ])
     );
 
-    const summary: Record<string, number> = { scale_day: 0, window_open: 0, window_close: 0 };
+    const summary: Record<string, number> = { scale_day: 0, eve_reminder: 0, window_open: 0, window_close: 0 };
 
     // ── 1. LEMBRETE DO DIA DA ESCALA ──
     const { data: assignments } = await supabase
@@ -90,10 +106,14 @@ serve(async (req: Request) => {
       .neq("role", "__EVENT_EXCLUDED__");
 
     if (assignments && assignments.length > 0) {
-       for (const a of assignments) {
+      for (const a of assignments) {
         if (!a.member_id) continue;
-        const rh = reminderHourByMinistry.get(a.ministry_id) ?? 8;
-        if (rh !== currentHour) continue;
+        const minConfig = minSettingsMap.get(a.ministry_id);
+        const scaleDayCfg = minConfig?.settings?.scale_day;
+        if (scaleDayCfg && scaleDayCfg.enabled === false) continue;
+        const targetHour = scaleDayCfg?.hour ?? minConfig?.reminderHour ?? 8;
+        if (targetHour !== currentHour) continue;
+
         const rule = Array.isArray(a.event_rules) ? a.event_rules[0] : a.event_rules;
         const title = rule?.title || "Evento";
         const time = rule?.time ? String(rule.time).slice(0, 5) : "";
@@ -138,7 +158,7 @@ serve(async (req: Request) => {
           }
         }
 
-        // Loga o envio (mesmo sem inscrição, para não tentar de novo hoje)
+        // Loga o envio
         await supabase.from("push_reminder_log").insert({
           member_id: a.member_id,
           ministry_id: a.ministry_id,
@@ -148,68 +168,141 @@ serve(async (req: Request) => {
       }
     }
 
-    // ── 2. JANELA DE DISPONIBILIDADE (abertura / fechamento) ──
-    const { data: ministries } = await supabase
-      .from("organization_ministries")
-      .select("id, organization_id, availability_start, availability_end, reminder_hour");
+    // ── 2. LEMBRETE DA VÉSPERA DA ESCALA (eve_reminder) ──
+    for (const [minId, minConfig] of minSettingsMap.entries()) {
+      const eveCfg = minConfig?.settings?.eve_reminder;
+      if (!eveCfg || !eveCfg.enabled) continue;
+      const targetHour = eveCfg.hour ?? 18;
+      if (targetHour !== currentHour) continue;
 
-    if (ministries && ministries.length > 0) {
-      for (const m of ministries) {
-        const start = m.availability_start ? String(m.availability_start).slice(0, 10) : null;
-        const end = m.availability_end ? String(m.availability_end).slice(0, 10) : null;
-        const isLegacyLocked = start?.startsWith("1970");
+      const daysAhead = eveCfg.days_before || 1;
+      const targetDate = localDate(-3 + daysAhead * 24);
 
-        // Abertura: janela começa hoje
-        if (start && !isLegacyLocked && start === today) {
+      const { data: eveAssignments } = await supabase
+        .from("schedule_assignments")
+        .select("id, organization_id, ministry_id, event_date, role, member_id, event_rules(title, time)")
+        .eq("ministry_id", minId)
+        .eq("event_date", targetDate)
+        .not("member_id", "is", null)
+        .neq("role", "__EVENT_EXCLUDED__");
+
+      if (eveAssignments && eveAssignments.length > 0) {
+        for (const a of eveAssignments) {
+          if (!a.member_id) continue;
           const { data: existing } = await supabase
             .from("push_reminder_log")
             .select("id")
-            .eq("ministry_id", m.id)
-            .eq("reminder_type", "window_open")
-            .eq("reminder_date", today)
+            .eq("member_id", a.member_id)
+            .eq("ministry_id", a.ministry_id)
+            .eq("reminder_type", "eve_reminder")
+            .eq("reminder_date", targetDate)
             .maybeSingle();
-          if (!existing) {
-            await sendToMinistry(supabase, m.id, {
-              title: "📅 Disponibilidade Liberada!",
-              body: "O período de disponibilidade abriu. Marque seus dias agora!",
-              type: "window_open",
-            });
-            await supabase.from("push_reminder_log").insert({
-              member_id: null,
-              ministry_id: m.id,
-              reminder_type: "window_open",
-              reminder_date: today,
-            });
-            summary.window_open++;
-          }
-        }
+          if (existing) continue;
 
-        // Fechamento: janela encerrada (end < hoje e não é o lock legado)
-        if (end && !end.startsWith("1970") && end < today) {
-          const { data: existing } = await supabase
-            .from("push_reminder_log")
-            .select("id")
-            .eq("ministry_id", m.id)
-            .eq("reminder_type", "window_close")
-            .eq("reminder_date", today)
-            .maybeSingle();
-          if (!existing) {
-            await sendToMinistry(supabase, m.id, {
-              title: "🔒 Janela Encerrada",
-              body: "O período para enviar disponibilidade terminou.",
-              type: "window_close",
+          const rule = Array.isArray(a.event_rules) ? a.event_rules[0] : a.event_rules;
+          const title = rule?.title || "Culto";
+          const daysText = daysAhead === 1 ? "amanhã" : `em ${daysAhead} dias`;
+
+          const { data: subs } = await supabase
+            .from("push_subscriptions")
+            .select("endpoint, p256dh, auth")
+            .eq("user_id", a.member_id);
+
+          if (subs && subs.length > 0) {
+            const payload = JSON.stringify({
+              title: `🔔 Lembrete: você está escalado ${daysText}!`,
+              body: `${title} (${targetDate}). Prepare-se e verifique o repertório.`,
+              icon: "/branding/icon-light.png",
+              data: { url: "/?tab=dashboard", type: "eve_reminder" },
             });
-            await supabase.from("push_reminder_log").insert({
-              member_id: null,
-              ministry_id: m.id,
-              reminder_type: "window_close",
-              reminder_date: today,
-            });
-            summary.window_close++;
+            for (const sub of subs) {
+              if (!sub.p256dh || !sub.auth || !sub.endpoint) continue;
+              try {
+                await webpush.sendNotification(
+                  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                  payload
+                );
+                summary.eve_reminder++;
+              } catch (e: any) {
+                if (e?.statusCode === 410 || e?.statusCode === 404) {
+                  await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+                }
+              }
+            }
           }
+
+          await supabase.from("push_reminder_log").insert({
+            member_id: a.member_id,
+            ministry_id: a.ministry_id,
+            reminder_type: "eve_reminder",
+            reminder_date: targetDate,
+          });
         }
       }
     }
+
+    // ── 3. JANELA DE DISPONIBILIDADE (abertura / fechamento) ──
+    for (const [_minId, minConfig] of minSettingsMap.entries()) {
+      const m = minConfig.ministry;
+      const start = m.availability_start ? String(m.availability_start).slice(0, 10) : null;
+      const end = m.availability_end ? String(m.availability_end).slice(0, 10) : null;
+      const isLegacyLocked = start?.startsWith("1970");
+
+      // Abertura: janela começa hoje
+      const openCfg = minConfig?.settings?.window_open;
+      const openHour = openCfg?.hour ?? 9;
+      if (openCfg?.enabled !== false && currentHour === openHour && start && !isLegacyLocked && start === today) {
+        const { data: existing } = await supabase
+          .from("push_reminder_log")
+          .select("id")
+          .eq("ministry_id", m.id)
+          .eq("reminder_type", "window_open")
+          .eq("reminder_date", today)
+          .maybeSingle();
+        if (!existing) {
+          await sendToMinistry(supabase, m.id, {
+            title: "📅 Disponibilidade Liberada!",
+            body: "O período de disponibilidade abriu. Marque seus dias agora!",
+            type: "window_open",
+          });
+          await supabase.from("push_reminder_log").insert({
+            member_id: null,
+            ministry_id: m.id,
+            reminder_type: "window_open",
+            reminder_date: today,
+          });
+          summary.window_open++;
+        }
+      }
+
+      // Fechamento: janela encerrada
+      const closeCfg = minConfig?.settings?.window_close;
+      const closeHour = closeCfg?.hour ?? 10;
+      if (closeCfg?.enabled !== false && currentHour === closeHour && end && !end.startsWith("1970") && end < today) {
+        const { data: existing } = await supabase
+          .from("push_reminder_log")
+          .select("id")
+          .eq("ministry_id", m.id)
+          .eq("reminder_type", "window_close")
+          .eq("reminder_date", today)
+          .maybeSingle();
+        if (!existing) {
+          await sendToMinistry(supabase, m.id, {
+            title: "🔒 Janela Encerrada",
+            body: "O período para enviar disponibilidade terminou.",
+            type: "window_close",
+          });
+          await supabase.from("push_reminder_log").insert({
+            member_id: null,
+            ministry_id: m.id,
+            reminder_type: "window_close",
+            reminder_date: today,
+          });
+          summary.window_close++;
+        }
+      }
+    }
+
 
     return new Response(JSON.stringify({ success: true, summary, date: today }), {
       headers: { "Content-Type": "application/json" }, status: 200,

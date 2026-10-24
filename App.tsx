@@ -17,7 +17,7 @@ import { useAppStore } from "./store/appStore";
 import { useSession, SessionProvider } from "./context/SessionContext";
 import { useToast, ToastProvider } from "./components/Toast";
 import * as Supabase from "./services/supabaseService";
-import { DEFAULT_TABS, ALL_TABS, User } from "./types";
+import { DEFAULT_TABS, ALL_TABS, User, NotificationSettings } from "./types";
 import { useMinistryData } from "./hooks/useMinistryData";
 import { useScreenMemos } from "./hooks/useScreenMemos";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
@@ -1023,7 +1023,7 @@ const InnerApp = () => {
                 event={nextEvent}
                 schedule={schedule}
                 attendance={attendance}
-                roles={roles}
+                roles={expandedRoles}
                 members={publicMembers}
                 config={ministryConfig}
                 onConfirm={async (key) => {
@@ -1497,6 +1497,25 @@ const InnerApp = () => {
             refreshData();
           } catch (e: any) {
             addToast("Erro ao atualizar horário de lembrete.", "error");
+          }
+        }}
+        onSaveNotificationSettings={async (settings: NotificationSettings) => {
+          try {
+            await Supabase.saveNotificationSettings(ministryId, orgId!, settings);
+            const updatedMinistries = availableMinistries.map((m) =>
+              m.id === ministryId
+                ? {
+                    ...m,
+                    reminderHour: settings.scale_day?.hour ?? m.reminderHour,
+                    notificationSettings: settings,
+                  }
+                : m,
+            );
+            setAvailableMinistries(updatedMinistries);
+            addToast("Configurações de notificações atualizadas com sucesso!", "success");
+            refreshData();
+          } catch (e: any) {
+            addToast("Erro ao salvar configurações de notificações.", "error");
           }
         }}
         ministryConfig={{ ...ministryConfig, ...integrations }}

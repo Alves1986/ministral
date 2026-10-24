@@ -64,6 +64,22 @@ export interface GlobalAIQuotaOverview {
   warningOrgsCount: number;
 }
 
+export interface NotificationSettings {
+  scale_day: { enabled: boolean; hour: number };
+  eve_reminder: { enabled: boolean; hour: number; days_before: number };
+  window_open: { enabled: boolean; hour: number };
+  window_close: { enabled: boolean; hour: number };
+  schedule_publish: { enabled: boolean; hour: number };
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  scale_day: { enabled: true, hour: 8 },
+  eve_reminder: { enabled: false, hour: 18, days_before: 1 },
+  window_open: { enabled: true, hour: 9 },
+  window_close: { enabled: true, hour: 10 },
+  schedule_publish: { enabled: true, hour: 12 },
+};
+
 export interface MinistryDef {
   id: string;
   code: string;
@@ -75,6 +91,8 @@ export interface MinistryDef {
   socialLinkUrl?: string;
   reminderHour?: number;
   reminder_hour?: number;
+  notificationSettings?: NotificationSettings;
+  notification_settings?: NotificationSettings;
 }
 
 export interface MemberMap {
@@ -122,6 +140,7 @@ export interface MinistrySettings {
   qrCodeUrl?: string;
   socialLinkUrl?: string;
   quickAccessItems?: string[];
+  notificationSettings?: NotificationSettings;
 }
 
 export interface AppNotification {

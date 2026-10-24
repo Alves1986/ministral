@@ -1,5 +1,10 @@
 import { getSupabase } from "./client";
-import { Organization, MinistryDef, MinistrySettings } from "../../types";
+import {
+  Organization,
+  MinistryDef,
+  MinistrySettings,
+  NotificationSettings,
+} from "../../types";
 import { notifySuperAdmins, sendNotificationSQL } from "./notifications";
 import { logAuditAction } from "./audit";
 
@@ -29,9 +34,11 @@ export const fetchOrganizationMinistries = async (
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
+  // select("*") evita quebra quando colunas opcionais (reminder_hour,
+  // notification_settings) ainda não existem no banco (migrations pendentes)
   const { data, error } = await sb
     .from("organization_ministries")
-    .select("id, code, label, enabled_tabs, reminder_hour")
+    .select("*")
     .eq("organization_id", orgId);
 
   if (error) throw error;
@@ -43,6 +50,7 @@ export const fetchOrganizationMinistries = async (
     organizationId: orgId,
     enabledTabs: m.enabled_tabs,
     reminderHour: m.reminder_hour ?? 8,
+    notificationSettings: m.notification_settings || undefined,
   }));
 };
 
@@ -147,9 +155,10 @@ export const fetchMinistrySettings = async (
   const sb = getSupabase();
   if (!sb || !ministryId || !orgId) return null;
 
+  // select("*") evita quebra quando colunas opcionais ainda não existem no banco
   const { data: ministryDef } = await sb
     .from("organization_ministries")
-    .select("label, availability_start, availability_end, enabled_tabs, reminder_hour")
+    .select("*")
     .eq("id", ministryId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -186,6 +195,7 @@ export const fetchMinistrySettings = async (
     availabilityStart: ministryDef?.availability_start,
     availabilityEnd: ministryDef?.availability_end,
     reminderHour: ministryDef?.reminder_hour ?? 8,
+    notificationSettings: ministryDef?.notification_settings || undefined,
     organizationId: orgId,
     spotifyClientId: settings?.spotify_client_id,
     spotifyClientSecret: settings?.spotify_client_secret,
@@ -670,3 +680,25 @@ export const saveReminderHour = async (
     throw error;
   }
 };
+
+export const saveNotificationSettings = async (
+  ministryId: string,
+  orgId: string,
+  settings: NotificationSettings,
+): Promise<void> => {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb
+    .from("organization_ministries")
+    .update({
+      notification_settings: settings,
+      reminder_hour: settings.scale_day?.hour ?? 8,
+    })
+    .eq("id", ministryId)
+    .eq("organization_id", orgId);
+  if (error) {
+    console.error("[saveNotificationSettings] Erro ao salvar notification_settings:", error);
+    throw error;
+  }
+};
+
