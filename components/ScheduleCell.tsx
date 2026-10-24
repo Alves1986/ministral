@@ -7,7 +7,8 @@ import {
     AlertTriangle, 
     Lock, 
     Search, 
-    X 
+    X,
+    Mic
 } from 'lucide-react';
 import { MemberV2, OccurrenceV2, AssignmentV2 } from '../services/scheduleServiceV2';
 
@@ -184,6 +185,8 @@ export interface ScheduleCellProps {
     memberCounts: Record<string, number>;
     globalConflicts: Record<string, { date: string, ministryId: string, role: string }[]>;
     allOccurrences: OccurrenceV2[];
+    /** Opcional: abre o modal de Coral (todos os vocais). Só aparece em funções Vocal. */
+    onOpenChoir?: () => void;
 }
 
 export const ScheduleCell: React.FC<ScheduleCellProps> = ({ 
@@ -201,7 +204,8 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     assignments,
     memberCounts,
     globalConflicts,
-    allOccurrences
+    allOccurrences,
+    onOpenChoir
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -418,6 +422,25 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
                                 />
                             </div>
                         </div>
+
+                        {/* Coral: escalar todos os vocais de uma vez */}
+                        {onOpenChoir && normBaseRole === 'vocal' && (
+                            <div className="p-2 md:p-1 border-b border-zinc-100 dark:border-zinc-800">
+                                <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setIsOpen(false);
+                                        onOpenChoir();
+                                    }}
+                                    className="w-full text-left px-3 md:px-2 py-3 md:py-2 text-sm md:text-xs text-secondary dark:text-white hover:bg-secondary/10 rounded-lg md:rounded flex items-center gap-2 font-bold transition-colors"
+                                >
+                                    <Mic size={16} className="md:w-3 md:h-3" />
+                                    TODOS — CORAL
+                                    <span className="ml-auto text-[10px] md:text-[9px] font-medium opacity-60">todos os vocais</span>
+                                </button>
+                            </div>
+                        )}
 
                         {/* Remove Button */}
                         {currentMember && (

@@ -15,7 +15,8 @@ import {
     fetchAvailabilityForEditor,
     fetchConflictRules,
     fetchGlobalConflictsV2,
-    togglePublishScheduleV2
+    togglePublishScheduleV2,
+    replaceChoirAssignmentsV2
 } from '../services/scheduleServiceV2';
 import { sendNotificationSQL } from '../services/supabaseService';
 import { 
@@ -37,7 +38,8 @@ import {
     RefreshCw,
     AlertCircle,
     Bell,
-    Send
+    Send,
+    Mic
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
@@ -59,7 +61,8 @@ const MemoizedEditorCell = React.memo<{
     memberCounts: Record<string, number>;
     globalConflicts?: any;
     allOccurrences?: any;
-}>(({ occurrence, role, members, onAssign, onConfirm, processing, availability, conflictRules, assignments, memberCounts, globalConflicts, allOccurrences }) => {
+    onOpenChoir?: () => void;
+}>(({ occurrence, role, members, onAssign, onConfirm, processing, availability, conflictRules, assignments, memberCounts, globalConflicts, allOccurrences, onOpenChoir }) => {
     const assignment = assignments.find(a => {
         const aDate = a.event_date?.slice(0, 10);
         const oDate = occurrence.date?.slice(0, 10);
@@ -83,6 +86,7 @@ const MemoizedEditorCell = React.memo<{
             memberCounts={memberCounts}
             globalConflicts={globalConflicts}
             allOccurrences={allOccurrences}
+            onOpenChoir={onOpenChoir}
         />
     );
 }, (prev, next) => {
@@ -94,6 +98,7 @@ const MemoizedEditorCell = React.memo<{
     if (prev.conflictRules !== next.conflictRules) return false;
     if (prev.globalConflicts !== next.globalConflicts) return false;
     if (prev.members !== next.members) return false;
+    if (prev.onOpenChoir !== next.onOpenChoir) return false;
 
     const prevDateAssignments = prev.assignments.filter(a => a.event_date?.slice(0, 10) === prev.occurrence.date.slice(0, 10));
     const nextDateAssignments = next.assignments.filter(a => a.event_date?.slice(0, 10) === next.occurrence.date.slice(0, 10));
@@ -140,16 +145,20 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [isRebalanceMode, setIsRebalanceMode] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
     const [showAlertsList, setShowAlertsList] = useState(false);
+    const [choirOccurrence, setChoirOccurrence] = useState<OccurrenceV2 | null>(null);
+    const [selectedChoirMembers, setSelectedChoirMembers] = useState<string[]>([]);
+    const [choirSearchTerm, setChoirSearchTerm] = useState('');
     
     const reviewModalRef = useRef<HTMLDivElement>(null);
     const confirmAIModalRef = useRef<HTMLDivElement>(null);
     const confirmRebalanceModalRef = useRef<HTMLDivElement>(null);
     const alertsModalRef = useRef<HTMLDivElement>(null);
+    const choirModalRef = useRef<HTMLDivElement>(null);
     const previousFocusRef = useRef<HTMLElement | null>(null);
 
     // Get the currently active modal ref
-    const activeModalRef = showReviewAI ? reviewModalRef : showConfirmAI ? confirmAIModalRef : showConfirmRebalance ? confirmRebalanceModalRef : showAlertsList ? alertsModalRef : null;
-    const isAnyModalOpen = showReviewAI || showConfirmAI || showConfirmRebalance || showAlertsList;
+    const activeModalRef = showReviewAI ? reviewModalRef : showConfirmAI ? confirmAIModalRef : showConfirmRebalance ? confirmRebalanceModalRef : showAlertsList ? alertsModalRef : choirOccurrence ? choirModalRef : null;
+    const isAnyModalOpen = showReviewAI || showConfirmAI || showConfirmRebalance || showAlertsList || Boolean(choirOccurrence);
 
     useEffect(() => {
         if (isAnyModalOpen) {
@@ -168,6 +177,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 else if (showConfirmAI) setShowConfirmAI(false);
                 else if (showConfirmRebalance) setShowConfirmRebalance(false);
                 else if (showAlertsList) setShowAlertsList(false);
+                else if (choirOccurrence) setChoirOccurrence(null);
                 return;
             }
             if (e.key === 'Tab' && activeModalRef?.current) {
@@ -260,8 +270,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     };
 
     // -- DERIVED STATE --
+    // O Coral é especial (Ceia) e não pesa no equilíbrio de escalas do mês
     const memberCounts = assignments.reduce((acc, curr) => {
-        if (curr.member_id && curr.role !== '__EVENT_EXCLUDED__' && curr.role !== '__PUBLISHED__') {
+        if (curr.member_id && curr.role !== '__EVENT_EXCLUDED__' && curr.role !== '__PUBLISHED__' && !curr.role.toLowerCase().startsWith('coral')) {
             acc[curr.member_id] = (acc[curr.member_id] || 0) + 1;
         }
         return acc;
@@ -548,6 +559,80 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         }
     };
 
+    const handleOpenChoirModal = useCallback((occ: OccurrenceV2) => {
+        setChoirOccurrence(occ);
+        setChoirSearchTerm('');
+
+        // Identifica todos os membros com função Vocal
+        const vocalMembers = members.filter(m => {
+            return (m.ministry_functions || []).some(f => {
+                const norm = f.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                return norm === 'vocal';
+            });
+        });
+
+        // Verifica se já existem membros no coral deste evento
+        const existingChoir = assignments.filter(a => 
+            a.event_date?.slice(0, 10) === occ.date.slice(0, 10) &&
+            a.event_rule_id === occ.ruleId &&
+            a.role.toLowerCase().startsWith('coral') &&
+            a.member_id
+        );
+
+        if (existingChoir.length > 0) {
+            setSelectedChoirMembers(existingChoir.map(a => a.member_id));
+        } else {
+            // Regra A1: Abre a lista com todos os vocais marcados para o usuário desmarcar quem não puder ir
+            setSelectedChoirMembers(vocalMembers.map(m => m.id));
+        }
+    }, [members, assignments]);
+
+    const handleSaveChoir = async (memberIdsToSave: string[]) => {
+        if (!choirOccurrence) return;
+        setProcessing(true);
+        try {
+            // Identifica todas as vagas de Vocal e Coral deste evento para substituição limpa (Regra A2)
+            const rolesToRemove = assignments
+                .filter(a => 
+                    a.event_date?.slice(0, 10) === choirOccurrence.date.slice(0, 10) &&
+                    a.event_rule_id === choirOccurrence.ruleId &&
+                    (a.role.toLowerCase().startsWith('vocal') || a.role.toLowerCase().startsWith('coral'))
+                )
+                .map(a => a.role);
+
+            // Garante que os papéis de Vocal padrão da escala também sejam incluídos na limpeza
+            roles.forEach(r => {
+                if (r.toLowerCase().startsWith('vocal') && !rolesToRemove.includes(r)) {
+                    rolesToRemove.push(r);
+                }
+            });
+
+            await replaceChoirAssignmentsV2(ministryId, orgId, {
+                event_rule_id: choirOccurrence.ruleId,
+                event_date: choirOccurrence.date,
+                rolesToRemove: Array.from(new Set(rolesToRemove)),
+                memberIds: memberIdsToSave
+            });
+
+            if (memberIdsToSave.length > 0) {
+                addToast(`Coral com ${memberIdsToSave.length} membros escalado com sucesso!`, 'success');
+            } else {
+                addToast('Coral removido da escala.', 'info');
+            }
+
+            queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
+            queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
+            await loadData();
+        } catch (err: any) {
+            console.error('Erro ao salvar coral:', err);
+            addToast('Erro ao salvar escala do coral', 'error');
+        } finally {
+            setProcessing(false);
+            setChoirOccurrence(null);
+        }
+    };
+
     const handleConfirmAssignment = useCallback(async (date: string, role: string, ruleId: string) => {
         setProcessing(true);
         let previousAssignments: AssignmentV2[] = [];
@@ -612,28 +697,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     member_id: memberId
                 });
 
-                // Notificar o membro escalado via push + in-app
+                // Sem notificação aqui: o membro só é avisado quando a escala do mês
+                // for liberada (handlePublishMonth) e no próprio dia (push-reminders).
                 const occurrence = occurrences.find(o => o.date === date && o.ruleId === ruleId);
-                const member = members.find(m => m.id === memberId);
-                const eventTitle = occurrence?.title || role;
-                const dateFormatted = date.split('-').reverse().join('/');
-                sendNotificationSQL(ministryId, orgId, {
-                    title: 'Você foi escalado(a)',
-                    message: `${member?.name || 'Membro'}, você foi escalado(a) para "${eventTitle}" no dia ${dateFormatted}.`,
-                    type: 'info',
-                    actionLink: 'calendar',
-                    targetUserId: memberId
-                }).catch(() => {});
-
                 if (occurrence) {
                     const status = getMemberAvailStatus(memberId, date, occurrence.time, availability);
                     if (status === 'unavailable') {
                         addToast('Atencao: membro escalado sem disponibilidade registrada', 'warning');
                     } else {
-                        addToast('Membro escalado e notificado', 'success');
+                        addToast('Membro escalado', 'success');
                     }
                 } else {
-                    addToast('Membro escalado e notificado', 'success');
+                    addToast('Membro escalado', 'success');
                 }
             } else {
                 await removeAssignmentV2(ministryId, orgId, {
@@ -707,13 +782,38 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             const fallbackRuleId = occurrences[0]?.ruleId || assignments.find(a => a.event_rule_id && a.event_rule_id !== 'PUBLISHED_FLAG')?.event_rule_id;
             await togglePublishScheduleV2(ministryId, orgId, currentMonth, newStatus, fallbackRuleId);
             if (newStatus) {
-                await sendNotificationSQL(ministryId, orgId, {
-                    title: `📅 Escala de ${monthLabel} Liberada!`,
-                    message: `A escala para ${monthLabel} foi publicada. Confira suas escalas e confirme sua presença no app!`,
-                    type: 'success',
-                    actionLink: 'calendar'
-                }).catch(() => {});
-                addToast(`Escala de ${monthLabel} liberada e visível a todos!`, 'success');
+                // Notifica individualmente cada membro escalado no mês, listando seus dias
+                const byMember = new Map<string, string[]>();
+                assignments
+                    .filter(a =>
+                        a.member_id &&
+                        a.event_date?.startsWith(currentMonth) &&
+                        a.role !== '__EVENT_EXCLUDED__' &&
+                        a.role !== '__PUBLISHED__' &&
+                        a.event_rule_id !== 'PUBLISHED_FLAG'
+                    )
+                    .sort((a, b) => a.event_date.localeCompare(b.event_date))
+                    .forEach(a => {
+                        const occurrence = occurrences.find(o => o.date === a.event_date && o.ruleId === a.event_rule_id);
+                        const [, mm, dd] = a.event_date.split('-');
+                        const cleanRole = a.role.toLowerCase().startsWith('coral') ? 'Coral' : a.role;
+                        const label = `${dd}/${mm}${occurrence?.title ? ` - ${occurrence.title}` : ''} (${cleanRole})`;
+                        const list = byMember.get(a.member_id as string) || [];
+                        list.push(label);
+                        byMember.set(a.member_id as string, list);
+                    });
+
+                await Promise.all(Array.from(byMember.entries()).map(([memberId, items]) => {
+                    const member = members.find(m => m.id === memberId);
+                    return sendNotificationSQL(ministryId, orgId, {
+                        title: `📅 Escala de ${monthLabel} liberada`,
+                        message: `${member?.name || 'Membro'}, você está escalado(a) em: ${items.join('; ')}.`,
+                        type: 'success',
+                        actionLink: 'calendar',
+                        targetUserId: memberId
+                    }).catch(() => {});
+                }));
+                addToast(`Escala de ${monthLabel} liberada! ${byMember.size} membro(s) notificado(s).`, 'success');
             } else {
                 addToast(`Escala de ${monthLabel} em modo rascunho (oculta do calendário).`, 'info');
             }
@@ -1002,6 +1102,61 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     </td>
                                     
                                     {roles.map(role => {
+                                        const occChoir = assignments.filter(a => 
+                                            a.event_date?.slice(0, 10) === occurrence.date.slice(0, 10) && 
+                                            a.event_rule_id === occurrence.ruleId && 
+                                            a.role.toLowerCase().startsWith('coral') && 
+                                            a.member_id
+                                        );
+                                        const isVocalRole = role.toLowerCase().startsWith('vocal');
+                                        const firstVocalRole = roles.find(r => r.toLowerCase().startsWith('vocal'));
+
+                                        if (occChoir.length > 0 && isVocalRole) {
+                                            if (role === firstVocalRole) {
+                                                return (
+                                                    <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenChoirModal(occurrence)}
+                                                            className="w-full h-full min-h-[42px] px-2 py-1 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 dark:from-purple-900/30 dark:to-amber-900/30 border-2 border-purple-400 dark:border-purple-600 rounded-xl flex items-center justify-between text-left hover:border-purple-500 transition-all shadow-sm group"
+                                                            title="Clique para ver ou editar membros do Coral da Ceia"
+                                                        >
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                <div className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] shrink-0 font-black">
+                                                                    🎤
+                                                                </div>
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="text-[11px] font-black text-purple-700 dark:text-purple-300 truncate">
+                                                                        Coral Ceia
+                                                                    </span>
+                                                                    <span className="text-[9px] text-zinc-500 dark:text-zinc-400 font-bold truncate">
+                                                                        {occChoir.length} {occChoir.length === 1 ? 'membro' : 'membros'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 shrink-0">
+                                                                Editar
+                                                            </span>
+                                                        </button>
+                                                    </td>
+                                                );
+                                            }
+                                            return (
+                                                <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenChoirModal(occurrence)}
+                                                        className="w-full h-full min-h-[42px] px-1 py-1 bg-zinc-50 dark:bg-zinc-800/40 border border-dashed border-purple-300 dark:border-purple-800/60 rounded-xl flex items-center justify-center text-center opacity-70 hover:opacity-100 transition-opacity"
+                                                        title="Integrado ao Coral da Ceia. Clique para gerenciar."
+                                                    >
+                                                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold truncate">
+                                                            Em Coral 🎤
+                                                        </span>
+                                                    </button>
+                                                </td>
+                                            );
+                                        }
+
                                         return (
                                             <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
                                                 <MemoizedEditorCell 
@@ -1017,6 +1172,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     memberCounts={memberCounts}
                                                     globalConflicts={globalConflicts}
                                                     allOccurrences={occurrences}
+                                                    onOpenChoir={() => handleOpenChoirModal(occurrence)}
                                                 />
                                             </td>
                                         );
@@ -1062,6 +1218,60 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                 </div>
                                 <div className="p-4 space-y-4">
                                     {roles.map(role => {
+                                        const occChoir = assignments.filter(a => 
+                                            a.event_date?.slice(0, 10) === occurrence.date.slice(0, 10) && 
+                                            a.event_rule_id === occurrence.ruleId && 
+                                            a.role.toLowerCase().startsWith('coral') && 
+                                            a.member_id
+                                        );
+                                        const isVocalRole = role.toLowerCase().startsWith('vocal');
+                                        const firstVocalRole = roles.find(r => r.toLowerCase().startsWith('vocal'));
+
+                                        if (occChoir.length > 0 && isVocalRole) {
+                                            if (role === firstVocalRole) {
+                                                return (
+                                                    <div id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
+                                                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider pl-1">{role} • Coral</label>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenChoirModal(occurrence)}
+                                                            className="w-full p-3 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 dark:from-purple-900/30 dark:to-amber-900/30 border-2 border-purple-400 dark:border-purple-600 rounded-xl flex items-center justify-between text-left hover:border-purple-500 transition-all shadow-sm"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-black">
+                                                                    🎤
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-bold text-purple-700 dark:text-purple-300 text-sm">
+                                                                        Coral da Ceia
+                                                                    </div>
+                                                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                                                                        {occChoir.length} membros escalados
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-purple-500 text-white shadow-sm">
+                                                                Gerenciar Coral
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            }
+                                            return (
+                                                <div id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
+                                                    <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider pl-1">{role}</label>
+                                                    <div 
+                                                        onClick={() => handleOpenChoirModal(occurrence)}
+                                                        className="p-2.5 rounded-xl border border-dashed border-purple-300 dark:border-purple-800/60 bg-zinc-50 dark:bg-zinc-800/40 text-center cursor-pointer"
+                                                    >
+                                                        <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                                                            Integrado ao Coral da Ceia 🎤
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
                                         return (
                                             <div id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="flex flex-col gap-1.5">
                                                 <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider pl-1">{role}</label>
@@ -1078,6 +1288,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                     memberCounts={memberCounts}
                                                     globalConflicts={globalConflicts}
                                                     allOccurrences={occurrences}
+                                                    onOpenChoir={() => handleOpenChoirModal(occurrence)}
                                                 />
                                             </div>
                                         );
@@ -1343,6 +1554,203 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             >
                                 Fechar
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal do Coral da Ceia (Todos os Vocais) */}
+            {choirOccurrence && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" role="presentation">
+                    <div 
+                        ref={choirModalRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Escalar Coral da Ceia"
+                        tabIndex={-1}
+                        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] outline-none"
+                    >
+                        {/* Header */}
+                        <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-purple-500/10 via-pink-500/5 to-transparent">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black">
+                                    <Mic size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-zinc-900 dark:text-white leading-tight">
+                                        Coral da Ceia — Todos os Vocais
+                                    </h3>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                                        {new Date(`${choirOccurrence.date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })} • {choirOccurrence.title}
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setChoirOccurrence(null)} 
+                                aria-label="Fechar" 
+                                className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Subheader info & quick controls */}
+                        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 space-y-3">
+                            <div className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/40 rounded-xl p-3">
+                                <strong>Dia de Santa Ceia:</strong> Todos os vocais selecionados serão escalados juntos no Coral. As vagas individuais de Vocal deste culto serão substituídas pelo Coral e essa escala especial não pesará no equilíbrio de escalas normais do mês.
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="relative flex-1">
+                                    <Search size={14} className="absolute left-2.5 top-2.5 text-zinc-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        placeholder="Filtrar vocais..."
+                                        className="w-full bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-200 text-xs rounded-lg py-2 pl-8 pr-3 focus:outline-none focus:ring-2 focus:ring-purple-500 border border-zinc-200 dark:border-zinc-800 placeholder:text-zinc-400"
+                                        value={choirSearchTerm}
+                                        onChange={(e) => setChoirSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const allVocalIds = members.filter(m => (m.ministry_functions || []).some(f => f.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'vocal')).map(m => m.id);
+                                            setSelectedChoirMembers(allVocalIds);
+                                        }}
+                                        className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-2 py-1.5 rounded-lg transition-colors"
+                                    >
+                                        Marcar Todos
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedChoirMembers([])}
+                                        className="text-[11px] font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1.5 rounded-lg transition-colors"
+                                    >
+                                        Desmarcar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Members list */}
+                        <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+                            {(() => {
+                                const vocalMembers = members.filter(m => {
+                                    const isVocal = (m.ministry_functions || []).some(f => {
+                                        const norm = f.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                        return norm === 'vocal';
+                                    });
+                                    if (!isVocal) return false;
+                                    if (choirSearchTerm && !m.name.toLowerCase().includes(choirSearchTerm.toLowerCase())) {
+                                        return false;
+                                    }
+                                    return true;
+                                });
+
+                                if (vocalMembers.length === 0) {
+                                    return (
+                                        <div className="py-8 text-center text-zinc-400 text-xs">
+                                            Nenhum membro com função Vocal encontrado.
+                                        </div>
+                                    );
+                                }
+
+                                return vocalMembers.map(member => {
+                                    const isSelected = selectedChoirMembers.includes(member.id);
+                                    const availStatus = getMemberAvailStatus(member.id, choirOccurrence.date, choirOccurrence.time, availability);
+                                    const isUnavailable = availStatus === 'unavailable';
+
+                                    return (
+                                        <div
+                                            key={member.id}
+                                            onClick={() => {
+                                                setSelectedChoirMembers(prev => 
+                                                    prev.includes(member.id) 
+                                                        ? prev.filter(id => id !== member.id)
+                                                        : [...prev, member.id]
+                                                );
+                                            }}
+                                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                                                isSelected
+                                                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700/60 shadow-sm'
+                                                    : 'bg-white dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors shrink-0 ${
+                                                    isSelected 
+                                                        ? 'bg-purple-600 border-purple-600 text-white' 
+                                                        : 'border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800'
+                                                }`}>
+                                                    {isSelected && <Check size={14} className="stroke-[3]" />}
+                                                </div>
+                                                <Avatar name={member.name} avatarUrl={member.avatar_url} size="sm" />
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-zinc-900 dark:text-white' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                                        {member.name}
+                                                    </span>
+                                                    {isUnavailable && (
+                                                        <span className="text-[10px] text-red-500 font-bold">
+                                                            Indisponível neste dia
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="shrink-0 flex items-center gap-1.5">
+                                                {isUnavailable ? (
+                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                                                        Ausência marcada
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                                                        Disponível
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800">
+                            {/* Se já existia coral escalado, botão para desfazer/remover */}
+                            {assignments.some(a => a.event_date?.slice(0, 10) === choirOccurrence.date.slice(0, 10) && a.event_rule_id === choirOccurrence.ruleId && a.role.toLowerCase().startsWith('coral') && a.member_id) ? (
+                                <button
+                                    type="button"
+                                    onClick={() => handleSaveChoir([])}
+                                    disabled={processing}
+                                    className="px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors flex items-center gap-1.5"
+                                >
+                                    <Trash2 size={14} />
+                                    Remover Coral
+                                </button>
+                            ) : (
+                                <div></div>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => setChoirOccurrence(null)}
+                                    disabled={processing}
+                                    className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => handleSaveChoir(selectedChoirMembers)}
+                                    disabled={processing}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70"
+                                >
+                                    {processing ? <Loader2 size={14} className="animate-spin" /> : <Mic size={14} />}
+                                    Confirmar Coral ({selectedChoirMembers.length})
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

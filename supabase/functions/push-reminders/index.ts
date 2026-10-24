@@ -16,10 +16,21 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { safeCompare } from "../_shared/safeCompare.ts";
 import webpush from "npm:web-push@3.6.7";
 
 declare const Deno: any;
+
+function safeCompare(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  if (bufA.length !== bufB.length) return false;
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,6 +108,21 @@ serve(async (req: Request) => {
 
     const summary: Record<string, number> = { scale_day: 0, eve_reminder: 0, window_open: 0, window_close: 0 };
 
+    // Escala só notifica membros quando o mês estiver LIBERADO (flag __PUBLISHED__ no dia 01)
+    const publishedCache = new Map<string, Set<string>>();
+    const getPublishedMinistries = async (dateStr: string): Promise<Set<string>> => {
+      const flagDate = `${dateStr.slice(0, 7)}-01`;
+      if (publishedCache.has(flagDate)) return publishedCache.get(flagDate)!;
+      const { data: flags } = await supabase
+        .from("schedule_assignments")
+        .select("ministry_id")
+        .eq("role", "__PUBLISHED__")
+        .eq("event_date", flagDate);
+      const set = new Set<string>((flags || []).map((f: any) => f.ministry_id));
+      publishedCache.set(flagDate, set);
+      return set;
+    };
+
     // ── 1. LEMBRETE DO DIA DA ESCALA ──
     const { data: assignments } = await supabase
       .from("schedule_assignments")
@@ -106,8 +132,11 @@ serve(async (req: Request) => {
       .neq("role", "__EVENT_EXCLUDED__");
 
     if (assignments && assignments.length > 0) {
+      const publishedToday = await getPublishedMinistries(today);
       for (const a of assignments) {
         if (!a.member_id) continue;
+        if (a.role === "__PUBLISHED__") continue;
+        if (!publishedToday.has(a.ministry_id)) continue; // escala ainda em rascunho
         const minConfig = minSettingsMap.get(a.ministry_id);
         const scaleDayCfg = minConfig?.settings?.scale_day;
         if (scaleDayCfg && scaleDayCfg.enabled === false) continue;
@@ -187,6 +216,8 @@ serve(async (req: Request) => {
         .neq("role", "__EVENT_EXCLUDED__");
 
       if (eveAssignments && eveAssignments.length > 0) {
+        const publishedTarget = await getPublishedMinistries(targetDate);
+        if (!publishedTarget.has(minId)) continue; // escala ainda em rascunho
         for (const a of eveAssignments) {
           if (!a.member_id) continue;
           const { data: existing } = await supabase

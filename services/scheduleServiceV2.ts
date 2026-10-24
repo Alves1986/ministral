@@ -499,6 +499,55 @@ export const removeAssignmentV2 = async (
   if (error) throw error;
 };
 
+/**
+ * Coral (todos os vocais): substitui as vagas informadas (ex: "Vocal 1..N" e
+ * "Coral N" antigos) de UM evento por linhas "Coral 1", "Coral 2"... — uma por membro.
+ * Usa a mesma tabela schedule_assignments, então agenda/calendário/lembretes
+ * dos membros funcionam sem alteração.
+ */
+export const replaceChoirAssignmentsV2 = async (
+  ministryId: string,
+  orgId: string,
+  params: {
+    event_rule_id: string;
+    event_date: string;
+    rolesToRemove: string[];
+    memberIds: string[];
+  }
+) => {
+  const sb = getSupabase();
+  if (!sb) throw new Error("NO_SUPABASE");
+
+  if (params.rolesToRemove.length > 0) {
+    const { error: delError } = await sb
+      .from("schedule_assignments")
+      .delete()
+      .eq("organization_id", orgId)
+      .eq("ministry_id", ministryId)
+      .eq("event_rule_id", params.event_rule_id)
+      .eq("event_date", params.event_date)
+      .in("role", params.rolesToRemove);
+    if (delError) throw delError;
+  }
+
+  if (params.memberIds.length === 0) return;
+
+  const rows = params.memberIds.map((memberId, i) => ({
+    organization_id: orgId,
+    ministry_id: ministryId,
+    event_rule_id: params.event_rule_id,
+    event_date: params.event_date,
+    role: `Coral ${i + 1}`,
+    member_id: memberId,
+    confirmed: false
+  }));
+
+  const { error } = await sb
+    .from("schedule_assignments")
+    .upsert(rows, { onConflict: "organization_id,ministry_id,event_rule_id,event_date,role" });
+  if (error) throw error;
+};
+
 // Helper Local Date (YYYY-MM-DD) sem UTC shift
 const localDateString = (d: Date) => {
   const y = d.getFullYear();

@@ -721,9 +721,9 @@ export const SettingsScreen: React.FC<Props> = ({
               icon: <Send size={20} />,
               color: "purple",
               title: "📋 Publicação da Nova Escala",
-              badge: "Manual | Toda Equipe",
-              desc: "Quando o administrador publicar a escala do próximo período, todos os membros são notificados para consultar seus dias escalados.",
-              preview: (_h: number) => ({ title: "Nova Escala Publicada!", body: `A escala do próximo período foi publicada. Acesse o app e confira seus dias.` }),
+              badge: "Manual | Por Membro",
+              desc: "Quando o administrador liberar a escala do mês, cada membro escalado recebe um aviso individual com seus dias e funções. Selecionar membros no editor não gera notificação.",
+              preview: (_h: number) => ({ title: "Escala liberada", body: `Você está escalado(a) em: 05/11 - Culto (Vocal); 19/11 - Culto (Vocal).` }),
               showDaysBefore: false,
             },
           ] as const).map(({ key, icon, color, title, badge, desc, preview, showDaysBefore }) => {
