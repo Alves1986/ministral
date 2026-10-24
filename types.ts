@@ -73,6 +73,8 @@ export interface MinistryDef {
   organizationId?: string;
   qrCodeUrl?: string;
   socialLinkUrl?: string;
+  reminderHour?: number;
+  reminder_hour?: number;
 }
 
 export interface MemberMap {
@@ -111,6 +113,7 @@ export interface MinistrySettings {
   roles: string[];
   availabilityStart?: string;
   availabilityEnd?: string;
+  reminderHour?: number;
   spotifyClientId?: string;
   spotifyClientSecret?: string;
   youtubeApiKey?: string;

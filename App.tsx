@@ -1483,6 +1483,22 @@ const InnerApp = () => {
           }
           return url;
         }}
+        onSaveReminderHour={async (hour: number) => {
+          try {
+            await Supabase.saveReminderHour(ministryId, orgId!, hour);
+            const updatedMinistries = availableMinistries.map((m) =>
+              m.id === ministryId ? { ...m, reminderHour: hour } : m,
+            );
+            setAvailableMinistries(updatedMinistries);
+            addToast(
+              `Horário de lembrete atualizado para às ${String(hour).padStart(2, "0")}:00!`,
+              "success",
+            );
+            refreshData();
+          } catch (e: any) {
+            addToast("Erro ao atualizar horário de lembrete.", "error");
+          }
+        }}
         ministryConfig={{ ...ministryConfig, ...integrations }}
         organization={organization}
         ministries={availableMinistries}

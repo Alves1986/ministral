@@ -229,6 +229,7 @@ export function useMinistryData(
       qrCodeUrl: settingsQuery.data?.qrCodeUrl,
       socialLinkUrl: settingsQuery.data?.socialLinkUrl,
       quickAccessItems: settingsQuery.data?.quickAccessItems,
+      reminderHour: settingsQuery.data?.reminderHour ?? 8,
     }),
     [settingsQuery.data],
   );

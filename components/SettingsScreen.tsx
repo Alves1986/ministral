@@ -62,6 +62,7 @@ interface Props {
   ) => Promise<void>;
   onSaveGuidelines?: (guidelines: string) => Promise<void>;
   onSaveOrgLogo?: (file: File | null) => Promise<string | null>;
+  onSaveReminderHour?: (hour: number) => Promise<void>;
   ministries?: MinistryDef[];
   isOrgAdmin?: boolean;
   onRefreshMinistries?: () => Promise<void>;
@@ -105,6 +106,7 @@ export const SettingsScreen: React.FC<Props> = ({
   onSaveIntegrations,
   onSaveGuidelines,
   onSaveOrgLogo,
+  onSaveReminderHour,
   ministries = [],
   events,
   isOrgAdmin = false,
@@ -115,6 +117,10 @@ export const SettingsScreen: React.FC<Props> = ({
   );
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
+  const [selectedReminderHour, setSelectedReminderHour] = useState<number>(
+    typeof ministryConfig?.reminderHour === "number" ? ministryConfig.reminderHour : 8,
+  );
+  const [isSavingReminderHour, setIsSavingReminderHour] = useState(false);
   const [tempGuidelines, setTempGuidelines] = useState(
     ministryConfig?.practicalGuidelines || "",
   );
@@ -193,6 +199,22 @@ export const SettingsScreen: React.FC<Props> = ({
   useEffect(() => {
     if ("Notification" in window) setNotifPermission(Notification.permission);
   }, []);
+
+  useEffect(() => {
+    if (typeof ministryConfig?.reminderHour === "number") {
+      setSelectedReminderHour(ministryConfig.reminderHour);
+    }
+  }, [ministryConfig?.reminderHour]);
+
+  const handleSaveReminderHour = async () => {
+    if (!onSaveReminderHour) return;
+    setIsSavingReminderHour(true);
+    try {
+      await onSaveReminderHour(selectedReminderHour);
+    } finally {
+      setIsSavingReminderHour(false);
+    }
+  };
 
   const isWindowActive = () => {
     const dbStart = availabilityWindow?.start;
@@ -570,6 +592,125 @@ export const SettingsScreen: React.FC<Props> = ({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "admin" && isAdmin && (
+        <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-700/60 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 shadow-sm border border-amber-500/20">
+                <BellRing size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base sm:text-lg text-zinc-900 dark:text-zinc-100 tracking-tight">
+                    Lembrete do Dia da Escala
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    Push Automático
+                  </span>
+                </div>
+                <p className="text-zinc-500 dark:text-zinc-400 text-xs">
+                  Notifica automaticamente os membros escalados no dia do culto ou evento
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5 space-y-4">
+            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+              No dia de cada culto ou evento, o sistema dispara um alerta Push no dispositivo de cada voluntário escalado para lembrar do compromisso e solicitar confirmação de presença no app.
+            </p>
+
+            <div className="bg-zinc-50 dark:bg-zinc-900/60 rounded-xl p-3.5 border border-zinc-200 dark:border-zinc-700/70">
+              <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Clock size={14} className="text-secondary" /> Horário de Disparo (Horário de Brasília)
+              </label>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <select
+                    value={selectedReminderHour}
+                    onChange={(e) => setSelectedReminderHour(parseInt(e.target.value, 10))}
+                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 shadow-sm transition-all cursor-pointer"
+                  >
+                    {[
+                      { h: 5, label: "05:00 — Madrugada" },
+                      { h: 6, label: "06:00 — Início da Manhã" },
+                      { h: 7, label: "07:00 — Manhã Cedo" },
+                      { h: 8, label: "08:00 — Manhã (Padrão Recomendado)" },
+                      { h: 9, label: "09:00 — Manhã" },
+                      { h: 10, label: "10:00 — Meio da Manhã" },
+                      { h: 11, label: "11:00 — Final da Manhã" },
+                      { h: 12, label: "12:00 — Meio-dia / Almoço" },
+                      { h: 13, label: "13:00 — Início da Tarde" },
+                      { h: 14, label: "14:00 — Tarde" },
+                      { h: 15, label: "15:00 — Meio da Tarde" },
+                      { h: 16, label: "16:00 — Final da Tarde" },
+                      { h: 17, label: "17:00 — Fim de Tarde" },
+                      { h: 18, label: "18:00 — Início da Noite" },
+                      { h: 19, label: "19:00 — Noite" },
+                      { h: 20, label: "20:00 — Noite" },
+                    ].map((opt) => (
+                      <option key={opt.h} value={opt.h}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {onSaveReminderHour && (
+                  <button
+                    onClick={handleSaveReminderHour}
+                    disabled={isSavingReminderHour || selectedReminderHour === (ministryConfig?.reminderHour ?? 8)}
+                    className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md active:scale-95 ${
+                      selectedReminderHour === (ministryConfig?.reminderHour ?? 8)
+                        ? "bg-zinc-100 dark:bg-zinc-700/50 text-zinc-400 dark:text-zinc-500 cursor-not-allowed shadow-none"
+                        : "bg-secondary hover:bg-secondaryHover text-white shadow-secondary/20"
+                    }`}
+                  >
+                    {isSavingReminderHour ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Salvando...
+                      </>
+                    ) : selectedReminderHour === (ministryConfig?.reminderHour ?? 8) ? (
+                      <>
+                        <Check size={16} className="text-emerald-500" />
+                        Salvo ({String(selectedReminderHour).padStart(2, "0")}:00)
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        Salvar Horário
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Preview do Lembrete */}
+            <div className="p-3 bg-zinc-100/70 dark:bg-zinc-900/40 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 text-xs">
+              <span className="font-bold text-zinc-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                <BellRing size={12} className="text-secondary" /> Prévia da Notificação ao Membro:
+              </span>
+              <div className="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700/80 shadow-sm flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary font-black shrink-0 text-xs">
+                  📅
+                </div>
+                <div>
+                  <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                    Você está escalado hoje — Culto
+                  </p>
+                  <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Disparado pontualmente às {String(selectedReminderHour).padStart(2, "0")}:00 solicitando a confirmação de presença no app.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

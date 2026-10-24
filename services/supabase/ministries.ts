@@ -31,7 +31,7 @@ export const fetchOrganizationMinistries = async (
 
   const { data, error } = await sb
     .from("organization_ministries")
-    .select("id, code, label, enabled_tabs")
+    .select("id, code, label, enabled_tabs, reminder_hour")
     .eq("organization_id", orgId);
 
   if (error) throw error;
@@ -42,6 +42,7 @@ export const fetchOrganizationMinistries = async (
     label: m.label || "Sem nome",
     organizationId: orgId,
     enabledTabs: m.enabled_tabs,
+    reminderHour: m.reminder_hour ?? 8,
   }));
 };
 
@@ -571,6 +572,7 @@ export const saveMinistrySettings = async (
   socialLinkUrl?: string,
   quickAccessItems?: string[],
   practicalGuidelines?: string,
+  reminderHour?: number,
 ) => {
   const sb = getSupabase();
   if (!sb) return;
@@ -636,16 +638,35 @@ export const saveMinistrySettings = async (
       .eq("organization_id", orgId);
   }
 
-  if (start !== undefined || end !== undefined || displayName !== undefined) {
+  if (start !== undefined || end !== undefined || displayName !== undefined || reminderHour !== undefined) {
     const minUpdates: any = {};
     if (start !== undefined) minUpdates.availability_start = start;
     if (end !== undefined) minUpdates.availability_end = end;
     if (displayName !== undefined) minUpdates.label = displayName;
+    if (reminderHour !== undefined) minUpdates.reminder_hour = reminderHour;
 
     await sb
       .from("organization_ministries")
       .update(minUpdates)
       .eq("id", ministryId)
       .eq("organization_id", orgId);
+  }
+};
+
+export const saveReminderHour = async (
+  ministryId: string,
+  orgId: string,
+  hour: number,
+): Promise<void> => {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb
+    .from("organization_ministries")
+    .update({ reminder_hour: hour })
+    .eq("id", ministryId)
+    .eq("organization_id", orgId);
+  if (error) {
+    console.error("[saveReminderHour] Erro ao salvar reminder_hour:", error);
+    throw error;
   }
 };
