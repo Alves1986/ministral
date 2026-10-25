@@ -58,6 +58,9 @@ export const generateAISchedule = async (input: ScheduleInput, model?: string) =
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
+      } else {
+        const errJson = await res.json().catch(() => null);
+        console.warn('[aiScheduleService] /api/ai/schedule retornou erro:', res.status, errJson);
       }
       console.warn('[aiScheduleService] /api/ai/schedule não retornou atribuições; usando geração local.');
     } catch (e) {

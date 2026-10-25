@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus, Music, ExternalLink } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus, Music, ExternalLink, Copy, Check, Share2 } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
 import { generateGoogleCalendarUrl } from '../utils/dateUtils';
 import { getSupabase } from '../services/supabase/client';
+import { formatScheduleForWhatsApp } from '../utils/navigation';
 
 interface Props {
   isOpen: boolean;
@@ -194,6 +195,67 @@ export const EventDetailsModal: React.FC<Props> = ({
       return baseList[roleObj.index] || (roleObj.baseRole !== 'Vocal' && roleObj.baseRole !== 'Dança' ? baseList[0] : null);
   };
 
+  const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
+
+  const handleCopyWhatsApp = () => {
+      if (!event) return;
+      const rolesList = expandedRoles.map(roleObj => {
+          const dbAssignment = getMemberForRole(roleObj);
+          const memberName = dbAssignment?.profiles?.name || schedule[`${event.id}|${roleObj.keySuffix}`] || 'Vago';
+          return {
+              role: roleObj.display,
+              member: memberName
+          };
+      });
+
+      const songsList = eventSongs.map(s => ({
+          title: s.title,
+          key: s.key,
+          link: s.link
+      }));
+
+      const text = formatScheduleForWhatsApp({
+          title,
+          dateDisplay: event.dateDisplay,
+          time: time ? time.substring(0, 5) : undefined,
+          roles: rolesList,
+          songs: songsList
+      });
+
+      navigator.clipboard.writeText(text);
+      setCopiedWhatsApp(true);
+      setTimeout(() => setCopiedWhatsApp(false), 2500);
+  };
+
+  const handleOpenWhatsApp = () => {
+      if (!event) return;
+      const rolesList = expandedRoles.map(roleObj => {
+          const dbAssignment = getMemberForRole(roleObj);
+          const memberName = dbAssignment?.profiles?.name || schedule[`${event.id}|${roleObj.keySuffix}`] || 'Vago';
+          return {
+              role: roleObj.display,
+              member: memberName
+          };
+      });
+
+      const songsList = eventSongs.map(s => ({
+          title: s.title,
+          key: s.key,
+          link: s.link
+      }));
+
+      const text = formatScheduleForWhatsApp({
+          title,
+          dateDisplay: event.dateDisplay,
+          time: time ? time.substring(0, 5) : undefined,
+          roles: rolesList,
+          songs: songsList
+      });
+
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100 max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -267,6 +329,27 @@ export const EventDetailsModal: React.FC<Props> = ({
                     >
                         <CalendarPlus size={16}/> Adicionar ao Google Agenda
                     </a>
+
+                    {/* Quick WhatsApp Share */}
+                    <div className="flex gap-2">
+                        <button 
+                            type="button"
+                            onClick={handleCopyWhatsApp}
+                            className="flex-1 flex items-center justify-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors active:scale-95"
+                            title="Copiar texto da escala para enviar no WhatsApp"
+                        >
+                            {copiedWhatsApp ? <Check size={16} className="text-emerald-600 dark:text-emerald-400" /> : <Copy size={16} />}
+                            {copiedWhatsApp ? 'Copiado para o WhatsApp!' : 'Copiar Escala p/ WhatsApp'}
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={handleOpenWhatsApp}
+                            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                            title="Abrir WhatsApp diretamente com a mensagem pronta"
+                        >
+                            <Share2 size={16} />
+                        </button>
+                    </div>
 
                     {/* Apply to All Checkbox */}
                     {canEdit && (

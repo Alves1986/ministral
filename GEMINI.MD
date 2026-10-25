@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Menu mobile configurado para abrir sempre no formato normal e completo (`DashboardLayout.tsx`), evitando o estado recuado em telas menores que 1024px. Adicionados testes unitários em `tests/dashboardMenuResponsive.test.ts` (45 testes no total, 100% aprovados no Vitest).
+- Último trabalho: Correção dos 4 gargalos de navegação: (1) Sincronização do histórico do navegador com `history.pushState` e `popstate` para corrigir o botão "Voltar" no celular; (2) Unificação de telas duplicadas (Repertório e Avisos unificados, reduzindo menu de gestão de 10 para 6 itens); (3) Central de Escalas com sub-abas (Grade, Regras de Cultos e Vagas); (4) Rótulo da Bottom Bar mobile corrigido para "Ausências"; (5) Compartilhamento da escala no WhatsApp em 1 clique (`EventDetailsModal.tsx`). Adicionados testes em `tests/navigationHistory.test.ts` e `tests/unifiedNav.test.ts` (51 testes aprovados no Vitest, build OK).
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

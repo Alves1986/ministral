@@ -133,7 +133,12 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
     }
 };
 
-export const clearScheduleForMonth = async (ministryId: string, orgId: string, month: string) => {
+export const clearScheduleForMonth = async (
+    ministryId: string, 
+    orgId: string, 
+    month: string, 
+    rolesToClear?: string[]
+) => {
     const sb = getSupabase();
     if (!sb) return;
 
@@ -142,12 +147,45 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
     const startDate = `${month}-01`;
     const endDate = `${month}-${lastDay}`;
 
-    await sb.from('schedule_assignments')
+    let query = sb.from('schedule_assignments')
         .delete()
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .gte('event_date', startDate)
         .lte('event_date', endDate);
+
+    if (rolesToClear && rolesToClear.length > 0) {
+        const expandedSet = new Set<string>(rolesToClear);
+        rolesToClear.forEach(r => {
+            const lower = r.toLowerCase().trim();
+            if (lower === 'vocal') {
+                for (let i = 1; i <= 10; i++) expandedSet.add(`Vocal ${i}`);
+            }
+            if (lower.startsWith('vocal ')) {
+                expandedSet.add('Vocal');
+            }
+            if (lower === 'ministro' || lower === 'ministro de louvor') {
+                expandedSet.add('Ministro');
+                expandedSet.add('Ministro de Louvor');
+            }
+            if (lower === 'coral') {
+                for (let i = 1; i <= 20; i++) expandedSet.add(`Coral ${i}`);
+            }
+            if (lower.startsWith('coral ')) {
+                expandedSet.add('Coral');
+            }
+            if (lower === 'dança' || lower === 'danca') {
+                for (let i = 1; i <= 10; i++) {
+                    expandedSet.add(`Dança ${i}`);
+                    expandedSet.add(`Danca ${i}`);
+                }
+            }
+        });
+        query = query.in('role', Array.from(expandedSet));
+    }
+
+    const { error } = await query;
+    if (error) throw error;
 };
 
 export const fetchGlobalSchedules = async (month: string, ministryId: string, orgId: string): Promise<GlobalConflictMap> => {

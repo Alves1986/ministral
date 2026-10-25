@@ -109,7 +109,14 @@ export const AdvancedAIScreen: React.FC<Props> = ({
       setProvider(savedProvider);
     }
     const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
-    if (savedModel) setSelectedModel(savedModel);
+    if (savedModel) {
+      const valid = AI_MODELS.some(m => m.id === savedModel) || OPENROUTER_MODELS.some(m => m.id === savedModel);
+      if (valid) {
+        setSelectedModel(savedModel);
+      } else {
+        setSelectedModel(DEFAULT_MODEL);
+      }
+    }
   }, [ministryId]);
 
   const handleProviderChange = (newProvider: 'gemini' | 'openrouter') => {
@@ -535,7 +542,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     } catch (error: any) {
       console.error(error);
       setAiError(error.message || "Não foi possível realizar o checkup.");
-      addToast('Erro na análise de saúde da escala', 'error');
+      addToast(error.message || 'Erro na análise de saúde da escala', 'error');
     } finally {
       setHealthLoading(false);
     }
@@ -594,7 +601,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     } catch (error: any) {
       console.error(error);
       setAiError(error.message || "Erro ao gerar mensagens.");
-      addToast("Erro ao gerar mensagens", "error");
+      addToast(error.message || "Erro ao gerar mensagens", "error");
     } finally {
       setMessagesLoading(false);
     }
@@ -637,7 +644,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     } catch (e: any) {
       console.error(e);
       setAiError(e.message || "Não foi possível gerar análise de conflitos.");
-      addToast('Falha na predição', 'error');
+      addToast(e.message || 'Falha na predição', 'error');
     } finally {
       setPredictiveLoading(false);
     }

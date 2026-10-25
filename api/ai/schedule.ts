@@ -7,7 +7,13 @@ import { createClient } from '@supabase/supabase-js';
 import { buildSchedulePrompt, extractAssignments } from '../../services/aiScheduleUtils.ts';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODELS_FALLBACK = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.0-flash-lite'];
+const MODELS_FALLBACK = [
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-pro',
+];
 
 async function callGeminiJSON(apiKey: string, model: string, prompt: string): Promise<string> {
   const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
@@ -31,7 +37,8 @@ async function callGeminiJSON(apiKey: string, model: string, prompt: string): Pr
 
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
-    const err = new Error(JSON.stringify(errBody?.error || { message: response.statusText }));
+    const errMsg = errBody?.error?.message || response.statusText;
+    const err = new Error(errMsg);
     (err as any).status = response.status;
     throw err;
   }
@@ -48,36 +55,63 @@ export default async function handler(req: any, res: any) {
 
   // --- AUTENTICAÇÃO (JWT do Supabase) ---
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const supabaseUrl =
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      '';
     const supabaseAnon =
       process.env.SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
       process.env.VITE_SUPABASE_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
       '';
     const authHeader = req.headers.authorization || '';
-    if (!supabaseUrl || !supabaseAnon || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Não autorizado. Faça login e tente novamente.' });
+
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Não autorizado. Token de sessão ausente.' });
     }
-    const token = authHeader.slice('Bearer '.length);
+
+    if (!supabaseUrl || !supabaseAnon) {
+      console.error('[api/ai/schedule] Configuração Supabase incompleta (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
+      return res.status(500).json({
+        error: 'Configuração de autenticação incompleta no servidor (Vercel). Verifique VITE_SUPABASE_ANON_KEY.',
+      });
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (!token) {
+      return res.status(401).json({ error: 'Token de autenticação vazio.' });
+    }
+
     const sb = createClient(supabaseUrl, supabaseAnon);
     const { data: { user }, error } = await sb.auth.getUser(token);
-    if (error || !user) return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+    if (error || !user) {
+      console.warn('[api/ai/schedule] Sessão do usuário inválida ou expirada:', error?.message);
+      return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
+    }
   } catch (authErr: any) {
     console.error('[api/ai/schedule] Erro na autenticação:', authErr?.message || authErr);
-    return res.status(500).json({ error: 'Falha ao validar sessão.' });
+    return res.status(500).json({ error: 'Falha ao validar sessão: ' + (authErr?.message || 'Erro interno') });
   }
 
-  const geminiApiKey =
-    (process.env.GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.GEMINI_API_KEY : '') ||
-    (process.env.VITE_GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.VITE_GEMINI_API_KEY : '') ||
+  const rawGemini =
     process.env.GEMINI_API_KEY ||
     process.env.VITE_GEMINI_API_KEY ||
     '';
+  const geminiApiKey = rawGemini.trim().replace(/^["']|["']$/g, '');
 
-  const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+  const rawOpenRouter =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.VITE_OPENROUTER_API_KEY ||
+    '';
+  const openRouterApiKey = rawOpenRouter.trim().replace(/^["']|["']$/g, '');
 
   if (!geminiApiKey && !openRouterApiKey) {
-    return res.status(500).json({ error: 'Serviço de IA temporariamente indisponível.' });
+    return res.status(500).json({
+      error: 'Serviço de IA indisponível. Verifique se a variável VITE_GEMINI_API_KEY está configurada no painel da Vercel.',
+    });
   }
 
   try {
@@ -120,12 +154,15 @@ export default async function handler(req: any, res: any) {
         console.warn(`[api/ai/schedule] Modelo ${m} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
       }
     }
-    if (!raw) throw lastErr || new Error('Todos os modelos falharam.');
+    if (!raw) throw lastErr || new Error('Todos os modelos de IA falharam.');
 
     const assignments = extractAssignments(raw);
     return res.status(200).json(assignments);
   } catch (error: any) {
     console.error('[api/ai/schedule] Erro:', error?.message || error);
-    return res.status(500).json({ error: 'Falha ao gerar escala com IA.' });
+    return res.status(500).json({
+      error: error?.message || 'Falha ao gerar escala com IA.',
+      status: error?.status || 500,
+    });
   }
 }

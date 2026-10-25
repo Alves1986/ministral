@@ -93,8 +93,14 @@ export const ToolsMenu: React.FC<Props> = ({
               
               <div className="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
               
-              <button onClick={onClearMonth} className="w-full text-left px-3 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-3 transition-colors">
-                <Trash size={18} /> Limpar Escala do Mês
+              <button 
+                onClick={() => {
+                  setIsOpen(false);
+                  onClearMonth();
+                }} 
+                className="w-full text-left px-3 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-3 transition-colors"
+              >
+                <Trash size={18} /> Limpar Escala...
               </button>
             </div>
             

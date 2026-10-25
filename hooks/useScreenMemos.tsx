@@ -35,6 +35,13 @@ export interface ScreenMemosProps {
   currentTab: string;
   safeEnabledTabs: string[];
   integrations: any;
+
+  orgName?: string;
+  ministryTitle?: string;
+  roles?: string[];
+  onSendAnnouncement?: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string, externalLink?: string) => Promise<void>;
+  openCreateAnnouncement?: boolean;
+  onCloseCreateAnnouncement?: () => void;
 }
 
 export function useScreenMemos(props: ScreenMemosProps) {
@@ -42,7 +49,9 @@ export function useScreenMemos(props: ScreenMemosProps) {
     availability, availabilityNotes, setAvailability, publicMembers,
     currentMonth, setCurrentMonth, activeUser, orgId, availabilityWindow,
     ministryId, queryClient, schedule, swapRequests, events, addToast,
-    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs, integrations
+    refreshData, announcements, repertoire, isAdmin, currentTab, safeEnabledTabs, integrations,
+    orgName = '', ministryTitle = '', roles = [], onSendAnnouncement,
+    openCreateAnnouncement = false, onCloseCreateAnnouncement
   } = props;
 
   const availabilityScreen = useMemo(() => (
@@ -50,7 +59,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
         key={ministryId}
         availability={availability} 
         availabilityNotes={availabilityNotes} 
-        setAvailability={setAvailability} 
+        setAvailability={setAvailability}
         members={publicMembers} 
         currentMonth={currentMonth} 
         onMonthChange={setCurrentMonth} 
@@ -73,9 +82,9 @@ export function useScreenMemos(props: ScreenMemosProps) {
             });
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
             queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
-        }} 
-        availabilityWindow={availabilityWindow} 
-        ministryId={ministryId} 
+        }}
+        availabilityWindow={availabilityWindow}
+        ministryId={ministryId}
         events={events}
     />
   ), [availability, availabilityNotes, setAvailability, publicMembers, currentMonth, activeUser, orgId, availabilityWindow, ministryId, queryClient, events]);
@@ -101,20 +110,17 @@ export function useScreenMemos(props: ScreenMemosProps) {
         }} 
         onAcceptRequest={async (reqId) => { 
             try {
-                // Optimistic update: remove imediatamente da lista local para evitar
-                // que outro membro tente assumir a mesma vaga enquanto a API responde
+                // Optimistic update
                 queryClient.setQueryData(
                     ['swaps', ministryId, orgId],
                     (old: SwapRequest[] | undefined) => (old || []).filter(r => r.id !== reqId)
                 );
                 await Supabase.performSwapSQL(ministryId, orgId!, reqId, activeUser!.name, activeUser!.id!); 
                 addToast("Escala assumida com sucesso.", "success");
-                // Garante que o cache está sincronizado com o servidor
                 queryClient.invalidateQueries({ queryKey: ['swaps', ministryId, orgId] });
                 queryClient.invalidateQueries({ queryKey: ['schedule', ministryId, orgId] });
                 refreshData();
             } catch (e: any) {
-                // Rollback: revalida o cache para restaurar o estado correto
                 queryClient.invalidateQueries({ queryKey: ['swaps', ministryId, orgId] });
                 addToast("Erro ao assumir escala: " + (e.message || "Erro desconhecido"), "error");
                 console.error(e);
@@ -133,11 +139,22 @@ export function useScreenMemos(props: ScreenMemosProps) {
     />
   ), [schedule, currentMonth, activeUser, swapRequests, events, ministryId, orgId, addToast, refreshData]);
 
+  const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
+  const canManage = Boolean(isAdmin || isMinister);
+
   const announcementsScreen = useMemo(() => (
     <AnnouncementsScreen 
         announcements={announcements} 
         currentUser={activeUser!} 
         onRefresh={refreshData}
+        canCreate={canManage}
+        orgName={orgName}
+        ministryName={ministryTitle}
+        members={publicMembers}
+        roles={roles}
+        onSendAnnouncement={onSendAnnouncement}
+        initialOpenCreate={openCreateAnnouncement}
+        onCloseCreate={onCloseCreateAnnouncement}
         onMarkRead={async (id) => {
             queryClient.setQueryData(['announcements', ministryId, orgId!], (old: any) => {
                 if (!old) return old;
@@ -200,44 +217,29 @@ export function useScreenMemos(props: ScreenMemosProps) {
             }
         }}
     />
-  ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData]);
+  ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData, canManage, orgName, ministryTitle, publicMembers, roles, onSendAnnouncement, openCreateAnnouncement, onCloseCreateAnnouncement, addToast]);
 
   const repertoireScreen = useMemo(() => {
-    const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
-    const canManage = isAdmin || isMinister;
+    const isRepertoireTab = currentTab === 'repertoire' || currentTab === 'repertoire-manager';
+    const isEnabled = safeEnabledTabs.includes('repertoire') || safeEnabledTabs.includes('repertoire-manager');
+
+    if (!isRepertoireTab || !isEnabled) return null;
+
     return (
-    <>
-      {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && (
-        <RepertoireScreen 
-          key={ministryId}
-          repertoire={repertoire} 
-          setRepertoire={async () => { refreshData(); }} 
-          currentUser={activeUser!} 
-          mode="view" 
-          ministryId={ministryId} 
-          integrations={integrations} 
-          events={events}
-          currentMonth={currentMonth}
-          onMonthChange={setCurrentMonth}
-        />
-      )}
-      {(currentTab === 'repertoire-manager' && canManage && safeEnabledTabs.includes('repertoire-manager')) && (
-        <RepertoireScreen 
-          key={ministryId}
-          repertoire={repertoire} 
-          setRepertoire={async () => { refreshData(); }} 
-          currentUser={activeUser!} 
-          mode="manage" 
-          ministryId={ministryId} 
-          integrations={integrations} 
-          events={events}
-          currentMonth={currentMonth}
-          onMonthChange={setCurrentMonth}
-        />
-      )}
-    </>
+      <RepertoireScreen 
+        key={ministryId}
+        repertoire={repertoire} 
+        setRepertoire={async () => { refreshData(); }} 
+        currentUser={activeUser!} 
+        mode={canManage ? 'manage' : 'view'} 
+        ministryId={ministryId} 
+        integrations={integrations} 
+        events={events}
+        currentMonth={currentMonth}
+        onMonthChange={setCurrentMonth}
+      />
     );
-  }, [currentTab, safeEnabledTabs, repertoire, activeUser, isAdmin, ministryId, refreshData, integrations, events, currentMonth, setCurrentMonth]);
+  }, [currentTab, safeEnabledTabs, repertoire, activeUser, canManage, ministryId, refreshData, integrations, events, currentMonth, setCurrentMonth]);
 
   return { availabilityScreen, swapsScreen, announcementsScreen, repertoireScreen };
 }

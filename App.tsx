@@ -35,10 +35,12 @@ import { getSupabase } from "./services/supabase/client";
 import { handleLoginCallback } from "./services/spotifyService";
 import { autoSyncIfConnected } from "./services/googleCalendar";
 import { logAuditAction } from "./services/supabase/audit";
+import { normalizeTabAlias } from "./utils/navigation";
 
 
 import {
   LayoutDashboard,
+  LayoutGrid,
   CalendarCheck,
   RefreshCcw,
   Music,
@@ -99,6 +101,7 @@ import {
 import { StatsModal } from "./components/StatsModal";
 import { ConfirmationModal } from "./components/ConfirmationModal";
 import { EventDetailsModal } from "./components/EventDetailsModal";
+import { ClearScheduleModal } from "./components/ClearScheduleModal";
 
 const ScheduleEditorV2 = lazy(() =>
   import("./components/ScheduleEditorV2").then((m) => ({
@@ -481,28 +484,56 @@ const InnerApp = () => {
     }
   }, [themeMode]);
 
+  const [scheduleSubTab, setScheduleSubTab] = useState<'editor' | 'events' | 'rules'>('editor');
+  const [openCreateAnnouncement, setOpenCreateAnnouncement] = useState(false);
+
   const [currentTab, setCurrentTab] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("calendar_connected") === "true") {
         return "profile";
       }
-      return params.get("tab") || "dashboard";
+      const rawTab = params.get("tab");
+      if (rawTab) {
+        const normalized = normalizeTabAlias(rawTab);
+        return normalized.tab;
+      }
     }
     return "dashboard";
   });
 
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("tab") !== currentTab) {
-      url.searchParams.set("tab", currentTab);
-      try {
-        window.history.replaceState({}, "", url.toString());
-      } catch (e) {}
+  const handleTabChange = useCallback((tab: string, replace = false) => {
+    const normalized = normalizeTabAlias(tab);
+    setCurrentTab(normalized.tab);
+    if (normalized.subTab) {
+      setScheduleSubTab(normalized.subTab);
     }
-  }, [currentTab]);
+    if (normalized.openCreate) {
+      setOpenCreateAnnouncement(true);
+    }
 
-  // Sincronizar navegação quando uma notificação Push for clicada ou a URL mudar
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const currentUrlTab = url.searchParams.get("tab") || "dashboard";
+      const targetTab = normalized.tab === "dashboard" ? "" : normalized.tab;
+
+      if (targetTab) {
+        url.searchParams.set("tab", targetTab);
+      } else {
+        url.searchParams.delete("tab");
+      }
+
+      if (currentUrlTab !== (targetTab || "dashboard")) {
+        if (replace) {
+          window.history.replaceState({ tab: normalized.tab }, "", url.toString());
+        } else {
+          window.history.pushState({ tab: normalized.tab }, "", url.toString());
+        }
+      }
+    }
+  }, []);
+
+  // Sincronizar navegação quando uma notificação Push for clicada ou o histórico popstate mudar
   useEffect(() => {
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === "NAVIGATE") {
@@ -513,34 +544,49 @@ const InnerApp = () => {
             tab = parsed.searchParams.get("tab");
           } catch (e) {}
         }
-        if (tab === "schedule") tab = "calendar";
-        if (tab) setCurrentTab(tab);
+        if (tab) handleTabChange(tab);
       }
     };
 
-    const handleUrlSync = () => {
+    const handlePopState = (event: PopStateEvent) => {
       const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get("tab");
-      if (tabParam) {
-        const normalizedTab = tabParam === "schedule" ? "calendar" : tabParam;
-        setCurrentTab((prev) => (prev !== normalizedTab ? normalizedTab : prev));
+      const tabParam = event.state?.tab || params.get("tab") || "dashboard";
+      const normalized = normalizeTabAlias(tabParam);
+      setCurrentTab((prev) => (prev !== normalized.tab ? normalized.tab : prev));
+      if (normalized.subTab) {
+        setScheduleSubTab(normalized.subTab);
+      }
+      if (normalized.openCreate) {
+        setOpenCreateAnnouncement(true);
       }
     };
+
+    // On initial mount, sync if URL contained special sub-tabs
+    const initialParams = new URLSearchParams(window.location.search);
+    const initialTab = initialParams.get("tab");
+    if (initialTab) {
+      const norm = normalizeTabAlias(initialTab);
+      if (norm.subTab) setScheduleSubTab(norm.subTab);
+      if (norm.openCreate) setOpenCreateAnnouncement(true);
+      if (norm.tab !== initialTab) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", norm.tab);
+        window.history.replaceState({ tab: norm.tab }, "", url.toString());
+      }
+    }
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("message", handleSwMessage);
     }
-    window.addEventListener("popstate", handleUrlSync);
-    window.addEventListener("focus", handleUrlSync);
+    window.addEventListener("popstate", handlePopState);
 
     return () => {
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.removeEventListener("message", handleSwMessage);
       }
-      window.removeEventListener("popstate", handleUrlSync);
-      window.removeEventListener("focus", handleUrlSync);
+      window.removeEventListener("popstate", handlePopState);
     };
-  }, []);
+  }, [handleTabChange]);
 
   const activeUser = currentUser || sessionUser;
   const ministryId = storeMinistryId || activeUser?.ministryId || "";
@@ -605,6 +651,7 @@ const InnerApp = () => {
   const [isEventsModalOpen, setEventsModalOpen] = useState(false);
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
+  const [isClearScheduleModalOpen, setIsClearScheduleModalOpen] = useState(false);
 
   useEffect(() => {
     const handlePwaReady = () => setShowInstallBanner(true);
@@ -776,34 +823,8 @@ const InnerApp = () => {
     () => [
       {
         id: "schedule-editor",
-        label: "Editor de Escala",
+        label: "Central de Escalas",
         icon: <Edit size={20} />,
-      },
-      {
-        id: "monthly-report",
-        label: "Relatório Mensal",
-        icon: <FileText size={20} />,
-      },
-      {
-        id: "repertoire-manager",
-        label: "Ger. Repertório",
-        icon: <ListMusic size={20} />,
-      },
-      { id: "report", label: "Relat. Indisp.", icon: <FileBarChart size={20} /> },
-      {
-        id: "event-rules",
-        label: "Regras de Agenda",
-        icon: <CalendarDays size={20} />,
-      },
-      {
-        id: "schedule-rules",
-        label: "Regras de Escala",
-        icon: <ShieldCheck size={20} />,
-      },
-      {
-        id: "send-announcements",
-        label: "Enviar Avisos",
-        icon: <Send size={20} />,
       },
       { 
         id: "members", 
@@ -811,6 +832,12 @@ const InnerApp = () => {
         icon: <Users size={20} />,
         badge: pendingJoinRequestsCount > 0 ? pendingJoinRequestsCount : undefined 
       },
+      {
+        id: "monthly-report",
+        label: "Relatório Mensal",
+        icon: <FileText size={20} />,
+      },
+      { id: "report", label: "Relat. Indisp.", icon: <FileBarChart size={20} /> },
       { id: "advanced-ai", label: "IA Avançada", icon: <Sparkles size={20} /> },
       {
         id: "support-admin",
@@ -1053,7 +1080,7 @@ const InnerApp = () => {
             {/* Último Aviso (se houver) */}
             {lastAnnouncement && (
               <div
-                onClick={() => setCurrentTab("announcements")}
+                onClick={() => handleTabChange("announcements")}
                 className="bg-ministral-gold/10 border border-ministral-gold/20 p-3 lg:p-3.5 rounded-xl animate-slide-up cursor-pointer hover:bg-ministral-gold/20 transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                 style={{ animationDelay: "0.25s" }}
                 title="Clique para ver os avisos"
@@ -1092,7 +1119,7 @@ const InnerApp = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => setCurrentTab('calendar')}
+                  onClick={() => handleTabChange('calendar')}
                   className="text-xs text-secondary hover:underline font-bold px-3 py-1.5 rounded-lg hover:bg-secondary/10 transition-colors inline-flex items-center gap-1"
                 >
                   Ver Todos →
@@ -1103,7 +1130,7 @@ const InnerApp = () => {
                 {upcomingEvents.length > 0 ? upcomingEvents.map((ev: any) => (
                   <div
                     key={ev.iso}
-                    onClick={() => setCurrentTab('calendar')}
+                    onClick={() => handleTabChange('calendar')}
                     className="flex items-center gap-3 p-3 bg-zinc-50/80 dark:bg-zinc-900/60 hover:bg-zinc-100 dark:hover:bg-zinc-700/60 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer group"
                   >
                     <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl w-12 h-12 flex-shrink-0 shadow-xs group-hover:border-ministral-500/40 transition-colors">
@@ -1142,7 +1169,7 @@ const InnerApp = () => {
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.id}
-                    onClick={() => setCurrentTab(action.id)}
+                    onClick={() => handleTabChange(action.id)}
                     className="group relative flex flex-col items-center justify-center p-2.5 lg:p-3 bg-white dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-95 overflow-hidden"
                   >
                     <div className={`absolute top-0 left-0 w-full h-0.5 ${action.color} opacity-80`}></div>
@@ -1178,7 +1205,7 @@ const InnerApp = () => {
       ministryId,
       QUICK_ACTIONS,
       safeEnabledTabs,
-      setCurrentTab,
+      handleTabChange,
       currentMonth,
       events,
       announcements,
@@ -1228,6 +1255,59 @@ const InnerApp = () => {
     [currentMonth, events, schedule, expandedRoles, setEventDetailsModal],
   );
 
+  const handleSendAnnouncement = useCallback(
+    async (
+      t: string,
+      m: string,
+      type: "info" | "success" | "warning" | "alert",
+      exp: string,
+      extLink?: string,
+    ) => {
+      if (!orgId) throw new Error("Organização não identificada.");
+
+      try {
+        await Supabase.createAnnouncementSQL(
+          ministryId,
+          orgId,
+          {
+            title: t,
+            message: m,
+            type,
+            expirationDate: exp,
+            externalLink: extLink,
+          },
+          activeUser!.name,
+        );
+
+        Supabase.sendNotificationSQL(ministryId, orgId, {
+          title: t,
+          message: m,
+          type,
+          actionLink: extLink || "announcements",
+        }).catch((err) => {
+          console.warn("Notificação push secundária:", err);
+        });
+
+        addToast("Aviso publicado com sucesso!", "success");
+
+        await queryClient.invalidateQueries({
+          queryKey: ["announcements", ministryId, orgId],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["announcements"],
+        });
+      } catch (e: any) {
+        console.error("Falha ao publicar aviso:", e);
+        addToast(
+          "Erro ao publicar aviso: " + (e.message || "Erro desconhecido"),
+          "error",
+        );
+        throw e;
+      }
+    },
+    [ministryId, orgId, activeUser, addToast, queryClient],
+  );
+
   const {
     availabilityScreen,
     swapsScreen,
@@ -1256,7 +1336,76 @@ const InnerApp = () => {
     currentTab,
     safeEnabledTabs,
     integrations,
+    orgName: organization?.name || "",
+    ministryTitle,
+    roles,
+    onSendAnnouncement: handleSendAnnouncement,
+    openCreateAnnouncement,
+    onCloseCreateAnnouncement: () => setOpenCreateAnnouncement(false),
   });
+
+  const scheduleRoleStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    Object.entries(schedule || {}).forEach(([key, memberName]) => {
+      if (
+        memberName &&
+        memberName !== "__EXCLUDED__" &&
+        memberName !== "__PUBLISHED__"
+      ) {
+        const parts = key.split("|");
+        if (parts.length >= 3) {
+          const role = parts.slice(2).join("|");
+          counts[role] = (counts[role] || 0) + 1;
+          total++;
+        }
+      }
+    });
+    return { counts, total };
+  }, [schedule]);
+
+  const allAvailableRolesForClear = useMemo(() => {
+    const set = new Set<string>(expandedRoles);
+    Object.keys(scheduleRoleStats.counts).forEach((r) => set.add(r));
+    return Array.from(set);
+  }, [expandedRoles, scheduleRoleStats.counts]);
+
+  const handleConfirmClearSchedule = useCallback(
+    async (rolesToClear?: string[]) => {
+      try {
+        await Supabase.clearScheduleForMonth(
+          ministryId,
+          orgId!,
+          currentMonth,
+          rolesToClear,
+        );
+        queryClient.invalidateQueries({
+          queryKey: [
+            "assignments",
+            ministryId,
+            currentMonth,
+            orgId,
+          ],
+        });
+        window.dispatchEvent(new CustomEvent("schedule-reloaded"));
+        if (rolesToClear && rolesToClear.length > 0) {
+          addToast(
+            rolesToClear.length === 1
+              ? `Função "${rolesToClear[0]}" limpa com sucesso`
+              : `${rolesToClear.length} funções limpas com sucesso`,
+            "success",
+          );
+        } else {
+          addToast("Escala do mês limpa com sucesso", "success");
+        }
+        refreshData();
+      } catch (e) {
+        addToast("Erro ao limpar escala", "error");
+        throw e;
+      }
+    },
+    [ministryId, orgId, currentMonth, queryClient, addToast, refreshData],
+  );
 
   const scheduleEditorScreen = useMemo(
     () => (
@@ -1264,97 +1413,142 @@ const InnerApp = () => {
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-700 pb-6">
           <div className="w-full xl:w-auto">
             <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
-              <Edit className="text-ministral-500" size={32} /> Editor de Escala
+              <Edit className="text-ministral-500" size={32} /> Central de Escalas
             </h2>
             <p className="text-zinc-500 dark:text-zinc-400 mt-2">
-              Gerencie a escala oficial de {getMonthName(currentMonth)}.
+              Gerencie cultos, vagas e a escala oficial de {getMonthName(currentMonth)}.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
-              <button
-                onClick={() => setRolesModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
-              >
-                <Briefcase size={16} /> <span>Funções</span>
-              </button>
-              <ToolsMenu
-                onExportIndividual={(member) =>
-                  generateIndividualPDF(
-                    ministryTitle,
-                    currentMonth,
-                    member,
-                    events.map((e) => ({
-                      ...e,
-                      dateDisplay: e.iso
-                        .split("T")[0]
-                        .split("-")
-                        .reverse()
-                        .join("/"),
-                    })),
-                    schedule,
-                    organization?.logo_url,
-                  )
-                }
-                onExportFull={() =>
-                  generateFullSchedulePDF(
-                    ministryTitle,
-                    currentMonth,
-                    events.map((e) => ({
-                      ...e,
-                      dateDisplay: e.iso
-                        .split("T")[0]
-                        .split("-")
-                        .reverse()
-                        .join("/"),
-                    })),
-                    expandedRoles,
-                    schedule,
-                    organization?.logo_url,
-                  )
-                }
-                onClearMonth={() =>
-                  confirmAction("Limpar?", "Limpar escala?", async () => {
-                    try {
-                      await Supabase.clearScheduleForMonth(
-                        ministryId,
-                        orgId!,
-                        currentMonth,
-                      );
-                      queryClient.invalidateQueries({
-                        queryKey: [
-                          "assignments",
-                          ministryId,
-                          currentMonth,
-                          orgId,
-                        ],
-                      });
-                      window.dispatchEvent(
-                        new CustomEvent("schedule-reloaded"),
-                      );
-                      addToast("Escala limpa com sucesso", "success");
-                      refreshData();
-                    } catch (e) {
-                      addToast("Erro ao limpar escala", "error");
-                    }
-                  })
-                }
-                allMembers={publicMembers.map((m) => m.name)}
-              />
+          {scheduleSubTab === "editor" && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
+                <button
+                  onClick={() => setRolesModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
+                >
+                  <Briefcase size={16} /> <span>Funções</span>
+                </button>
+                <ToolsMenu
+                  onExportIndividual={(member) =>
+                    generateIndividualPDF(
+                      ministryTitle,
+                      currentMonth,
+                      member,
+                      events.map((e) => ({
+                        ...e,
+                        dateDisplay: e.iso
+                          .split("T")[0]
+                          .split("-")
+                          .reverse()
+                          .join("/"),
+                      })),
+                      schedule,
+                      organization?.logo_url,
+                    )
+                  }
+                  onExportFull={() =>
+                    generateFullSchedulePDF(
+                      ministryTitle,
+                      currentMonth,
+                      events.map((e) => ({
+                        ...e,
+                        dateDisplay: e.iso
+                          .split("T")[0]
+                          .split("-")
+                          .reverse()
+                          .join("/"),
+                      })),
+                      expandedRoles,
+                      schedule,
+                      organization?.logo_url,
+                    )
+                  }
+                  onClearMonth={() => setIsClearScheduleModalOpen(true)}
+                  allMembers={publicMembers.map((m) => m.name)}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
-        <ScheduleEditorV2
-          key={ministryId}
-          ministryId={ministryId}
-          orgId={orgId!}
-          currentMonth={currentMonth}
-          onMonthChange={setCurrentMonth}
-          currentTab={currentTab}
-          isAdmin={isAdmin}
-          isPro={activeUser?.isPro ?? false}
-          roles={expandedRoles}
-        />
+
+        {/* Sub-abas da Central de Escalas */}
+        <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200/80 dark:border-zinc-700/80 w-fit">
+          <button
+            type="button"
+            onClick={() => setScheduleSubTab("editor")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              scheduleSubTab === "editor"
+                ? "bg-white dark:bg-zinc-900 text-ministral-600 dark:text-white shadow-sm"
+                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            }`}
+          >
+            <LayoutGrid size={16} /> <span>Grade da Escala</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setScheduleSubTab("events")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              scheduleSubTab === "events"
+                ? "bg-white dark:bg-zinc-900 text-ministral-600 dark:text-white shadow-sm"
+                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            }`}
+          >
+            <CalendarDays size={16} /> <span>Regras de Agenda (Cultos)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setScheduleSubTab("rules")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              scheduleSubTab === "rules"
+                ? "bg-white dark:bg-zinc-900 text-ministral-600 dark:text-white shadow-sm"
+                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            }`}
+          >
+            <ShieldCheck size={16} /> <span>Vagas por Função</span>
+          </button>
+        </div>
+
+        {scheduleSubTab === "editor" && (
+          <ScheduleEditorV2
+            key={ministryId}
+            ministryId={ministryId}
+            orgId={orgId!}
+            currentMonth={currentMonth}
+            onMonthChange={setCurrentMonth}
+            currentTab={currentTab}
+            isAdmin={isAdmin}
+            isPro={activeUser?.isPro ?? false}
+            roles={expandedRoles}
+            onOpenClearModal={() => setIsClearScheduleModalOpen(true)}
+          />
+        )}
+
+        {scheduleSubTab === "events" && (
+          <div className="bg-white dark:bg-zinc-800/50 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700">
+            <EventsScreen key={ministryId} />
+          </div>
+        )}
+
+        {scheduleSubTab === "rules" && (
+          <div className="bg-white dark:bg-zinc-800/50 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700">
+            <ScheduleRulesScreen
+              key={ministryId}
+              ministryId={ministryId}
+              orgId={orgId!}
+              availableRoles={roles}
+              members={publicMembers}
+              availableEvents={events
+                .map((e: any) => ({
+                  id: e.id?.split("|")[0] || e.ruleId || e.id,
+                  title: e.title,
+                }))
+                .filter(
+                  (e: any, i: number, arr: any[]) =>
+                    arr.findIndex((x) => x.id === e.id) === i,
+                )}
+            />
+          </div>
+        )}
       </div>
     ),
     [
@@ -1371,6 +1565,7 @@ const InnerApp = () => {
       isAdmin,
       activeUser,
       expandedRoles,
+      scheduleSubTab,
       refreshData,
       queryClient,
       confirmAction,
@@ -1832,24 +2027,9 @@ const InnerApp = () => {
               : ministryTitle || "Carregando..."
           }
           currentTab={isTabValid ? currentTab : "dashboard"}
-          onTabChange={async (tab) => {
-            setCurrentTab(tab);
-          }}
+          onTabChange={handleTabChange}
           mainNavItems={MAIN_NAV}
-          managementNavItems={(() => {
-            const isMinister =
-              activeUser?.ministry_functions?.some((r) =>
-                r.toLowerCase().includes("ministro"),
-              ) || false;
-            if (isAdmin) return MANAGEMENT_NAV;
-            if (isMinister)
-              return MANAGEMENT_NAV.filter(
-                (item) =>
-                  item.id === "repertoire-manager" ||
-                  item.id === "send-announcements",
-              );
-            return [];
-          })()}
+          managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
           notifications={notifications}
           onNotificationsUpdate={setNotifications}
           onInstall={() => {
@@ -2070,33 +2250,11 @@ const InnerApp = () => {
                 status === "ready" &&
                 ministryId.length === 36 &&
                 membersScreen}
-              {currentTab === "event-rules" &&
+              {(currentTab === "event-rules" || currentTab === "schedule-rules") &&
                 isAdmin &&
-                safeEnabledTabs.includes("event-rules") &&
                 status === "ready" &&
-                ministryId.length === 36 && <EventsScreen key={ministryId} />}
-              {currentTab === "schedule-rules" &&
-                isAdmin &&
-                safeEnabledTabs.includes("schedule-rules") &&
-                status === "ready" &&
-                ministryId.length === 36 && (
-                  <ScheduleRulesScreen
-                    key={ministryId}
-                    ministryId={ministryId}
-                    orgId={orgId!}
-                    availableRoles={roles}
-                    members={publicMembers}
-                    availableEvents={events
-                      .map((e: any) => ({
-                        id: e.id?.split("|")[0] || e.ruleId || e.id,
-                        title: e.title,
-                      }))
-                      .filter(
-                        (e: any, i: number, arr: any[]) =>
-                          arr.findIndex((x) => x.id === e.id) === i,
-                      )}
-                  />
-                )}
+                ministryId.length === 36 &&
+                scheduleEditorScreen}
               {currentTab === "plan" && isAdmin && status === "ready" && (
                 <PlanScreen
                   organization={organization}
@@ -2197,65 +2355,7 @@ const InnerApp = () => {
                     events={events}
                   />
                 )}
-              {currentTab === "send-announcements" &&
-                (isAdmin ||
-                  activeUser?.ministry_functions?.some((r) =>
-                    r.toLowerCase().includes("ministro"),
-                  )) &&
-                safeEnabledTabs.includes("send-announcements") &&
-                status === "ready" &&
-                ministryId.length === 36 && (
-                  <AlertsManager
-                    orgName={organization?.name || ""}
-                    ministryName={ministryTitle}
-                    members={publicMembers}
-                    roles={roles}
-                    onSend={async (t, m, type, exp, extLink) => {
-                      if (!orgId)
-                        throw new Error("Organização não identificada.");
-
-                      try {
-                        // ALTERAÇÃO 2
-                        // (a) Operação principal
-                        await Supabase.createAnnouncementSQL(
-                          ministryId,
-                          orgId,
-                          {
-                            title: t,
-                            message: m,
-                            type,
-                            expirationDate: exp,
-                            externalLink: extLink,
-                          },
-                          activeUser!.name,
-                        );
-
-                        // (b) Operação secundária de notificação (Push e In-App)
-                        Supabase.sendNotificationSQL(ministryId, orgId, {
-                          title: t,
-                          message: m,
-                          type,
-                          actionLink: extLink || "announcements",
-                        }).catch((err) => {
-                          console.warn(
-                            "Notificação push secundária:",
-                            err,
-                          );
-                        });
-
-                        addToast("Aviso publicado com sucesso!", "success");
-
-                        // (c) Invalidação de cache substituindo refreshData
-                        await queryClient.invalidateQueries({
-                          queryKey: ["announcements", ministryId, orgId],
-                        });
-                      } catch (err) {
-                        console.error("Erro ao processar aviso:", err);
-                        throw err;
-                      }
-                    }}
-                  />
-                )}
+              {currentTab === "send-announcements" && announcementsScreen}
             </div>
 
             <InstallBanner
@@ -2455,6 +2555,15 @@ const InnerApp = () => {
                   addToast("Presença confirmada!", "success");
                 }
               }}
+            />
+            <ClearScheduleModal
+              isOpen={isClearScheduleModalOpen}
+              onClose={() => setIsClearScheduleModalOpen(false)}
+              monthLabel={getMonthName(currentMonth)}
+              roles={allAvailableRolesForClear}
+              roleCounts={scheduleRoleStats.counts}
+              totalAssignments={scheduleRoleStats.total}
+              onConfirm={handleConfirmClearSchedule}
             />
           </Suspense>
         </DashboardLayout>

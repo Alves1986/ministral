@@ -7,9 +7,18 @@ import { createClient } from '@supabase/supabase-js';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const MODELS_FALLBACK = [
-  'gemini-2.0-flash',
   'gemini-2.5-flash',
-  'gemini-2.0-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-pro',
+  'gemini-flash-latest',
+];
+
+const OPENROUTER_MODELS = [
+  'meta-llama/llama-3-8b-instruct:free',
+  'anthropic/claude-3-haiku',
+  'google/gemini-flash-1.5',
 ];
 
 const SYSTEM_INSTRUCTION =
@@ -157,6 +166,30 @@ PADRÃO DE RESPOSTA (Markdown):
 - Título
 - Pontos principais
 - Sugestões práticas`,
+
+    WHATSAPP_MSG_REWRITE: (() => {
+      const tones: Record<string, string> = {
+        motivador: 'Reescreva as orientações de forma animada, motivadora e inspiradora. Use emojis relevantes.',
+        formal: 'Reescreva as orientações de forma formal, clara e respeitosa. Evite emojis em excesso.',
+        acolhedor: 'Reescreva as orientações de forma carinhosa, acolhedora e gentil. Use emojis suaves.',
+        direto: 'Reescreva as orientações de forma direta, objetiva e simples. Listas numéricas curtas.',
+      };
+      const tone = payload?.tone || 'motivador';
+      return `
+Você é um especialista em comunicação para ministérios de igrejas e grupos de WhatsApp.
+${tones[tone] || tones.motivador}
+Ministério: ${payload?.ministry_name || context?.ministry_name || 'Ministério'}
+Texto original a reescrever:
+---
+${payload?.text || ''}
+---
+REGRAS OBRIGATÓRIAS:
+1. Retorne APENAS o texto puro reescrito, sem explicações, sem títulos adicionais.
+2. O texto deve ser formatado para WhatsApp: use *negrito* com asteriscos, não HTML.
+3. Mantenha o formato de lista numerada se o original tiver.
+4. Não adicione conteúdo inventado — apenas reescreva o que foi dado.
+5. Ao final, inclua uma frase de fechamento inspiradora.`;
+    })(),
   };
 
   return prompts[taskType] || `${GLOBAL_PERSONALITY}\n${contextBlock}\nTAREFA: ${taskType}\nDADOS: ${JSON.stringify(payload)}`;
@@ -199,7 +232,7 @@ async function callGeminiREST(
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
     const errMsg = errBody?.error?.message || response.statusText;
-    const err = new Error(JSON.stringify(errBody?.error || { message: errMsg }));
+    const err = new Error(errMsg);
     (err as any).status = response.status;
     throw err;
   }
@@ -211,36 +244,91 @@ async function callGeminiREST(
   return text;
 }
 
+async function callOpenRouterREST(apiKey: string, model: string, prompt: string): Promise<string> {
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://ministral.app',
+      'X-Title': 'Ministral'
+    },
+    body: JSON.stringify({
+      model: model || 'meta-llama/llama-3-8b-instruct:free',
+      messages: [
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
+    const errMsg = errBody?.error?.message || response.statusText;
+    const err = new Error(errMsg);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const text: string = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('OpenRouter retornou resposta vazia.');
+  return text;
+}
+
 async function callWithFallback(
-  apiKey: string,
+  geminiKey: string,
+  openRouterKey: string,
   prompt: string,
   useJson: boolean,
   preferredModel?: string
 ): Promise<string> {
+  const isOpenRouterModel = Boolean(
+    preferredModel && (
+      preferredModel.includes('/') ||
+      OPENROUTER_MODELS.includes(preferredModel)
+    )
+  );
+
+  // Se o modelo solicitado for OpenRouter e houver chave, prioriza OpenRouter
+  if (isOpenRouterModel && openRouterKey) {
+    try {
+      return await callOpenRouterREST(openRouterKey, preferredModel!, prompt);
+    } catch (err: any) {
+      console.warn(`[api/ai/run] OpenRouter model ${preferredModel} falhou:`, err?.message);
+      if (!geminiKey) throw err;
+    }
+  }
+
+  // Prepara ordem de modelos Gemini
   const knownModels = MODELS_FALLBACK;
   const order =
-    preferredModel && knownModels.includes(preferredModel)
+    preferredModel && !isOpenRouterModel
       ? [preferredModel, ...knownModels.filter((m) => m !== preferredModel)]
       : knownModels;
 
-  let lastErr: Error = new Error('Todos os modelos falharam.');
+  let lastErr: Error = new Error('Todos os modelos de IA falharam.');
 
-  for (const model of order) {
-    try {
-      return await callGeminiREST(apiKey, model, prompt, useJson);
-    } catch (err: any) {
-      const status: number = err.status || 0;
-      const msg: string = err.message || '';
-      console.warn(`[api/ai/run] Modelo ${model} falhou (${status}): ${msg.slice(0, 200)}`);
-
-      if (status === 404 || msg.includes('NOT_FOUND')) {
-        console.error(`[api/ai/run] Modelo ${model} não existe. Pulando.`);
-      } else if (status === 503 || msg.includes('UNAVAILABLE')) {
-        console.warn(`[api/ai/run] Modelo ${model} indisponível. Tentando próximo...`);
-      } else if (status === 429 || msg.includes('RESOURCE_EXHAUSTED')) {
-        console.warn(`[api/ai/run] Quota excedida para ${model}. Tentando próximo...`);
+  if (geminiKey) {
+    for (const model of order) {
+      try {
+        return await callGeminiREST(geminiKey, model, prompt, useJson);
+      } catch (err: any) {
+        const status: number = err.status || 0;
+        const msg: string = err.message || '';
+        console.warn(`[api/ai/run] Modelo ${model} falhou (${status}): ${msg.slice(0, 150)}`);
+        lastErr = err;
       }
-      lastErr = err;
+    }
+  }
+
+  // Se o Gemini falhou ou não tem chave configurada, tenta OpenRouter se disponível
+  if (openRouterKey && !isOpenRouterModel) {
+    try {
+      return await callOpenRouterREST(openRouterKey, 'meta-llama/llama-3-8b-instruct:free', prompt);
+    } catch (openRouterErr: any) {
+      console.warn('[api/ai/run] Fallback OpenRouter falhou:', openRouterErr?.message);
     }
   }
 
@@ -301,41 +389,64 @@ export default async function handler(req: any, res: any) {
 
   // --- AUTENTICAÇÃO: exige JWT válido do Supabase (evita abuso/queima da quota Gemini) ---
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const supabaseUrl =
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      '';
     const supabaseAnon =
       process.env.SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
       process.env.VITE_SUPABASE_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
       '';
     const authHeader = req.headers.authorization || '';
-    if (!supabaseUrl || !supabaseAnon || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Não autorizado. Faça login e tente novamente.' });
+
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Não autorizado. Token de sessão ausente.' });
     }
-    const token = authHeader.slice('Bearer '.length);
+
+    if (!supabaseUrl || !supabaseAnon) {
+      console.error('[api/ai/run] Configuração Supabase incompleta (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
+      return res.status(500).json({
+        error: 'Configuração de autenticação incompleta no servidor (Vercel). Verifique VITE_SUPABASE_ANON_KEY.'
+      });
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (!token) {
+      return res.status(401).json({ error: 'Token de autenticação vazio.' });
+    }
+
     const sb = createClient(supabaseUrl, supabaseAnon);
     const { data: { user }, error } = await sb.auth.getUser(token);
     if (error || !user) {
-      return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+      console.warn('[api/ai/run] Sessão do usuário inválida ou expirada:', error?.message);
+      return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
     }
   } catch (authErr: any) {
     console.error('[api/ai/run] Erro na autenticação:', authErr?.message || authErr);
-    return res.status(500).json({ error: 'Falha ao validar sessão.' });
+    return res.status(500).json({ error: 'Falha ao validar sessão: ' + (authErr?.message || 'Erro interno') });
   }
 
-  // Resolve a API key — suporta ambas as variáveis de ambiente
-  const geminiApiKey =
-    (process.env.GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.GEMINI_API_KEY : '') ||
-    (process.env.VITE_GEMINI_API_KEY?.startsWith('AIzaSy') ? process.env.VITE_GEMINI_API_KEY : '') ||
+  // Resolve as chaves de API — suporta ambas as variações de nomes e remove aspas/espaços acidentais
+  const rawGemini =
     process.env.GEMINI_API_KEY ||
     process.env.VITE_GEMINI_API_KEY ||
     '';
+  const geminiApiKey = rawGemini.trim().replace(/^["']|["']$/g, '');
 
-  const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+  const rawOpenRouter =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.VITE_OPENROUTER_API_KEY ||
+    '';
+  const openRouterApiKey = rawOpenRouter.trim().replace(/^["']|["']$/g, '');
 
   if (!geminiApiKey && !openRouterApiKey) {
-    console.error('[api/ai/run] Nenhuma chave de IA (Gemini ou OpenRouter) configurada.');
+    console.error('[api/ai/run] Nenhuma chave de IA (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY) configurada.');
     return res.status(500).json({
-      error: 'Serviço de IA temporariamente indisponível (Chaves ausentes).',
+      error: 'Serviço de IA indisponível. Verifique se a variável VITE_GEMINI_API_KEY está configurada no painel da Vercel.',
     });
   }
 
@@ -346,7 +457,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'taskType é obrigatório.' });
     }
 
-    // SCALE_GENERATION não usa IA — retorna array vazio (geração local no cliente)
+    // SCALE_GENERATION não usa IA neste endpoint — retorna array vazio (geração local no cliente)
     if (taskType === 'SCALE_GENERATION') {
       return res.status(200).json([]);
     }
@@ -354,14 +465,21 @@ export default async function handler(req: any, res: any) {
     const useJson = JSON_TASKS.has(taskType);
     const prompt = buildPrompt(taskType, context, payload);
 
-    const content = await callWithFallback(geminiApiKey, prompt, useJson, preferredModel);
+    const content = await callWithFallback(geminiApiKey, openRouterApiKey, prompt, useJson, preferredModel);
     const result = parseResponse(content, taskType);
 
     return res.status(200).json(result);
   } catch (error: any) {
     console.error('[api/ai/run] Erro:', error.message || error);
+    let errMsg = error.message || 'Falha ao processar tarefa de IA.';
+    if (errMsg.includes('503') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE')) {
+      errMsg = 'O serviço da IA está com alta demanda temporária. Tente novamente em alguns segundos.';
+    } else if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+      errMsg = 'Limite de requisições da IA atingido temporariamente. Aguarde um minuto.';
+    }
     return res.status(500).json({
-      error: 'Falha ao processar tarefa de IA.',
+      error: errMsg,
+      status: error.status || 500,
     });
   }
 }

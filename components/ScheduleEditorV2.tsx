@@ -1112,18 +1112,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
                 onClickCapture={handleClickCapture}
-                className="w-full pb-16 md:pb-0"
+                className="w-full pb-16 md:pb-0 overflow-x-auto select-none custom-scrollbar"
             > 
                 {/* Desktop View (Table) */}
                 <div className="hidden md:block">
-                    <table className="w-full table-fixed text-sm border-separate border-spacing-0">
-                        <thead className="bg-zinc-100 dark:bg-zinc-800/80">
+                    <table className="w-full min-w-max table-fixed text-sm border-separate border-spacing-0">
+                        <thead className="sticky top-0 z-30 bg-zinc-100 dark:bg-zinc-900">
                             <tr>
-                                <th className="p-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 w-[120px] bg-zinc-100 dark:bg-zinc-900 border-b border-r border-zinc-200 dark:border-zinc-800">
+                                <th className="sticky top-0 left-0 z-40 p-2.5 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 w-[190px] min-w-[190px] bg-zinc-100 dark:bg-zinc-900 border-b border-r border-zinc-200 dark:border-zinc-800 shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.1)] dark:shadow-[2px_2px_5px_-1px_rgba(0,0,0,0.5)]">
                                     Data / Evento
                                 </th>
                                 {roles.map(role => (
-                                    <th key={role} title={role} className="px-1.5 py-2 text-center text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 truncate bg-zinc-100 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+                                    <th key={role} title={role} className="sticky top-0 z-30 px-2 py-2 text-center text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 truncate bg-zinc-100 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 w-[140px] min-w-[140px] shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_4px_-1px_rgba(0,0,0,0.4)]">
                                         {role.toUpperCase()}
                                     </th>
                                 ))}
@@ -1133,17 +1133,17 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                             {visibleOccurrences.map((occurrence: OccurrenceV2) => (
                                 <tr key={`${occurrence.date}-${occurrence.time}-${occurrence.ruleId}`} className="group hover:bg-zinc-100/60 dark:hover:bg-zinc-800/30 even:bg-zinc-50/50 dark:even:bg-zinc-900/30">
                                     {/* Coluna Fixa de Data */}
-                                    <td className="p-2 bg-white dark:bg-slate-950 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-900 border-b border-r border-zinc-200 dark:border-zinc-800">
-                                        <div className="flex items-center justify-between group/row-header">
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-zinc-700 dark:text-zinc-200">
+                                    <td className="sticky left-0 z-10 p-2.5 bg-white dark:bg-slate-950 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-900/95 border-b border-r border-zinc-200 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.4)] w-[190px] min-w-[190px]">
+                                        <div className="flex items-center justify-between gap-1.5 group/row-header min-w-0">
+                                            <div className="flex flex-col min-w-0 flex-1">
+                                                <span className="font-bold text-xs text-zinc-800 dark:text-zinc-100 capitalize truncate">
                                                     {new Date(`${occurrence.date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' })}
                                                 </span>
-                                                <div className="flex items-center gap-1.5 mt-0.5">
-                                                    <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 px-1.5 rounded">
+                                                <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                                                    <span className="text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded shrink-0 font-mono">
                                                         {occurrence.time.substring(0, 5)}
                                                     </span>
-                                                    <span className="text-[10px] text-zinc-400 truncate max-w-[80px]" title={occurrence.title}>
+                                                    <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 truncate flex-1 min-w-0" title={occurrence.title}>
                                                         {occurrence.title}
                                                     </span>
                                                 </div>
@@ -1151,10 +1151,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                                             {isAdmin && (
                                                 <button 
                                                     onClick={() => handleExcludeOccurrence(occurrence)} 
-                                                    className="p-1 px-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all opacity-0 group-hover/row-header:opacity-100"
+                                                    className="p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all opacity-0 group-hover/row-header:opacity-100 shrink-0"
                                                     title="Excluir evento deste mês"
                                                 >
-                                                    <Trash2 size={12} />
+                                                    <Trash2 size={13} />
                                                 </button>
                                             )}
                                         </div>
@@ -1162,82 +1162,82 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                                     
                                     {roles.map(role => {
                                         const occChoir = assignments.filter(a => 
-                                            a.event_date?.slice(0, 10) === occurrence.date.slice(0, 10) && 
-                                            a.event_rule_id === occurrence.ruleId && 
-                                            a.role.toLowerCase().startsWith('coral') && 
-                                            a.member_id
-                                        );
-                                        const isVocalRole = role.toLowerCase().startsWith('vocal');
-                                        const firstVocalRole = roles.find(r => r.toLowerCase().startsWith('vocal'));
+                                             a.event_date?.slice(0, 10) === occurrence.date.slice(0, 10) && 
+                                             a.event_rule_id === occurrence.ruleId && 
+                                             a.role.toLowerCase().startsWith('coral') && 
+                                             a.member_id
+                                         );
+                                         const isVocalRole = role.toLowerCase().startsWith('vocal');
+                                         const firstVocalRole = roles.find(r => r.toLowerCase().startsWith('vocal'));
 
-                                        if (occChoir.length > 0 && isVocalRole) {
-                                            if (role === firstVocalRole) {
-                                                return (
-                                                    <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleOpenChoirModal(occurrence)}
-                                                            className="w-full h-full min-h-[42px] px-2 py-1 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 dark:from-purple-900/30 dark:to-amber-900/30 border-2 border-purple-400 dark:border-purple-600 rounded-xl flex items-center justify-between text-left hover:border-purple-500 transition-all shadow-sm group"
-                                                            title="Clique para ver ou editar membros do Coral da Ceia"
-                                                        >
-                                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                                <div className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] shrink-0 font-black">
-                                                                    🎤
-                                                                </div>
-                                                                <div className="flex flex-col min-w-0">
-                                                                    <span className="text-[11px] font-black text-purple-700 dark:text-purple-300 truncate">
-                                                                        Coral Ceia
-                                                                    </span>
-                                                                    <span className="text-[9px] text-zinc-500 dark:text-zinc-400 font-bold truncate">
-                                                                        {occChoir.length} {occChoir.length === 1 ? 'membro' : 'membros'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 shrink-0">
-                                                                Editar
-                                                            </span>
-                                                        </button>
-                                                    </td>
-                                                );
-                                            }
-                                            return (
-                                                <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleOpenChoirModal(occurrence)}
-                                                        className="w-full h-full min-h-[42px] px-1 py-1 bg-zinc-50 dark:bg-zinc-800/40 border border-dashed border-purple-300 dark:border-purple-800/60 rounded-xl flex items-center justify-center text-center opacity-70 hover:opacity-100 transition-opacity"
-                                                        title="Integrado ao Coral da Ceia. Clique para gerenciar."
-                                                    >
-                                                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold truncate">
-                                                            Em Coral 🎤
-                                                        </span>
-                                                    </button>
-                                                </td>
-                                            );
-                                        }
+                                         if (occChoir.length > 0 && isVocalRole) {
+                                             if (role === firstVocalRole) {
+                                                 return (
+                                                     <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-1 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0 w-[140px] min-w-[140px]">
+                                                         <button
+                                                             type="button"
+                                                             onClick={() => handleOpenChoirModal(occurrence)}
+                                                             className="w-full h-full min-h-[42px] px-2 py-1 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 dark:from-purple-900/30 dark:to-amber-900/30 border-2 border-purple-400 dark:border-purple-600 rounded-xl flex items-center justify-between text-left hover:border-purple-500 transition-all shadow-sm group"
+                                                             title="Clique para ver ou editar membros do Coral da Ceia"
+                                                         >
+                                                             <div className="flex items-center gap-1.5 min-w-0">
+                                                                 <div className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] shrink-0 font-black">
+                                                                     🎤
+                                                                 </div>
+                                                                 <div className="flex flex-col min-w-0">
+                                                                     <span className="text-[11px] font-black text-purple-700 dark:text-purple-300 truncate">
+                                                                         Coral Ceia
+                                                                     </span>
+                                                                     <span className="text-[9px] text-zinc-500 dark:text-zinc-400 font-bold truncate">
+                                                                         {occChoir.length} {occChoir.length === 1 ? 'membro' : 'membros'}
+                                                                     </span>
+                                                                 </div>
+                                                             </div>
+                                                             <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 shrink-0">
+                                                                 Editar
+                                                             </span>
+                                                         </button>
+                                                     </td>
+                                                 );
+                                             }
+                                             return (
+                                                 <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-1 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0 w-[140px] min-w-[140px]">
+                                                     <button
+                                                         type="button"
+                                                         onClick={() => handleOpenChoirModal(occurrence)}
+                                                         className="w-full h-full min-h-[42px] px-1 py-1 bg-zinc-50 dark:bg-zinc-800/40 border border-dashed border-purple-300 dark:border-purple-800/60 rounded-xl flex items-center justify-center text-center opacity-70 hover:opacity-100 transition-opacity"
+                                                         title="Integrado ao Coral da Ceia. Clique para gerenciar."
+                                                     >
+                                                         <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold truncate">
+                                                             Em Coral 🎤
+                                                         </span>
+                                                     </button>
+                                                 </td>
+                                             );
+                                         }
 
-                                        return (
-                                            <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-0.5 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0">
-                                                <MemoizedEditorCell 
-                                                    occurrence={occurrence}
-                                                    role={role}
-                                                    members={members}
-                                                    onAssign={handleAssignmentChange}
-                                                    onConfirm={handleConfirmAssignment}
-                                                    processing={processing}
-                                                    availability={availability}
-                                                    conflictRules={conflictRules}
-                                                    assignments={assignments}
-                                                    memberCounts={memberCounts}
-                                                    globalConflicts={globalConflicts}
-                                                    allOccurrences={occurrences}
-                                                    onOpenChoir={() => handleOpenChoirModal(occurrence)}
-                                                />
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
+                                         return (
+                                             <td id={`cell-${occurrence.date}-${role}`} key={`${occurrence.date}-${role}`} className="px-1 py-1.5 relative border-b border-zinc-100 dark:border-zinc-800/50 min-w-0 w-[140px] min-w-[140px]">
+                                                 <MemoizedEditorCell 
+                                                     occurrence={occurrence}
+                                                     role={role}
+                                                     members={members}
+                                                     onAssign={handleAssignmentChange}
+                                                     onConfirm={handleConfirmAssignment}
+                                                     processing={processing}
+                                                     availability={availability}
+                                                     conflictRules={conflictRules}
+                                                     assignments={assignments}
+                                                     memberCounts={memberCounts}
+                                                     globalConflicts={globalConflicts}
+                                                     allOccurrences={occurrences}
+                                                     onOpenChoir={() => handleOpenChoirModal(occurrence)}
+                                                 />
+                                             </td>
+                                         );
+                                     })}
+                                 </tr>
+                             ))}
                         </tbody>
                     </table>
                 </div>

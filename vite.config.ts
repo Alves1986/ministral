@@ -43,6 +43,11 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       exclude: ['canvg', 'jspdf']
     },
+    server: {
+      watch: {
+        ignored: ['**/.agents/**', '**/node_modules/**', '**/.git/**', '**/tests/**', '**/coverage/**']
+      }
+    },
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
       'global': 'globalThis',

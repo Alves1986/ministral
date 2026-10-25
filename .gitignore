@@ -11,4 +11,6 @@ check_*.ts
 firebase-applet-config.json
 *.timestamp-*.mjs
 vite.config.ts.timestamp*
-fix*.cjs
+fix*.cjs
+.agents
+skills-lock.json

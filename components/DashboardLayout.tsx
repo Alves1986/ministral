@@ -201,7 +201,7 @@ export const DashboardLayout: React.FC<Props> = ({
           <div className="relative flex-1 flex flex-col items-center -top-4">
             <button 
                 onClick={() => onTabChange('availability')}
-                aria-label="Minha disponibilidade"
+                aria-label="Minhas ausências e disponibilidade"
                 aria-current={isAvailability ? 'page' : undefined}
                 className={`w-14 h-14 rounded-3xl flex items-center justify-center shadow-2xl shadow-ministral-500/40 transition-all duration-300 active:scale-90 border-4 border-[#f8fafc] dark:border-[#0F172A] ${
                     isAvailability 
@@ -212,7 +212,7 @@ export const DashboardLayout: React.FC<Props> = ({
                 <CalendarCheck size={28} strokeWidth={2.5} />
             </button>
             <span className={`text-[10px] uppercase tracking-widest mt-2 font-black transition-colors ${isAvailability ? 'text-ministral-500 dark:text-ministral-100' : 'text-slate-400'}`}>
-                Agenda
+                Ausências
             </span>
           </div>
  

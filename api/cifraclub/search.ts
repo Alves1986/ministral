@@ -10,13 +10,14 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Query string is required' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const rawKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+    const apiKey = rawKey.trim().replace(/^["']|["']$/g, '');
     if (!apiKey) {
       return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.8-flash"];
     const prompt = `Retorne os 5 melhores resultados encontrados no site cifraclub.com.br para a busca: "${query}". Para cada resultado, retorne o nome da música (title), nome do artista ou banda (artist), URL completa da música no cifraclub (url) e o tom (key) se conseguir extrair (ou "N/A").`;
     
     let resultContent: string | null = null;

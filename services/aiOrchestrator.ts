@@ -25,19 +25,19 @@ export enum AI_TASKS {
 
 export const AI_MODELS = [
   {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash (Recomendado)',
-    description: 'Modelo rápido, estável e eficiente para análises e reescritas diárias.'
-  },
-  {
-    id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash',
-    description: 'Geração anterior estável com bom equilíbrio de custo e qualidade.'
-  },
-  {
     id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Avançado)',
-    description: 'Modelo avançado com maior capacidade de raciocínio.'
+    name: 'Gemini 2.5 Flash (Recomendado)',
+    description: 'Modelo ultrarrápido, estável e eficiente para análises e reescritas diárias.'
+  },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    description: 'Nova geração inteligente com ótimo equilíbrio de qualidade.'
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    description: 'Geração mais recente de alto desempenho e precisão.'
   },
   {
     id: 'gemini-2.5-pro',
@@ -47,7 +47,7 @@ export const AI_MODELS = [
   {
     id: 'gemini-3.5-flash-lite',
     name: 'Gemini 3.5 Flash Lite (Econômico)',
-    description: 'Opção leve e econômica para tarefas simples.'
+    description: 'Opção leve e rápida para tarefas simples.'
   }
 ];
 
@@ -407,13 +407,17 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
       body: JSON.stringify({ taskType, context, payload, preferredModel })
     });
     if (!res.ok) {
-      const text = await res.text();
+      let errMsg = `Erro na API (${res.status})`;
       try {
-        const err = JSON.parse(text);
-        throw new Error(err.error || 'Erro na camada de proxy da IA');
-      } catch (e) {
-        throw new Error(`Erro na API (${res.status}): ${text}`);
+        const json = await res.json();
+        errMsg = json.error || json.message || errMsg;
+      } catch {
+        try {
+          const text = await res.text();
+          if (text) errMsg = `Erro na API (${res.status}): ${text.slice(0, 300)}`;
+        } catch {}
       }
+      throw new Error(errMsg);
     }
     const jsonResult = await res.json();
     if (targetOrgId) {

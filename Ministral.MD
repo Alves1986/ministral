@@ -72,20 +72,25 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 25/10/2026
 - **Realizações**:
-  1. **Seleção Cirúrgica de Trocas no Equilíbrio de Escalas (`ScheduleEditorV2.tsx`)**:
-     - Implementado controle granular de seleção no modal de equilíbrio e geração IA.
-     - Usuário agora pode selecionar/desmarcar cada troca sugerida individualmente com clique no card ou checkbox interativo.
-     - Adicionada barra de controle com contagem dinâmica ("X de Y trocas selecionadas") e ação rápida "Selecionar todas / Desmarcar todas".
-     - `handleApplyAISuggestions` filtra cirurgicamente apenas as trocas marcadas pelo usuário, garantindo que substituições desmarcadas não toquem no banco de dados.
-     - Botão de aplicação protegido contra submissões vazias (`disabled` com 0 selecionadas) e texto contextualizado (`Aplicar Trocas (N)`).
-  2. **Menu Mobile Normal em Tela Cheia (`DashboardLayout.tsx`)**:
-     - Corrigido comportamento do menu mobile para nunca iniciar recuado/colapsado.
-     - Implementada detecção reativa de breakpoint (`isDesktop` para `>= 1024px`), confinando o modo colapsado (`isEffectivelyCollapsed`) exclusivamente ao desktop.
-     - No mobile, a gaveta drawer abre sempre normal (`w-72 max-w-[85vw]`), com rótulos de navegação legíveis, botão `X` de fechar visível, dados do usuário e seletor de ministério.
-  3. **Suíte de Testes Automatizados**:
-     - Criados `tests/scheduleRebalanceSelection.test.ts` e `tests/dashboardMenuResponsive.test.ts` (45 testes aprovados no Vitest).
+  1. **Sincronização com o Histórico do Navegador (`App.tsx` & `utils/navigation.ts`)**:
+     - Resolvido o problema do botão "Voltar" no celular/PWA: `handleTabChange` registra cada troca de aba em `window.history.pushState`.
+     - Tratamento reativo de `popstate`: voltar no Android/navegador retorna para a tela anterior em vez de fechar o aplicativo.
+     - Suporte a normalização retroativa de aliases (`schedule` -> `calendar`, `repertoire-manager` -> `repertoire`, etc.).
+  2. **Unificação de Telas Duplicadas e Enxugamento do Menu Lateral**:
+     - Menu de Gestão reduzido de 10 para 6 itens limpos e objetivos.
+     - **Repertório**: Fundido em aba única (`repertoire`). Usuários com permissão de liderança/ministro recebem controles de gestão (`mode="manage"`) naturalmente.
+     - **Avisos**: Central unificada (`announcements`) com botão `+ Novo Comunicado` para líderes abrindo o modal do `AlertsManager`.
+  3. **Central de Escalas Unificada (`schedule-editor`)**:
+     - Adicionada barra superior com sub-abas elegantes: `[ Grade da Escala ]`, `[ Regras de Agenda (Cultos) ]` e `[ Vagas por Função ]`.
+     - Links antigos de regras de agenda e vagas redirecionam automaticamente para a sub-aba correta.
+  4. **Ajuste de Rótulo Mobile (`DashboardLayout.tsx`)**:
+     - Botão central flutuante da barra inferior corrigido de "Agenda" para "Ausências".
+  5. **Compartilhamento Rápido no WhatsApp (`EventDetailsModal.tsx`)**:
+     - Botões de copiar resumo formatado com emojis da escala para o clipboard e abrir diretamente no WhatsApp com 1 clique.
+  6. **Suíte de Testes Automatizados**:
+     - Criados `tests/navigationHistory.test.ts` e `tests/unifiedNav.test.ts` (13 suítes, 51 testes 100% aprovados).
 - **Validação**:
-  - `npm test`: 11 arquivos e 45 testes aprovados (100% no Vitest).
+  - `npm test`: 13 arquivos e 51 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
