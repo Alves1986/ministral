@@ -663,17 +663,24 @@ function hasBlockGroupConflict(
   rules?: ScheduleInput['rules']
 ): boolean {
   if (!rules?.blockGroups?.length) return false;
+  const targetBase = role.replace(/\s\d+$/, '');
   const memberInEvent = allAssignments.filter(
     a => a.member_id === memberId &&
          a.event_rule_id === ruleId &&
          normalizeDate(a.event_date) === date
   );
   for (const group of rules.blockGroups) {
-    if (!group.includes(role)) continue;
-    const conflicting = memberInEvent.find(a => group.includes(a.role));
+    const groupMatchesTarget = group.some(g => g === role || g === targetBase || g.toLowerCase() === targetBase.toLowerCase());
+    if (!groupMatchesTarget) continue;
+    const conflicting = memberInEvent.find(a => {
+      const aBase = a.role.replace(/\s\d+$/, '');
+      return group.some(g => g === a.role || g === aBase || g.toLowerCase() === aBase.toLowerCase());
+    });
     if (!conflicting) continue;
+    const conflictingBase = conflicting.role.replace(/\s\d+$/, '');
     const hasException = rules.allowExceptions?.some(exc =>
-      exc.includes(role) && exc.includes(conflicting.role)
+      (exc.includes(role) || exc.includes(targetBase)) &&
+      (exc.includes(conflicting.role) || exc.includes(conflictingBase))
     );
     if (!hasException) return true;
   }
@@ -741,9 +748,38 @@ function fillSchedule(data: ScheduleInput): Assignment[] {
       );
       if (alreadyFilled) continue;
 
+      const baseRole = role.replace(/\s\d+$/, '');
+
       // Filtra membros elegíveis respeitando todas as regras
       const eligible = data.members.filter(m => {
-        if (!m.functions.includes(role)) return false;
+        // Verifica se o membro possui a função (suporta sufixo numérico, ex: Vocal 1 -> Vocal)
+        const hasRole = (m.functions || []).some(
+          f => f === role || f === baseRole || f.toLowerCase() === baseRole.toLowerCase()
+        );
+        if (!hasRole) return false;
+
+        // Não pode ser escalado duas vezes no mesmo evento com a mesma função base (ex: Vocal 1 e Vocal 2)
+        const memberRolesInEvent = allAssignments()
+          .filter(a => a.member_id === m.id && a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
+          .map(a => a.role);
+
+        const hasSameBaseRoleInEvent = memberRolesInEvent.some(
+          r => r.replace(/\s\d+$/, '').toLowerCase() === baseRole.toLowerCase()
+        );
+        if (hasSameBaseRoleInEvent) return false;
+
+        // Se já está no evento em outra função diferente: só pode se houver exceção explícita
+        if (memberRolesInEvent.length > 0) {
+          const allowedByException = memberRolesInEvent.every(existingRole => {
+            const existingBase = existingRole.replace(/\s\d+$/, '');
+            return data.rules?.allowExceptions?.some(exc =>
+              (exc.includes(role) || exc.includes(baseRole)) &&
+              (exc.includes(existingRole) || exc.includes(existingBase))
+            );
+          });
+          if (!allowedByException) return false;
+        }
+
         if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
         if (hasSundayTurnConflict(m.id, occ.date, occ.time, allAssignments(), data.occurrences)) return false;
         if (hasBlockGroupConflict(m.id, role, occ.ruleId, occ.date, allAssignments(), data.rules)) return false;
@@ -855,7 +891,11 @@ function rebalanceSchedule(data: ScheduleInput): Assignment[] {
       // - nao viola regras de conflito
       const candidates = data.members.filter(m => {
         if (m.id === heavyMember.id) return false;
-        if (!m.functions.includes(assign.role)) return false;
+        const targetBaseRole = assign.role.replace(/\s\d+$/, '');
+        const hasRole = (m.functions || []).some(
+          f => f === assign.role || f === targetBaseRole || f.toLowerCase() === targetBaseRole.toLowerCase()
+        );
+        if (!hasRole) return false;
         // Carga menor = candidato valido para troca (critério mais permissivo: < heavyMember)
         if ((mutableCounts[m.id] || 0) >= (mutableCounts[heavyMember.id] || 0)) return false;
         if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;

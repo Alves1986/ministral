@@ -47,12 +47,14 @@ function normalizeAvailability(input: ScheduleInput): Record<string, string[]> {
     const raw = input.availability?.[m.id];
     let absences: string[] = [];
     if (Array.isArray(raw)) {
-      // Formato array: ja sao ausencias
-      absences = raw.map((d) => String(d));
+      // Formato array: ja sao ausencias (excluindo marcador FREE)
+      absences = raw.filter((d) => !String(d).endsWith("-FREE")).map((d) => String(d));
     } else if (raw && typeof raw === "object") {
-      // Formato objeto legado (convertido por fetchAvailabilityForEditor):
-      // chaves = dias disponiveis. Nao extraimos ausencias aqui — o motor ja sabe lidar.
-      absences = [];
+      // Formato objeto legado / cross-ministry
+      const availObj = raw as Record<string, string>;
+      absences = Object.entries(availObj)
+        .filter(([_, v]) => v === "unavailable" || v === "BLK")
+        .map(([k]) => k);
     }
     out[m.id] = absences;
   }
@@ -73,9 +75,9 @@ export function buildSchedulePrompt(input: ScheduleInput): string {
       const dates = availByMember[m.id] || [];
       const availTxt =
         dates.length > 0
-          ? dates.slice(0, 40).join(", ")
-          : "sem disponibilidade informada";
-      return `- ${m.name} (id: ${m.id}) — funções: [${funcs}] — disponível em: ${dates.length > 1 ? dates.length + " datas (" : ""}${availTxt}${dates.length > 1 ? ")" : ""}`;
+          ? `indisponível em: ${dates.slice(0, 40).join(", ")}`
+          : "disponível (sem ausências registradas)";
+      return `- ${m.name} (id: ${m.id}) — funções: [${funcs}] — disponibilidade: ${availTxt}`;
     })
     .join("\n") || "- nenhum membro";
 
@@ -191,7 +193,8 @@ export type ValidationError = {
     | "UNAVAILABLE"
     | "ROLE_EXCLUDED"
     | "DUPLICATE"
-    | "SLOT_FILLED";
+    | "SLOT_FILLED"
+    | "CONFLICT";
   message: string;
 };
 
@@ -287,9 +290,9 @@ export function validateAssignment(
         return { type: "UNAVAILABLE", message: `${member.name} marcou o mês inteiro como indisponível.` };
       }
       const dayVal = availObj[event_date];
-      // Tem dados do mes mas o dia nao esta no mapa = ausencia
+      // Tem dados do mes mas o dia nao esta no mapa ou foi marcado como indisponivel
       const hasDaysInMonth = Object.keys(availObj).some(k => k.startsWith(month) && !k.includes('BLK'));
-      if (hasDaysInMonth && !dayVal) {
+      if (hasDaysInMonth && (!dayVal || dayVal === 'unavailable')) {
         return { type: "UNAVAILABLE", message: `${member.name} não está disponível em ${event_date}.` };
       }
       if (dayVal && dayVal !== 'all' && dayVal !== 'unavailable') {
@@ -311,19 +314,45 @@ export function validateAssignment(
     };
   }
 
-  // 7. Duplicidade (mesmo membro, mesma data, mesma função, mesmo evento)
-  const isDuplicate = (input.existingAssignments || []).some(
+  // 7. Duplicidade (mesmo membro, mesma data, mesma função ou mesma função base, mesmo evento)
+  const targetBaseRole = role.replace(/\s\d+$/, '');
+  const memberAssignmentsInEvent = (input.existingAssignments || []).filter(
     (a) =>
+      a.member_id === member_id &&
       a.event_rule_id === event_rule_id &&
       a.event_date === event_date &&
-      a.role === role &&
-      a.member_id === member_id,
+      a.role !== '__EVENT_EXCLUDED__'
   );
-  if (isDuplicate) {
+
+  const duplicateSameBase = memberAssignmentsInEvent.find(
+    (a) => a.role === role || a.role.replace(/\s\d+$/, '').toLowerCase() === targetBaseRole.toLowerCase()
+  );
+  if (duplicateSameBase) {
     return {
       type: "DUPLICATE",
-      message: `${member.name} já está escalado para "${role}" neste evento.`,
+      message: `${member.name} já está escalado(a) como "${duplicateSameBase.role}" neste mesmo evento.`,
     };
+  }
+
+  // Verifica conflito com outra função do mesmo membro no mesmo evento se estiver em blockGroups sem exceção
+  if (memberAssignmentsInEvent.length > 0 && input.rules?.blockGroups?.length) {
+    for (const existing of memberAssignmentsInEvent) {
+      const existingBase = existing.role.replace(/\s\d+$/, '');
+      const inBlockGroup = input.rules.blockGroups.some(
+        (bg) => (bg.includes(role) || bg.includes(targetBaseRole)) && (bg.includes(existing.role) || bg.includes(existingBase))
+      );
+      if (inBlockGroup) {
+        const hasExc = (input.rules.allowExceptions || []).some(
+          (exc) => (exc.includes(role) || exc.includes(targetBaseRole)) && (exc.includes(existing.role) || exc.includes(existingBase))
+        );
+        if (!hasExc) {
+          return {
+            type: "CONFLICT",
+            message: `${member.name} já está escalado(a) como "${existing.role}", conflitante com "${role}".`,
+          };
+        }
+      }
+    }
   }
 
   // 8. Vaga já preenchida (outro membro já ocupa essa posição)

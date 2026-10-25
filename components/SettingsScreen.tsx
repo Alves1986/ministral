@@ -685,6 +685,7 @@ export const SettingsScreen: React.FC<Props> = ({
               desc: "Envia um push individual para cada voluntário escalado no próprio dia do culto ou evento, pedindo confirmação de presença.",
               preview: (h: number) => ({ title: "Você está escalado hoje!", body: `Hoje às ${String(h).padStart(2,"0")}:00. Confirme sua presença no app.` }),
               showDaysBefore: false,
+              showHour: true,
             },
             {
               key: "eve_reminder" as const,
@@ -695,6 +696,7 @@ export const SettingsScreen: React.FC<Props> = ({
               desc: "Notifica o voluntário alguns dias antes do evento para que possa se preparar (repertório, figurino, logística).",
               preview: (h: number, d?: number) => ({ title: "Culto se aproxima!", body: `Você está escalado em ${d ?? 1} dia(s). Prepare-se e verifique o repertório.` }),
               showDaysBefore: true,
+              showHour: true,
             },
             {
               key: "window_open" as const,
@@ -705,6 +707,7 @@ export const SettingsScreen: React.FC<Props> = ({
               desc: "Avisa todos os membros que o período para registrar ausências foi aberto, incentivando o preenchimento imediato.",
               preview: (_h: number) => ({ title: "Disponibilidade Liberada!", body: `O período para apontar ausências abriu. Acesse o app e marque seus dias antes do prazo.` }),
               showDaysBefore: false,
+              showHour: true,
             },
             {
               key: "window_close" as const,
@@ -715,18 +718,20 @@ export const SettingsScreen: React.FC<Props> = ({
               desc: "Lembra os membros que a janela de disponibilidade está se encerrando, incentivando quem ainda não respondeu.",
               preview: (_h: number) => ({ title: "Prazo Encerrando!", body: `Último aviso: marque sua disponibilidade agora antes que a janela feche.` }),
               showDaysBefore: false,
+              showHour: true,
             },
             {
               key: "schedule_publish" as const,
               icon: <Send size={20} />,
               color: "purple",
               title: "📋 Publicação da Nova Escala",
-              badge: "Manual | Por Membro",
-              desc: "Quando o administrador liberar a escala do mês, cada membro escalado recebe um aviso individual com seus dias e funções. Selecionar membros no editor não gera notificação.",
-              preview: (_h: number) => ({ title: "Escala liberada", body: `Você está escalado(a) em: 05/11 - Culto (Vocal); 19/11 - Culto (Vocal).` }),
+              badge: "Ao Liberar | Por Membro",
+              desc: "Disparado imediatamente quando o administrador liberar a escala do mês no editor. Cada voluntário escalado recebe uma notificação com seus dias e funções, com link direto para o Histórico de Escala.",
+              preview: (_h: number) => ({ title: "📅 Escala liberada", body: `Você está escalado(a) em: 05/11 - Culto (Vocal); 19/11 - Culto (Vocal). Toque para ver no Histórico de Escala.` }),
               showDaysBefore: false,
+              showHour: false,
             },
-          ] as const).map(({ key, icon, color, title, badge, desc, preview, showDaysBefore }) => {
+          ] as const).map(({ key, icon, color, title, badge, desc, preview, showDaysBefore, showHour }) => {
             const current = notifSettings[key];
             const colorMap: Record<string, string> = {
               amber:   "bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 border-amber-500/20",
@@ -794,49 +799,56 @@ export const SettingsScreen: React.FC<Props> = ({
                 {/* Card Body — shown only when enabled */}
                 {current.enabled && (
                   <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3 border-t border-zinc-100 dark:border-zinc-700/60 pt-3">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                          <Clock size={11} /> Horário de Disparo (Brasília)
-                        </label>
-                        <select
-                          value={current.hour}
-                          onChange={(e) =>
-                            setNotifSettings((prev) => ({
-                              ...prev,
-                              [key]: { ...prev[key], hour: parseInt(e.target.value, 10) },
-                            }))
-                          }
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 transition-all cursor-pointer"
-                        >
-                          {HOURS.map((opt) => (
-                            <option key={opt.h} value={opt.h}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {showDaysBefore && (
+                    {showHour ? (
+                      <div className="flex flex-col sm:flex-row gap-3">
                         <div className="flex-1 space-y-1">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                            <CalendarRange size={11} /> Dias de Antecedência
+                            <Clock size={11} /> Horário de Disparo (Brasília)
                           </label>
                           <select
-                            value={daysBeforeVal}
+                            value={current.hour}
                             onChange={(e) =>
                               setNotifSettings((prev) => ({
                                 ...prev,
-                                [key]: { ...prev[key], days_before: parseInt(e.target.value, 10) },
-                              } as NotificationSettings))
+                                [key]: { ...prev[key], hour: parseInt(e.target.value, 10) },
+                              }))
                             }
                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 transition-all cursor-pointer"
                           >
-                            {[1, 2, 3].map((d) => (
-                              <option key={d} value={d}>{d} dia{d > 1 ? "s" : ""} antes</option>
+                            {HOURS.map((opt) => (
+                              <option key={opt.h} value={opt.h}>{opt.label}</option>
                             ))}
                           </select>
                         </div>
-                      )}
-                    </div>
+
+                        {showDaysBefore && (
+                          <div className="flex-1 space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                              <CalendarRange size={11} /> Dias de Antecedência
+                            </label>
+                            <select
+                              value={daysBeforeVal}
+                              onChange={(e) =>
+                                setNotifSettings((prev) => ({
+                                  ...prev,
+                                  [key]: { ...prev[key], days_before: parseInt(e.target.value, 10) },
+                                } as NotificationSettings))
+                              }
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-secondary/50 transition-all cursor-pointer"
+                            >
+                              {[1, 2, 3].map((d) => (
+                                <option key={d} value={d}>{d} dia{d > 1 ? "s" : ""} antes</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60">
+                        <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span>
+                        <span>Disparo automático e instantâneo quando você clicar em <strong>Liberar Escala</strong> no editor. Não requer horário pré-agendado.</span>
+                      </div>
+                    )}
 
                     {/* Push notification preview */}
                     <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700/70 flex items-start gap-2.5">

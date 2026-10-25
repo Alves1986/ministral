@@ -14,7 +14,15 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'confirmed' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const currentMonthStr = React.useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -36,6 +44,9 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
 
   const availableMonths = React.useMemo(() => {
     const months = new Set<string>();
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    months.add(currentYearMonth);
     history.forEach(item => {
       if (item.event_date) {
         months.add(item.event_date.substring(0, 7)); // YYYY-MM
@@ -131,18 +142,23 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
                </h3>
                <div className="relative">
                  <select 
-                   value={selectedMonth} 
-                   onChange={e => setSelectedMonth(e.target.value)}
-                   className="w-full pl-3 pr-8 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-ministral-500 transition-all appearance-none cursor-pointer"
-                 >
-                   <option value="all">Todos os meses</option>
-                   {availableMonths.map(month => {
-                      const [year, m] = month.split('-');
-                      const date = new Date(Number(year), Number(m) - 1, 1);
-                      const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-                      return <option key={month} value={month}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>
-                   })}
-                 </select>
+                    value={selectedMonth} 
+                    onChange={e => setSelectedMonth(e.target.value)}
+                    className="w-full pl-3 pr-8 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-ministral-500 transition-all appearance-none cursor-pointer"
+                  >
+                    {availableMonths.map(month => {
+                       const [year, m] = month.split('-');
+                       const date = new Date(Number(year), Number(m) - 1, 1);
+                       const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                       const isCurrent = month === currentMonthStr;
+                       return (
+                         <option key={month} value={month}>
+                           {label.charAt(0).toUpperCase() + label.slice(1)} {isCurrent ? '(Mês Atual)' : ''}
+                         </option>
+                       );
+                    })}
+                    <option value="all">Todos os meses</option>
+                  </select>
                  <ChevronRight size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none rotate-90" />
                </div>
             </div>
@@ -176,8 +192,22 @@ export const HistoryScreen: React.FC<Props> = ({ user }) => {
               <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center text-zinc-400 mb-3">
                 <HistoryIcon size={24} />
               </div>
-              <h3 className="text-base font-bold text-zinc-800 dark:text-white mb-0.5">Nenhuma escala encontrada</h3>
-              <p className="text-zinc-500 text-xs max-w-xs">Não encontramos registros que correspondam aos seus filtros ou busca.</p>
+              <h3 className="text-base font-bold text-zinc-800 dark:text-white mb-0.5">
+                {selectedMonth !== 'all' ? 'Nenhuma escala neste mês' : 'Nenhuma escala encontrada'}
+              </h3>
+              <p className="text-zinc-500 text-xs max-w-xs">
+                {selectedMonth !== 'all'
+                  ? 'Você não possui participações registradas no mês selecionado.'
+                  : 'Não encontramos registros que correspondam aos seus filtros ou busca.'}
+              </p>
+              {selectedMonth !== 'all' && (
+                <button
+                  onClick={() => setSelectedMonth('all')}
+                  className="mt-3 px-3.5 py-1.5 rounded-lg text-xs font-bold text-ministral-600 dark:text-ministral-400 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors"
+                >
+                  Ver todos os meses
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

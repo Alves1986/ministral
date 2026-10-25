@@ -451,7 +451,12 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             });
 
             if (newAssignments.length === 0) {
-                addToast(`A IA retornou: ${JSON.stringify(aiAssignments).substring(0, 150)}...`, 'info');
+                addToast(
+                    aiAssignments.length === 0
+                        ? 'Nenhuma nova vaga pôde ser preenchida (a escala pode já estar completa ou não há membros disponíveis para as vagas restantes).'
+                        : 'Todas as sugestões geradas já estão preenchidas na escala.',
+                    'info'
+                );
                 setIsGeneratingAI(false);
                 return;
             }
@@ -807,9 +812,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     const member = members.find(m => m.id === memberId);
                     return sendNotificationSQL(ministryId, orgId, {
                         title: `📅 Escala de ${monthLabel} liberada`,
-                        message: `${member?.name || 'Membro'}, você está escalado(a) em: ${items.join('; ')}.`,
+                        message: `${member?.name || 'Membro'}, a escala de ${monthLabel} está liberada! Você está escalado(a) em: ${items.join('; ')}.`,
                         type: 'success',
-                        actionLink: 'calendar',
+                        actionLink: 'history',
                         targetUserId: memberId
                     }).catch(() => {});
                 }));

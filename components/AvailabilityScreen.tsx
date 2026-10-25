@@ -386,15 +386,17 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!selectedMemberId) return;
       if (isSaveLocked) return;
 
-      // Se houver dias ausentes (ou mês bloqueado), solicita justificativa antes de salvar
-      if (hasAbsentDays) {
+      // Se houver ausências e NÃO houver justificativa preenchida no campo abaixo do calendário,
+      // solicita a justificativa via modal
+      const hasJustification = generalNote.trim().length >= 3;
+      if (hasAbsentDays && !hasJustification) {
           setJustificationInput(generalNote || "");
           setJustificationError("");
           setIsJustificationModalOpen(true);
           return;
       }
 
-      // Se não há ausências (disponível todo o mês), salva diretamente
+      // Se já preencheu a justificativa ou não há ausências (disponível todo o mês), salva diretamente
       executeSave();
   };
 
@@ -650,6 +652,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             );
                         }
 
+                        const hasMultipleEventsOrSunday = dayEvents.length > 0 && (isSunday || dayEvents.length > 1);
+
                         return (
                             <button
                                 key={day}
@@ -658,7 +662,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                                         addToast("O período de envio está fechado.", "warning");
                                         return;
                                     }
-                                    if (dayEvents.length > 0) {
+                                    if (hasMultipleEventsOrSunday) {
                                         setDayModalOpen(day);
                                     } else {
                                         handleToggleDate(day);
@@ -807,14 +811,16 @@ export const AvailabilityScreen: React.FC<Props> = ({
                                 <Ban size={14} /> Limpar dia
                             </button>
                         </div>
-                        <button 
-                            onClick={() => {
-                                handleToggleDate(dayModalOpen);
-                            }}
-                            className="w-full py-2.5 rounded-xl text-zinc-500 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
-                        >
-                            <RefreshCw size={14} /> Ciclo Geral do Dia (D/M/N)
-                        </button>
+                        {dayModalOpen !== null && new Date(year, month - 1, dayModalOpen).getDay() === 0 && (
+                            <button 
+                                onClick={() => {
+                                    handleToggleDate(dayModalOpen);
+                                }}
+                                className="w-full py-2.5 rounded-xl text-zinc-500 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw size={14} /> Ciclo Geral do Dia (D/M/N)
+                            </button>
+                        )}
                     </div>
 
                     <button 
