@@ -72,27 +72,16 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 25/10/2026
 - **Realizações**:
-  1. **Auditoria Profunda Multi-Agente (Teamwork) para Escalar SaaS**:
-     - Conduzida auditoria profunda e adversarial com 12 subagentes cobrindo concorrência, isolamento multi-tenant, resiliência de frontend e carga simultânea.
-  2. **Blindagem de Segurança BOLA e Privilege Escalation nas Edge Functions**:
-     - `stripe-customer-portal` e `stripe-create-checkout`: Validação obrigatória de que o solicitante autenticado é super admin ou administrador formal daquela organização (`callerProfile.organization_id === orgId && callerProfile.is_admin === true`).
-     - `push-notification`: Bloqueio de disparos cross-tenant. Administradores não super admins ficam estritamente confinados a ministérios e destinatários da sua própria `organization_id`.
-     - `accept-invite`: Corrigida escalação indevida de privilégio. A aceitação do primeiro membro de um novo ministério não concede mais `profiles.is_admin = true` (administrador da igreja inteira), garantindo estritamente `ministry_members.role = 'admin'`.
-  3. **Concorrência e Eliminação da Race Condition de Disponibilidade**:
-     - `services/supabase/availability.ts`: Substituição do padrão destrutivo de delete total mensal por reconciliação cirúrgica por diff (`existingRows` vs `rows`). Registros inalterados nunca são deletados, eliminando a janela de zero registros observada pelo Supabase Realtime.
-     - `AvailabilityScreen.tsx` & `hooks/useScreenMemos.tsx`: Implementado optimistic update imediato no cache do TanStack Query (`queryClient.setQueryData`) e proteção com `lastSavedDatesRef`, eliminando o "rollback fantasma" aos 8s e garantindo estabilidade visual absoluta.
-  4. **Eliminação de Zombie Requests e Trocas de Ministério**:
-     - `App.tsx`: Adicionado `switchSequenceRef` para descarte de respostas assíncronas zumbis em trocas consecutivas de ministério no header/sidebar.
-  5. **Conformidade Estrita com Convenções Mandatórias**:
-     - `services/supabase/repertoire.ts`: Removida leitura incorreta de `profiles.ministry_functions`. Migrado para consulta na tabela canônica `ministry_members.functions` com join em `profiles(id, name)` e deduplicação por membro.
-  6. **Resiliência do Frontend e TanStack Query**:
-     - `lib/queryClient.ts`: Configurado backoff exponencial com jitter (até 30s) e bloqueio imediato de retries para erros definitivos (401, 403, 404, `PGRST301`, `42501`).
-     - `components/ErrorBoundary.tsx`: Substituído `process.env.NODE_ENV` por `import.meta.env.DEV` para compatibilidade estrita com runtime Vite no browser.
-     - `components/ScreenErrorBoundary.tsx`: Criado Error Boundary granular por tela com botão de retry contextual.
-  7. **Suíte de Testes Automatizados (Vitest)**:
-     - Criados testes de concorrência de escalas (`scheduleAssignmentConcurrency.test.ts`), disputas em trocas de escala (`swapRequestConcurrency.test.ts`), isolamento multi-tenant (`tenantDataIsolation.test.ts`) e resiliência de retries (`queryClientResilience.test.ts`).
+  1. **Seleção Cirúrgica de Trocas no Equilíbrio de Escalas (`ScheduleEditorV2.tsx`)**:
+     - Implementado controle granular de seleção no modal de equilíbrio e geração IA.
+     - Usuário agora pode selecionar/desmarcar cada troca sugerida individualmente com clique no card ou checkbox interativo.
+     - Adicionada barra de controle com contagem dinâmica ("X de Y trocas selecionadas") e ação rápida "Selecionar todas / Desmarcar todas".
+     - `handleApplyAISuggestions` filtra cirurgicamente apenas as trocas marcadas pelo usuário, garantindo que substituições desmarcadas não toquem no banco de dados.
+     - Botão de aplicação protegido contra submissões vazias (`disabled` com 0 selecionadas) e texto contextualizado (`Aplicar Trocas (N)`).
+  2. **Suíte de Testes Automatizados**:
+     - Criado `tests/scheduleRebalanceSelection.test.ts` cobrindo seleção padrão, alternância individual, seleção/desmarcação global e aplicação isolada sem tocar nas desmarcadas.
 - **Validação**:
-  - `npm test`: 8 arquivos e 32 testes aprovados (100% no Vitest).
-  - `npm run build`: Bundles e Service Worker PWA gerados com sucesso.
-  - `npm run lint` (`tsc --noEmit`): Compilação limpa sem erros de tipagem.
+  - `npm test`: 9 arquivos e 37 testes aprovados (100% no Vitest).
+  - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
+  - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

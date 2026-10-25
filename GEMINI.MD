@@ -24,8 +24,8 @@
 - Commits: Conventional Commits obrigatório (`feat:`, `fix:`, `refactor:`, `test:`)
 
 ## Bugs conhecidos (contexto ativo)
-1. **Race condition de disponibilidade**: conflito entre otimistic UI e Supabase Realtime em `AvailabilityScreen.tsx` — Realtime reseta estado após otimistic update
-2. **Ministry-switching lento**: roundtrips sequenciais em `onSwitchMinistry` dentro de `SessionContext.tsx` — paralelizar com `Promise.all`
+1. **Race condition de disponibilidade**: mitigada com conciliação cirúrgica e optimistic update no cache TanStack Query.
+2. **Ministry-switching lento**: mitigado com cancelamento sequencial via switchSequenceRef e paralelização.
 
 ## Design system
 - Cor primária (navy): #0f1f3d
@@ -34,6 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Debugging severo de regressão na UI do Editor de Escalas (ScheduleEditorV2). Funções desapareceram pois `fetchMinistrySettings` pedia colunas inexistentes no DB (`practical_guidelines`, etc), causando erro 400 silencioso e fallback para a role default 'Membro'. Adicionado `fix_ministry_settings_schema.sql` para corrigir o DB.
-- Refatoração SQL: Função `is_super_admin` foi restaurada usando `SECURITY DEFINER` para evitar recursão infinita no RLS sem quebrar o acesso de contas Super Admin que não possuem `organization_id` atrelado no `profiles`.
-- Próximo passo: corrigir race condition em AvailabilityScreen.tsx (flag isSyncing).
+- Último trabalho: Implementada seleção cirúrgica de trocas e atribuições no modal de equilíbrio de escalas (`ScheduleEditorV2.tsx`), permitindo ao usuário marcar/desmarcar trocas individualmente, selecionar todas/desmarcar todas, e aplicar apenas as alterações desejadas na escala. Adicionados 5 testes unitários em `tests/scheduleRebalanceSelection.test.ts` (37 testes no total, 100% aprovados no Vitest).
+- Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

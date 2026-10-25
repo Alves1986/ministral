@@ -207,6 +207,7 @@ Este documento preserva integralmente o histórico técnico detalhado, auditoria
 - [x] **[BUG]** Race condition de disponibilidade — já implementado com `isSyncing` e sem listener Realtime conflitante.
 - [x] **[PERF]** Ministry-switching lento — otimizado com paralelização de chamadas em `SessionContext.tsx`.
 - [x] **[BUG]** Alerta de falha no envio de avisos e notificações push — corrigido fallback de schema, CORS da edge function e resolução de membros.
+- [x] **[FEAT]** Seleção seletiva de trocas no equilíbrio de escalas (`ScheduleEditorV2`) — permite ao usuário marcar/desmarcar individualmente quais sugestões/trocas deseja aplicar antes de salvar.
 
 ---
 

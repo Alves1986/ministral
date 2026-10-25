@@ -129,9 +129,20 @@ interface Props {
     isAdmin?: boolean;
     isPro?: boolean;
     roles: string[];
+    onOpenClearModal?: () => void;
 }
 
-export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMonth, onMonthChange, currentTab, isAdmin, isPro, roles }) => {
+export const ScheduleEditorV2: React.FC<Props> = ({ 
+    ministryId, 
+    orgId, 
+    currentMonth, 
+    onMonthChange, 
+    currentTab, 
+    isAdmin, 
+    isPro, 
+    roles,
+    onOpenClearModal
+}) => {
     const { addToast, confirmAction } = useToast();
     const queryClient = useQueryClient();
     
@@ -144,10 +155,34 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     const [showReviewAI, setShowReviewAI] = useState(false);
     const [isRebalanceMode, setIsRebalanceMode] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+    const [selectedAiIndices, setSelectedAiIndices] = useState<number[]>([]);
     const [showAlertsList, setShowAlertsList] = useState(false);
     const [choirOccurrence, setChoirOccurrence] = useState<OccurrenceV2 | null>(null);
     const [selectedChoirMembers, setSelectedChoirMembers] = useState<string[]>([]);
     const [choirSearchTerm, setChoirSearchTerm] = useState('');
+
+    const toggleSelectAiSuggestion = (index: number) => {
+        setSelectedAiIndices(prev => 
+            prev.includes(index) 
+                ? prev.filter(i => i !== index) 
+                : [...prev, index]
+        );
+    };
+
+    const handleSelectAllAiSuggestions = () => {
+        if (selectedAiIndices.length === aiSuggestions.length) {
+            setSelectedAiIndices([]);
+        } else {
+            setSelectedAiIndices(aiSuggestions.map((_, i) => i));
+        }
+    };
+
+    const handleCloseReviewAI = () => {
+        setShowReviewAI(false);
+        setIsRebalanceMode(false);
+        setAiSuggestions([]);
+        setSelectedAiIndices([]);
+    };
     
     const reviewModalRef = useRef<HTMLDivElement>(null);
     const confirmAIModalRef = useRef<HTMLDivElement>(null);
@@ -173,7 +208,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         if (!isAnyModalOpen) return;
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                if (showReviewAI) { setShowReviewAI(false); setIsRebalanceMode(false); }
+                if (showReviewAI) handleCloseReviewAI();
                 else if (showConfirmAI) setShowConfirmAI(false);
                 else if (showConfirmRebalance) setShowConfirmRebalance(false);
                 else if (showAlertsList) setShowAlertsList(false);
@@ -462,6 +497,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             }
 
             setAiSuggestions(newAssignments);
+            setSelectedAiIndices(newAssignments.map((_, i) => i));
             setShowReviewAI(true);
         } catch (error: any) {
             console.error(error);
@@ -473,10 +509,13 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
     };
 
     const handleApplyAISuggestions = async () => {
+        const itemsToApply = aiSuggestions.filter((_, idx) => selectedAiIndices.includes(idx));
+        if (itemsToApply.length === 0) return;
+
         setProcessing(true);
         setShowReviewAI(false);
         try {
-            for (const item of aiSuggestions) {
+            for (const item of itemsToApply) {
                 // Modo rebalance: remove a atribuição antiga antes de salvar a nova
                 if (item.replacedMemberId) {
                     await removeAssignmentV2(ministryId, orgId, {
@@ -492,8 +531,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     member_id: item.member_id
                 });
             }
-            const label = isRebalanceMode ? 'trocas de equilíbrio aplicadas' : 'atribuições aplicadas';
-            addToast(`${aiSuggestions.length} ${label} com sucesso!`, 'success');
+            const label = isRebalanceMode 
+                ? `${itemsToApply.length} ${itemsToApply.length === 1 ? 'troca de equilíbrio aplicada' : 'trocas de equilíbrio aplicadas'}`
+                : `${itemsToApply.length} ${itemsToApply.length === 1 ? 'atribuição aplicada' : 'atribuições aplicadas'}`;
+            addToast(`${label} com sucesso!`, 'success');
             queryClient.invalidateQueries({ queryKey: ['assignments', ministryId, currentMonth, orgId] });
             queryClient.invalidateQueries({ queryKey: ['nextEvent', ministryId, orgId] });
             queryClient.invalidateQueries({ queryKey: ['conflicts', ministryId, currentMonth, orgId] });
@@ -504,6 +545,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
         } finally {
             setProcessing(false);
             setAiSuggestions([]);
+            setSelectedAiIndices([]);
             setIsRebalanceMode(false);
         }
     };
@@ -553,6 +595,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                 return;
             }
             setAiSuggestions(validAi);
+            setSelectedAiIndices(validAi.map((_, i) => i));
             setIsRebalanceMode(true);
             setShowReviewAI(true);
         } catch (error: any) {
@@ -1045,6 +1088,17 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     Equilibrar
                                 </button>
                             )}
+
+                            {onOpenClearModal && (
+                                <button
+                                    onClick={onOpenClearModal}
+                                    title="Limpar escala completa ou parcialmente por função (Vocal, Ministros, etc.)"
+                                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-sm bg-zinc-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/30 text-zinc-600 dark:text-zinc-300 hover:text-red-600 dark:hover:text-red-400 border border-zinc-200 dark:border-zinc-700 hover:border-red-300 dark:hover:border-red-800"
+                                >
+                                    <Trash2 size={15} />
+                                    <span>Limpar</span>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1333,8 +1387,25 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={() => { setShowReviewAI(false); setIsRebalanceMode(false); }} aria-label="Fechar" className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
+                            <button onClick={handleCloseReviewAI} aria-label="Fechar" className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors">
                                 <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Barra de Seleção Rápida */}
+                        <div className="px-6 py-2.5 bg-zinc-50 dark:bg-zinc-800/40 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between gap-4">
+                            <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-2">
+                                <span className={`inline-block w-2 h-2 rounded-full ${isRebalanceMode ? 'bg-amber-500' : 'bg-secondary'}`} />
+                                <span>
+                                    <strong>{selectedAiIndices.length}</strong> de {aiSuggestions.length} {isRebalanceMode ? (aiSuggestions.length === 1 ? 'troca selecionada' : 'trocas selecionadas') : (aiSuggestions.length === 1 ? 'sugestão selecionada' : 'sugestões selecionadas')}
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleSelectAllAiSuggestions}
+                                className="text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white px-2.5 py-1 rounded-lg hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors"
+                            >
+                                {selectedAiIndices.length === aiSuggestions.length ? 'Desmarcar todas' : 'Selecionar todas'}
                             </button>
                         </div>
 
@@ -1348,10 +1419,35 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     const dayNum = dateObj.toLocaleDateString('pt-BR', { day: '2-digit' });
                                     const currentCount = memberCounts[item.member_id] || 0;
                                     const replacedCount = item.replacedMemberId ? (memberCounts[item.replacedMemberId] || 0) : 0;
+                                    const isSelected = selectedAiIndices.includes(i);
+
                                     return (
-                                        <div key={i} className="flex flex-col gap-1.5 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50 transition-all hover:border-secondary/20">
+                                        <div 
+                                            key={i} 
+                                            role="checkbox"
+                                            aria-checked={isSelected}
+                                            tabIndex={0}
+                                            onClick={() => toggleSelectAiSuggestion(i)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === ' ' || e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    toggleSelectAiSuggestion(i);
+                                                }
+                                            }}
+                                            className={`flex flex-col gap-2 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                                isSelected
+                                                    ? isRebalanceMode
+                                                        ? 'bg-amber-500/[0.08] border-amber-500/60 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/30'
+                                                        : 'bg-secondary/[0.08] border-secondary/60 dark:border-secondary/50 shadow-sm ring-1 ring-secondary/30'
+                                                    : 'bg-zinc-50/50 dark:bg-zinc-800/30 border-zinc-200 dark:border-zinc-700/50 opacity-50 hover:opacity-85'
+                                            }`}
+                                        >
                                             <div className="flex items-center gap-3">
-                                                <div className="flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg w-10 h-10 shrink-0 shadow-sm">
+                                                <div className={`flex flex-col items-center justify-center bg-white dark:bg-zinc-800 border rounded-lg w-10 h-10 shrink-0 shadow-sm transition-colors ${
+                                                    isSelected 
+                                                        ? (isRebalanceMode ? 'border-amber-500/40 text-amber-600 dark:text-amber-400' : 'border-secondary/40 text-secondary') 
+                                                        : 'border-zinc-200 dark:border-zinc-700 text-zinc-400'
+                                                }`}>
                                                     <span className="text-[8px] font-bold text-red-500 uppercase leading-none mb-0.5">{dayName}</span>
                                                     <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 leading-none">{dayNum}</span>
                                                 </div>
@@ -1362,12 +1458,27 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                                         <span className="ml-1 text-[10px] font-normal text-zinc-400">({currentCount}x mês)</span>
                                                     </div>
                                                     {replacedMember && (
-                                                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5 truncate">
-                                                            ⇔ substitui {replacedMember.name} ({replacedCount}x)
+                                                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 truncate flex items-center gap-1">
+                                                            <RefreshCw size={10} className="shrink-0" />
+                                                            <span>⇔ substitui {replacedMember.name} ({replacedCount}x)</span>
+                                                        </div>
+                                                    )}
+                                                    {isRebalanceMode && !item.replacedMemberId && (
+                                                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5 truncate flex items-center gap-1">
+                                                            <Sparkles size={10} className="shrink-0" />
+                                                            <span>Preenchendo vaga vazia</span>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <CheckCircle2 size={16} className="text-secondary opacity-40 shrink-0" />
+                                                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all ${
+                                                    isSelected
+                                                        ? isRebalanceMode
+                                                            ? 'bg-amber-500 text-white shadow-sm'
+                                                            : 'bg-secondary text-white shadow-sm'
+                                                        : 'border-2 border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800'
+                                                }`}>
+                                                    {isSelected && <Check size={14} className="stroke-[3]" />}
+                                                </div>
                                             </div>
                                             {item.memberNote && (
                                                 <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
@@ -1383,22 +1494,31 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
 
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 flex justify-end gap-3 border-t border-zinc-100 dark:border-zinc-800">
                             <button 
-                                onClick={() => { setShowReviewAI(false); setIsRebalanceMode(false); }}
+                                onClick={handleCloseReviewAI}
                                 className="px-4 py-2 text-sm font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
                             >
                                 Descartar
                             </button>
                             <button 
                                 onClick={handleApplyAISuggestions}
-                                disabled={processing}
-                                className={`px-6 py-2 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 ${
+                                disabled={processing || selectedAiIndices.length === 0}
+                                className={`px-6 py-2 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                                     isRebalanceMode
                                         ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'
                                         : 'bg-secondary hover:bg-secondaryHover shadow-secondary/20'
                                 }`}
                             >
-                                {processing ? <Loader2 size={16} className="animate-spin" /> : isRebalanceMode ? <RefreshCw size={16} /> : <Sparkles size={16} />}
-                                {isRebalanceMode ? 'Aplicar Trocas' : 'Aplicar na Escala'}
+                                {processing ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : isRebalanceMode ? (
+                                    <RefreshCw size={16} />
+                                ) : (
+                                    <Sparkles size={16} />
+                                )}
+                                {isRebalanceMode 
+                                    ? `Aplicar Trocas (${selectedAiIndices.length})` 
+                                    : `Aplicar na Escala (${selectedAiIndices.length})`
+                                }
                             </button>
                         </div>
                     </div>
