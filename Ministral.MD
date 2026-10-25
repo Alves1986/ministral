@@ -61,7 +61,7 @@
 
 ### B. Em Análise / Dependências Externas
 - [ ] **[API] CifraClub / Vagalume**: Monitorar estabilidade dos endpoints de letras/cifras e avaliar necessidade de chave dedicada caso a API pública apresente limites de requisição.
-- [ ] **[TESTES] Suíte Completa de Componentes**: Ajustar configuração de testes unitários para permitir execução com `@testing-library/react` e `@testing-library/jest-dom` v6 sem conflitos de dependências.
+- [x] **[TESTES] Suíte Completa de Concorrência, Resiliência e Multi-Tenancy**: 8 suítes com 32 testes automatizados executados e aprovados via Vitest (`tests/concurrency/`, `tests/multi-tenant/`, `tests/resilience/`).
 
 ### C. Débito Técnico / Refatorações Futuras
 - [ ] **[REFACTOR] `ScheduleEditorV2.tsx`**: Modularizar o arquivo principal dividindo em submódulos atômicos (células de escala, modais de IA e barras de navegação mensal).
@@ -70,24 +70,29 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 20/10/2026
+- **Data**: 25/10/2026
 - **Realizações**:
-  1. **Auditoria e Blindagem de Notificações e Solicitações de Entrada**:
-     - Corrigido o fluxo de aprovação de solicitações de entrada (`join_request`): blindado [MembersScreen.tsx](components/MembersScreen.tsx) com avatar, nome real, e-mail e citação da notificação original, além de resolução automática de perfis (`profiles`) e seletor manual de vinculação para notificações legadas ou com nomes genéricos ("Novo Integrante").
-     - Atualizado [NotificationCenter.tsx](components/NotificationCenter.tsx) para redirecionar o clique em solicitações de entrada diretamente para a aba de membros com o ministério correto já selecionado.
-     - Adicionado banner de alerta e badge numérico no item de menu "Membros" em [DashboardLayout.tsx](components/DashboardLayout.tsx) e [App.tsx](App.tsx) quando houver solicitações aguardando aprovação.
-     - Blindado `fetchNotificationsSQL` em [services/supabase/notifications.ts](services/supabase/notifications.ts) para sempre retornar `type = join_request` para administradores e nunca quebrar com erro 400.
-     - Unificados ministérios permitidos e ministério ativo em [useMinistryQueries.ts](hooks/useMinistryQueries.ts) para nunca perder notificações do ministério selecionado.
-     - Criada migração idempotente [20261020_add_target_user_id_to_notifications.sql](supabase/migrations/20261020_add_target_user_id_to_notifications.sql) adicionando `target_user_id` e `action_link`.
-     - Corrigido registro automático de inscrição Web Push e deep-links contextuais.
-  2. **Organização da Documentação**:
-     - Criação de [docs/agent-context/MINISTRAL_HISTORY.md](docs/agent-context/MINISTRAL_HISTORY.md) preservando 100% do histórico técnico e das auditorias passadas.
-     - Otimização do `Ministral.MD` como índice ágil e confiável com backlog ativo estruturado por estado.
-     - Refinamento de `AGENTS.MD` com regras permanentes.
-   3. **Repertório Musical e Suporte Completo a Playlists do YouTube**:
-      - Corrigida a identificação e extração de Playlists do YouTube (`/playlist?list=...`, `&list=...` e IDs canônicos `PL...`) em [RepertoireScreen.tsx](components/RepertoireScreen.tsx), [youtubeService.ts](services/youtubeService.ts) e [api/youtube/search.ts](api/youtube/search.ts).
-      - Implementado suporte multi-camada: busca oficial via API do YouTube com fallback resiliente direto para extração de playlists e vídeos (zero quota / sem bloqueios de API key).
-      - Adicionado botão de importação em lote "Adicionar Todas" na interface do repertório para adicionar todas as faixas da playlist com um único clique.
-- **Validação**: `npm run build` aprovado gerando bundles e service worker sem advertências impeditivas.
-- **Próximo Passo**: Teste de ponta a ponta no mobile e aprovação da solicitação de entrada de teste.
-
+  1. **Auditoria Profunda Multi-Agente (Teamwork) para Escalar SaaS**:
+     - Conduzida auditoria profunda e adversarial com 12 subagentes cobrindo concorrência, isolamento multi-tenant, resiliência de frontend e carga simultânea.
+  2. **Blindagem de Segurança BOLA e Privilege Escalation nas Edge Functions**:
+     - `stripe-customer-portal` e `stripe-create-checkout`: Validação obrigatória de que o solicitante autenticado é super admin ou administrador formal daquela organização (`callerProfile.organization_id === orgId && callerProfile.is_admin === true`).
+     - `push-notification`: Bloqueio de disparos cross-tenant. Administradores não super admins ficam estritamente confinados a ministérios e destinatários da sua própria `organization_id`.
+     - `accept-invite`: Corrigida escalação indevida de privilégio. A aceitação do primeiro membro de um novo ministério não concede mais `profiles.is_admin = true` (administrador da igreja inteira), garantindo estritamente `ministry_members.role = 'admin'`.
+  3. **Concorrência e Eliminação da Race Condition de Disponibilidade**:
+     - `services/supabase/availability.ts`: Substituição do padrão destrutivo de delete total mensal por reconciliação cirúrgica por diff (`existingRows` vs `rows`). Registros inalterados nunca são deletados, eliminando a janela de zero registros observada pelo Supabase Realtime.
+     - `AvailabilityScreen.tsx` & `hooks/useScreenMemos.tsx`: Implementado optimistic update imediato no cache do TanStack Query (`queryClient.setQueryData`) e proteção com `lastSavedDatesRef`, eliminando o "rollback fantasma" aos 8s e garantindo estabilidade visual absoluta.
+  4. **Eliminação de Zombie Requests e Trocas de Ministério**:
+     - `App.tsx`: Adicionado `switchSequenceRef` para descarte de respostas assíncronas zumbis em trocas consecutivas de ministério no header/sidebar.
+  5. **Conformidade Estrita com Convenções Mandatórias**:
+     - `services/supabase/repertoire.ts`: Removida leitura incorreta de `profiles.ministry_functions`. Migrado para consulta na tabela canônica `ministry_members.functions` com join em `profiles(id, name)` e deduplicação por membro.
+  6. **Resiliência do Frontend e TanStack Query**:
+     - `lib/queryClient.ts`: Configurado backoff exponencial com jitter (até 30s) e bloqueio imediato de retries para erros definitivos (401, 403, 404, `PGRST301`, `42501`).
+     - `components/ErrorBoundary.tsx`: Substituído `process.env.NODE_ENV` por `import.meta.env.DEV` para compatibilidade estrita com runtime Vite no browser.
+     - `components/ScreenErrorBoundary.tsx`: Criado Error Boundary granular por tela com botão de retry contextual.
+  7. **Suíte de Testes Automatizados (Vitest)**:
+     - Criados testes de concorrência de escalas (`scheduleAssignmentConcurrency.test.ts`), disputas em trocas de escala (`swapRequestConcurrency.test.ts`), isolamento multi-tenant (`tenantDataIsolation.test.ts`) e resiliência de retries (`queryClientResilience.test.ts`).
+- **Validação**:
+  - `npm test`: 8 arquivos e 32 testes aprovados (100% no Vitest).
+  - `npm run build`: Bundles e Service Worker PWA gerados com sucesso.
+  - `npm run lint` (`tsc --noEmit`): Compilação limpa sem erros de tipagem.
+- **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

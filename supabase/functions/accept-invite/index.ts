@@ -135,7 +135,7 @@ serve(async (req) => {
         organization_id: invite.organization_id,
         ministry_id: invite.ministry_id,
         allowed_ministries: [invite.ministry_id],
-        is_admin: isFirstMember,
+        is_admin: false,
         is_super_admin: false,
       })
       .eq("id", userId);
@@ -157,7 +157,8 @@ serve(async (req) => {
       await supabaseAdmin.from("ministry_members").insert({
         profile_id: userId,
         ministry_id: invite.ministry_id,
-        role: "member",
+        role: isFirstMember ? "admin" : "member",
+        organization_id: invite.organization_id,
         functions: functions,
       });
     }

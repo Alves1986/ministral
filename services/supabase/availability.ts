@@ -65,20 +65,7 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const next = new Date(year, month, 1);
     const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
 
-    console.log("[saveMemberAvailabilityV2] Iniciando delete...", { orgId, ministryId, userId, targetMonth, nextMonth });
 
-    const { error: delError } = await sb
-        .from('member_availability')
-        .delete()
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .eq('user_id', userId)
-        .gte('available_date', `${targetMonth}-01`)
-        .lt('available_date', `${nextMonth}-01`);
-
-    console.log("[saveMemberAvailabilityV2] Delete concluido", { delError });
-
-    if (delError) throw delError;
 
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
     const rows: any[] = [];
@@ -140,15 +127,41 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         });
     }
 
-    console.log("[saveMemberAvailabilityV2] Iniciando insert...", rows.length, "linhas");
+    // Reconciliação cirúrgica por diff para evitar wipe temporário da tela via Supabase Realtime
+    const { data: existingRows, error: fetchErr } = await sb
+        .from('member_availability')
+        .select('id, available_date, note')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('user_id', userId)
+        .gte('available_date', `${targetMonth}-01`)
+        .lt('available_date', `${nextMonth}-01`);
 
-    if (rows.length > 0) {
+    if (fetchErr) throw fetchErr;
+
+    const sig = (r: { available_date: string; note?: string | null }) => `${r.available_date}|${r.note || ''}`;
+    const existingMap = new Map((existingRows || []).map((r: any) => [sig(r), r.id]));
+    const desiredSigs = new Set(rows.map(r => sig(r)));
+
+    // 1. Remove apenas registros que foram desmarcados
+    const idsToDelete = (existingRows || [])
+        .filter((r: any) => !desiredSigs.has(sig(r)))
+        .map((r: any) => r.id);
+
+    if (idsToDelete.length > 0) {
+        const { error: delError } = await sb
+            .from('member_availability')
+            .delete()
+            .in('id', idsToDelete);
+        if (delError) throw delError;
+    }
+
+    // 2. Insere apenas novos registros que não existiam previamente
+    const rowsToInsert = rows.filter(r => !existingMap.has(sig(r)));
+    if (rowsToInsert.length > 0) {
         const { error: insError } = await sb
             .from('member_availability')
-            .insert(rows);
-
-        console.log("[saveMemberAvailabilityV2] Insert concluido", { insError });
-
+            .insert(rowsToInsert);
         if (insError) throw insError;
     }
 };

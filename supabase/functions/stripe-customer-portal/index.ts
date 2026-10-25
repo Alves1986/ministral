@@ -38,6 +38,24 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: corsHeaders });
     }
 
+    // Verify user authorization: must be super admin or admin of this specific org
+    const { data: callerProfile, error: profileError } = await sbAdmin
+      .from('profiles')
+      .select('is_admin, is_super_admin, organization_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !callerProfile) {
+      return new Response(JSON.stringify({ error: 'User profile not found' }), { status: 403, headers: corsHeaders });
+    }
+
+    const isSuperAdmin = callerProfile.is_super_admin === true;
+    const isOrgAdmin = callerProfile.organization_id === orgId && callerProfile.is_admin === true;
+
+    if (!isSuperAdmin && !isOrgAdmin) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Insufficient privileges for this organization' }), { status: 403, headers: corsHeaders });
+    }
+
     // Get organization to check if stripe customer exists
     const { data: orgData } = await sbAdmin.from('organizations').select('stripe_customer_id').eq('id', orgId).single();
     

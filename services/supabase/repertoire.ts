@@ -135,16 +135,34 @@ export const replicateRepertoireToProjectionAndDance = async (
         }
 
         if (notify) {
-            // 2. Notificar membros com funções específicas na organização
-            const { data: profiles } = await sb
-                .from('profiles')
-                .select('id, name, ministry_functions')
+            // 2. Notificar membros com funções específicas na organização via tabela canônica ministry_members
+            const { data: members } = await sb
+                .from('ministry_members')
+                .select('profile_id, functions, profiles!inner(id, name)')
                 .eq('organization_id', orgId);
 
+            const memberMap = new Map<string, { id: string; name: string; funcs: string[] }>();
+            (members || []).forEach((m: any) => {
+                const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+                const pid = m.profile_id || profile?.id;
+                if (!pid) return;
+                const funcs = (m.functions || []).map((f: string) => f.toLowerCase());
+                if (!memberMap.has(pid)) {
+                    memberMap.set(pid, {
+                        id: pid,
+                        name: profile?.name || '',
+                        funcs: [...funcs]
+                    });
+                } else {
+                    const existing = memberMap.get(pid)!;
+                    existing.funcs = Array.from(new Set([...existing.funcs, ...funcs]));
+                }
+            });
+            const memberProfiles = Array.from(memberMap.values());
+
             // Notificar voluntários de Projeção
-            const projectionProfiles = (profiles || []).filter((p: any) => {
-                const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
-                return funcs.some((f: string) => 
+            const projectionProfiles = memberProfiles.filter((p) => {
+                return p.funcs.some((f: string) => 
                     f.includes('projec') || 
                     f.includes('projeç') || 
                     f.includes('mídia') || 
@@ -166,9 +184,8 @@ export const replicateRepertoireToProjectionAndDance = async (
             }
 
             // Notificar voluntárias de Dança
-            const danceProfiles = (profiles || []).filter((p: any) => {
-                const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
-                return funcs.some((f: string) => 
+            const danceProfiles = memberProfiles.filter((p) => {
+                return p.funcs.some((f: string) => 
                     f.includes('dança') || 
                     f.includes('danca') || 
                     f.includes('coreograf') || 
@@ -288,15 +305,33 @@ export const notifyRepertoirePlaylistPublished = async (
             }).catch(() => {});
         }
 
-        // 3. Notificar voluntários com funções de Projeção e Dança
-        const { data: profiles } = await sb
-            .from('profiles')
-            .select('id, name, ministry_functions')
+        // 3. Notificar voluntários com funções de Projeção e Dança via ministry_members
+        const { data: members } = await sb
+            .from('ministry_members')
+            .select('profile_id, functions, profiles!inner(id, name)')
             .eq('organization_id', orgId);
 
-        const projectionProfiles = (profiles || []).filter((p: any) => {
-            const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
-            return funcs.some((f: string) => 
+        const memberMap = new Map<string, { id: string; name: string; funcs: string[] }>();
+        (members || []).forEach((m: any) => {
+            const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+            const pid = m.profile_id || profile?.id;
+            if (!pid) return;
+            const funcs = (m.functions || []).map((f: string) => f.toLowerCase());
+            if (!memberMap.has(pid)) {
+                memberMap.set(pid, {
+                    id: pid,
+                    name: profile?.name || '',
+                    funcs: [...funcs]
+                });
+            } else {
+                const existing = memberMap.get(pid)!;
+                existing.funcs = Array.from(new Set([...existing.funcs, ...funcs]));
+            }
+        });
+        const memberProfiles = Array.from(memberMap.values());
+
+        const projectionProfiles = memberProfiles.filter((p) => {
+            return p.funcs.some((f: string) => 
                 f.includes('projec') || 
                 f.includes('projeç') || 
                 f.includes('mídia') || 
@@ -317,9 +352,8 @@ export const notifyRepertoirePlaylistPublished = async (
             }).catch(() => {});
         }
 
-        const danceProfiles = (profiles || []).filter((p: any) => {
-            const funcs = (p.ministry_functions || []).map((f: string) => f.toLowerCase());
-            return funcs.some((f: string) => 
+        const danceProfiles = memberProfiles.filter((p) => {
+            return p.funcs.some((f: string) => 
                 f.includes('dança') || 
                 f.includes('danca') || 
                 f.includes('coreograf') || 

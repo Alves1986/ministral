@@ -208,6 +208,7 @@ export function validateAssignment(
     event_date: string;
     role: string;
     member_id: string;
+    replacedMemberId?: string;
   },
   input: ScheduleInput,
 ): ValidationError | null {
@@ -356,13 +357,15 @@ export function validateAssignment(
   }
 
   // 8. Vaga já preenchida (outro membro já ocupa essa posição)
+  // Se for uma proposta de substituição (replacedMemberId), permite substituir o membro indicado
   const slotFilled = (input.existingAssignments || []).some(
     (a) =>
       a.event_rule_id === event_rule_id &&
       a.event_date === event_date &&
       a.role === role &&
       a.member_id &&
-      a.member_id !== member_id,
+      a.member_id !== member_id &&
+      (!assignment.replacedMemberId || a.member_id !== assignment.replacedMemberId),
   );
   if (slotFilled) {
     return {

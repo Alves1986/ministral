@@ -86,7 +86,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {isChunkError ? "Atualizar Aplicação" : "Recarregar Aplicação"}
             </button>
             
-            {this.state.error && process.env.NODE_ENV === 'development' && (
+            {this.state.error && import.meta.env.DEV && (
                 <div className="mt-6 p-4 bg-zinc-100 dark:bg-black rounded-lg text-left overflow-auto max-h-32 text-[10px] font-mono text-red-500">
                     {this.state.error.toString()}
                 </div>

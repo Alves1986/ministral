@@ -50,6 +50,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const lastSavedDatesRef = React.useRef<string[] | null>(null);
 
   // Bloqueio visual: Impede alterações enquanto salva ou mostra sucesso
   const isSaveLocked = saveState === 'saving' || saveState === 'saved';
@@ -128,6 +129,17 @@ export const AvailabilityScreen: React.FC<Props> = ({
     // Availability map is keyed by User ID now
     const storedDates = availability[selectedMemberId] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
+
+    // Se salvamos recentemente, só aceita dados do backend se já refletirem o que foi salvo
+    if (lastSavedDatesRef.current !== null) {
+      const savedSorted = [...lastSavedDatesRef.current].sort().join(',');
+      const backendSorted = [...monthDates].sort().join(',');
+      if (savedSorted !== backendSorted) {
+        return;
+      }
+      lastSavedDatesRef.current = null;
+    }
+
     setTempDates(monthDates);
     
     // Note key format: ID_YYYY-MM-00
@@ -370,6 +382,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           });
           
           // ESTADO TERMINAL DE SUCESSO
+          lastSavedDatesRef.current = [...tempDates];
           setSaveState('saved');
           addToast("Indisponibilidade salva com sucesso!", "success");
           

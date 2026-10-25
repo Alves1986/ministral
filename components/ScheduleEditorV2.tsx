@@ -549,7 +549,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             });
 
             if (validAi.length === 0) {
-                addToast('A escala já está bem equilibrada ou não foi possível sugerir trocas seguras.', 'info');
+                addToast('A escala já está bem equilibrada e sem vagas pendentes para preencher.', 'info');
                 return;
             }
             setAiSuggestions(validAi);
@@ -1034,11 +1034,11 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                     </div>
                                 )}
                             </div>
-                            {isPro && hasExistingAssignments && (
+                            {isPro && (
                                 <button
                                     onClick={() => setShowConfirmRebalance(true)}
                                     disabled={isGeneratingAI}
-                                    title="Sugerir trocas para equilibrar a carga do mês"
+                                    title="Preencher vagas vazias e equilibrar as escalas do mês"
                                     className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all active:scale-95 shadow-lg bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20 disabled:opacity-60"
                                 >
                                     <RefreshCw size={16} />
@@ -1461,11 +1461,11 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                             <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500 mb-4 shadow-sm">
                                 <RefreshCw size={24} />
                             </div>
-                            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Reequilibrar Escala?</h3>
+                            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Equilibrar Escala?</h3>
                             <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
-                                A IA vai analisar a distribuição atual do mês e sugerir <strong>trocas</strong> para equilibrar a carga entre os membros, sem sobrecarregar ninguém.
+                                O sistema vai <strong>preencher as vagas vazias</strong> distribuindo igualmente as escalas entre os membros disponíveis e, se necessário, sugerir <strong>trocas</strong> para descarregar membros com excesso de escalas.
                                 <br/><br/>
-                                Você revisará cada troca antes de aplicar. Membros já escalados <strong>poderão ser substituídos</strong> por outros com menos escalas no mês.
+                                Você revisará cada vaga preenchida e troca antes de aplicar na escala. Deseja continuar?
                             </p>
                         </div>
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 flex justify-end gap-3 border-t border-zinc-100 dark:border-zinc-800">
@@ -1480,7 +1480,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                                 className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
                             >
                                 <RefreshCw size={16} />
-                                Analisar e Equilibrar
+                                Equilibrar Escala
                             </button>
                         </div>
                     </div>

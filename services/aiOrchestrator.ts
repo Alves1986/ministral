@@ -824,115 +824,223 @@ function fillSchedule(data: ScheduleInput): Assignment[] {
   return result;
 }
 
-// === Modo Rebalance: sugere trocas para equilibrar a carga mensal ===
+// === Modo Rebalance: preenche vagas vazias e equilibra a carga mensal ===
 
 function rebalanceSchedule(data: ScheduleInput): Assignment[] {
-  // Contagem atual de escalas por membro (ignora marcadores de exclusao)
-  const currentCount: Record<string, number> = {};
-  data.members.forEach(m => { currentCount[m.id] = 0; });
+  const result: Assignment[] = [];
+
+  // 1. Contagem atual de escalas por membro (ignora marcadores de exclusão)
+  const mutableCounts: Record<string, number> = {};
+  data.members.forEach(m => { mutableCounts[m.id] = 0; });
   data.existingAssignments.forEach(a => {
-    if (a.member_id && a.role !== '__EVENT_EXCLUDED__' && currentCount[a.member_id] !== undefined) {
-      currentCount[a.member_id]++;
+    if (a.member_id && a.role !== '__EVENT_EXCLUDED__' && mutableCounts[a.member_id] !== undefined) {
+      mutableCounts[a.member_id]++;
     }
   });
 
-  const totalAssigned = Object.values(currentCount).reduce((s, c) => s + c, 0);
-  const memberCount = data.members.length;
-  if (memberCount === 0 || totalAssigned === 0) return [];
+  const allAssignments = (): ExistingAssignment[] => [
+    ...data.existingAssignments,
+    ...result
+  ];
 
-  // Media de escalas por membro (apenas membros que possuem a funcao necessaria)
-  // Calcula threshold dinamico: ceil(media)
-  const avgLoad = totalAssigned / memberCount;
-  const overloadThreshold = Math.ceil(avgLoad);
+  // ───────────────────────────────────────────────────────────────────────────
+  // ETAPA 1: Preencher vagas vazias priorizando rigorosamente o equilíbrio
+  //          (quem tem menos escalas no mês recebe prioridade máxima)
+  // ───────────────────────────────────────────────────────────────────────────
+  for (const occ of data.occurrences) {
+    for (const role of data.roles) {
+      // Verifica se esta função está excluída para este evento específico
+      const excludedRoles = data.eventRoleExcludes?.[occ.ruleId] || [];
+      if (excludedRoles.includes(role)) continue;
 
-  // Membros com mais escalas que o threshold (sobrecarregados, mais pesados primeiro)
-  const overloaded = data.members
-    .filter(m => (currentCount[m.id] || 0) > overloadThreshold)
-    .sort((a, b) => (currentCount[b.id] || 0) - (currentCount[a.id] || 0));
-
-  if (overloaded.length === 0) return [];
-
-  const result: Assignment[] = [];
-  const mutableCounts = { ...currentCount };
-  const swappedKeys = new Set<string>();
-
-  for (const heavyMember of overloaded) {
-    // Escalas do membro sobrecarregado, ordenadas da mais recente para a mais antiga
-    const memberAssignments = [...data.existingAssignments]
-      .filter(a => a.member_id === heavyMember.id && a.role !== '__EVENT_EXCLUDED__')
-      .sort((a, b) => b.event_date.localeCompare(a.event_date));
-
-    for (const assign of memberAssignments) {
-      // Para quando este membro ja estiver equilibrado
-      if ((mutableCounts[heavyMember.id] || 0) <= overloadThreshold) break;
-
-      const key = `${assign.event_rule_id}|${normalizeDate(assign.event_date)}|${assign.role}`;
-      if (swappedKeys.has(key)) continue;
-
-      // Ocorrencia para obter data e horario
-      const occ = data.occurrences.find(
-        o => o.ruleId === assign.event_rule_id && o.date === normalizeDate(assign.event_date)
+      // Vaga já preenchida (no banco ou já preenchida nesta execução) — pula
+      const alreadyFilled = allAssignments().some(
+        a => a.event_rule_id === occ.ruleId &&
+             normalizeDate(a.event_date) === occ.date &&
+             a.role === role &&
+             a.member_id
       );
-      if (!occ) continue;
+      if (alreadyFilled) continue;
 
-      // Assignments restantes neste evento (excluindo quem vai ser trocado)
-      const remainingEventAssignments = data.existingAssignments.filter(
-        a => a.event_rule_id === assign.event_rule_id &&
-             normalizeDate(a.event_date) === normalizeDate(assign.event_date) &&
-             a.member_id !== heavyMember.id
-      );
-      const membersInEvent = remainingEventAssignments.map(a => a.member_id);
+      const baseRole = role.replace(/\s\d+$/, '');
 
-      // Busca candidatos a substituto:
-      // - tem a funcao necessaria
-      // - esta disponivel no dia
-      // - nao esta ja neste evento
-      // - tem carga menor que o sobrecarregado (threshold: pelo menos 1 a menos)
-      // - nao viola regras de conflito
-      const candidates = data.members.filter(m => {
-        if (m.id === heavyMember.id) return false;
-        const targetBaseRole = assign.role.replace(/\s\d+$/, '');
+      // Filtra membros elegíveis respeitando todas as regras
+      const eligible = data.members.filter(m => {
+        // Função do membro (suporta sufixos numéricos como 'Vocal 1' -> 'Vocal')
         const hasRole = (m.functions || []).some(
-          f => f === assign.role || f === targetBaseRole || f.toLowerCase() === targetBaseRole.toLowerCase()
+          f => f === role || f === baseRole || f.toLowerCase() === baseRole.toLowerCase()
         );
         if (!hasRole) return false;
-        // Carga menor = candidato valido para troca (critério mais permissivo: < heavyMember)
-        if ((mutableCounts[m.id] || 0) >= (mutableCounts[heavyMember.id] || 0)) return false;
+
+        // Não pode ser escalado duas vezes no mesmo evento com a mesma função base (ex: Vocal 1 e Vocal 2)
+        const memberRolesInEvent = allAssignments()
+          .filter(a => a.member_id === m.id && a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
+          .map(a => a.role);
+
+        const hasSameBaseRoleInEvent = memberRolesInEvent.some(
+          r => r.replace(/\s\d+$/, '').toLowerCase() === baseRole.toLowerCase()
+        );
+        if (hasSameBaseRoleInEvent) return false;
+
+        // Se já está no evento em outra função diferente: só pode se houver exceção explícita
+        if (memberRolesInEvent.length > 0) {
+          const allowedByException = memberRolesInEvent.every(existingRole => {
+            const existingBase = existingRole.replace(/\s\d+$/, '');
+            return data.rules?.allowExceptions?.some(exc =>
+              (exc.includes(role) || exc.includes(baseRole)) &&
+              (exc.includes(existingRole) || exc.includes(existingBase))
+            );
+          });
+          if (!allowedByException) return false;
+        }
+
         if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
-        if (membersInEvent.includes(m.id)) return false;
-        if (hasBlockGroupConflict(m.id, assign.role, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
-        if (hasMemberBlockConflict(m.id, assign.event_rule_id, normalizeDate(assign.event_date), remainingEventAssignments, data.rules)) return false;
-        // Conflito de turno no domingo
-        const tempAll: ExistingAssignment[] = [
-          ...data.existingAssignments.filter(
-            a => !(a.member_id === heavyMember.id &&
-                   a.event_rule_id === assign.event_rule_id &&
-                   normalizeDate(a.event_date) === normalizeDate(assign.event_date))
-          ),
-          ...result
-        ];
-        if (hasSundayTurnConflict(m.id, occ.date, occ.time, tempAll, data.occurrences)) return false;
+        if (hasSundayTurnConflict(m.id, occ.date, occ.time, allAssignments(), data.occurrences)) return false;
+        if (hasBlockGroupConflict(m.id, role, occ.ruleId, occ.date, allAssignments(), data.rules)) return false;
+        if (hasMemberBlockConflict(m.id, occ.ruleId, occ.date, allAssignments(), data.rules)) return false;
         return true;
-      }).sort((a, b) => (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0)); // Menor carga primeiro
-
-      if (candidates.length === 0) continue;
-
-      const replacement = candidates[0];
-      const monthKey = occ.date.substring(0, 7);
-      const memberNote = data.memberNotes?.[`${replacement.id}_${monthKey}`];
-
-      result.push({
-        event_rule_id: assign.event_rule_id,
-        event_date: normalizeDate(assign.event_date),
-        role: assign.role,
-        member_id: replacement.id,
-        replacedMemberId: heavyMember.id,
-        ...(memberNote ? { memberNote } : {})
       });
 
-      mutableCounts[heavyMember.id]--;
-      mutableCounts[replacement.id]++;
-      swappedKeys.add(key);
+      if (eligible.length === 0) continue;
+
+      const membersInEvent = allAssignments()
+        .filter(a => a.event_rule_id === occ.ruleId && normalizeDate(a.event_date) === occ.date)
+        .map(a => a.member_id);
+
+      // ORDENAÇÃO POR EQUILÍBRIO:
+      // 1) Menor quantidade de escalas no mês
+      // 2) Se empate, prioriza parceiro preferido já no evento
+      // 3) Ordem alfabética
+      const sorted = [...eligible].sort((a, b) => {
+        const diff = (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0);
+        if (diff !== 0) return diff;
+
+        const aPref = getPreferredPartners(a.id, data.rules).some(p => membersInEvent.includes(p));
+        const bPref = getPreferredPartners(b.id, data.rules).some(p => membersInEvent.includes(p));
+        if (aPref && !bPref) return -1;
+        if (!aPref && bPref) return 1;
+
+        return a.name.localeCompare(b.name);
+      });
+
+      const chosen = sorted[0];
+      const monthKey = occ.date.substring(0, 7);
+      const memberNote = data.memberNotes?.[`${chosen.id}_${monthKey}`];
+
+      result.push({
+        event_rule_id: occ.ruleId,
+        event_date: occ.date,
+        role,
+        member_id: chosen.id,
+        ...(memberNote ? { memberNote } : {})
+      });
+      mutableCounts[chosen.id] = (mutableCounts[chosen.id] || 0) + 1;
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ETAPA 2: Se ainda houver desequilíbrio significativo entre membros com a
+  //          mesma função, sugerir trocas (swaps) nas escalas preenchidas
+  // ───────────────────────────────────────────────────────────────────────────
+  const swappedKeys = new Set<string>();
+  let improvementMade = true;
+  let iterations = 0;
+  const MAX_ITERATIONS = 40;
+
+  while (improvementMade && iterations < MAX_ITERATIONS) {
+    improvementMade = false;
+    iterations++;
+
+    // Membros com mais escalas primeiro
+    const sortedMembers = [...data.members].sort(
+      (a, b) => (mutableCounts[b.id] || 0) - (mutableCounts[a.id] || 0)
+    );
+
+    for (const heavyMember of sortedMembers) {
+      const heavyCount = mutableCounts[heavyMember.id] || 0;
+      if (heavyCount <= 1) continue; // Não há como aliviar quem tem 1 ou 0 escalas
+
+      // Busca as escalas do membro sobrecarregado (apenas escalas existentes no banco)
+      const heavyAssignments = data.existingAssignments
+        .filter(a => a.member_id === heavyMember.id && a.role !== '__EVENT_EXCLUDED__')
+        .sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+      for (const assign of heavyAssignments) {
+        const key = `${assign.event_rule_id}|${normalizeDate(assign.event_date)}|${assign.role}`;
+        if (swappedKeys.has(key)) continue;
+
+        const occ = data.occurrences.find(
+          o => o.ruleId === assign.event_rule_id && o.date === normalizeDate(assign.event_date)
+        );
+        if (!occ) continue;
+
+        // Membros presentes no evento (excluindo quem vai sair)
+        const currentEventAssignments = [
+          ...data.existingAssignments.filter(
+            a => a.event_rule_id === assign.event_rule_id &&
+                 normalizeDate(a.event_date) === normalizeDate(assign.event_date) &&
+                 a.member_id !== heavyMember.id
+          ),
+          ...result.filter(
+            r => r.event_rule_id === assign.event_rule_id &&
+                 r.event_date === normalizeDate(assign.event_date)
+          )
+        ];
+        const membersInEvent = currentEventAssignments.map(a => a.member_id);
+        const targetBaseRole = assign.role.replace(/\s\d+$/, '');
+
+        // Candidatos que reduzem a diferença de carga (contagem <= heavyCount - 2)
+        const candidates = data.members.filter(m => {
+          if (m.id === heavyMember.id) return false;
+          const mCount = mutableCounts[m.id] || 0;
+          if (mCount > heavyCount - 2) return false;
+
+          const hasRole = (m.functions || []).some(
+            f => f === assign.role || f === targetBaseRole || f.toLowerCase() === targetBaseRole.toLowerCase()
+          );
+          if (!hasRole) return false;
+
+          if (membersInEvent.includes(m.id)) return false;
+          if (!isMemberAvailable(m.id, occ.date, occ.time, data.availability)) return false;
+          if (hasBlockGroupConflict(m.id, assign.role, assign.event_rule_id, normalizeDate(assign.event_date), currentEventAssignments, data.rules)) return false;
+          if (hasMemberBlockConflict(m.id, assign.event_rule_id, normalizeDate(assign.event_date), currentEventAssignments, data.rules)) return false;
+
+          const tempAll: ExistingAssignment[] = [
+            ...data.existingAssignments.filter(
+              a => !(a.member_id === heavyMember.id &&
+                     a.event_rule_id === assign.event_rule_id &&
+                     normalizeDate(a.event_date) === normalizeDate(assign.event_date))
+            ),
+            ...result
+          ];
+          if (hasSundayTurnConflict(m.id, occ.date, occ.time, tempAll, data.occurrences)) return false;
+
+          return true;
+        }).sort((a, b) => (mutableCounts[a.id] || 0) - (mutableCounts[b.id] || 0));
+
+        if (candidates.length > 0) {
+          const replacement = candidates[0];
+          const monthKey = occ.date.substring(0, 7);
+          const memberNote = data.memberNotes?.[`${replacement.id}_${monthKey}`];
+
+          result.push({
+            event_rule_id: assign.event_rule_id,
+            event_date: normalizeDate(assign.event_date),
+            role: assign.role,
+            member_id: replacement.id,
+            replacedMemberId: heavyMember.id,
+            ...(memberNote ? { memberNote } : {})
+          });
+
+          mutableCounts[heavyMember.id]--;
+          mutableCounts[replacement.id]++;
+          swappedKeys.add(key);
+          improvementMade = true;
+          break;
+        }
+      }
+
+      if (improvementMade) break;
     }
   }
 

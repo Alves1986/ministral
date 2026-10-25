@@ -86,9 +86,27 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, message: 'Profile not found' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Multi-tenant boundary check: non-superadmins can only access ministries from their own organization
+    if (!callerProfile.is_super_admin) {
+        if (!callerProfile.organization_id) {
+            return new Response(JSON.stringify({ success: false, message: 'Forbidden: caller has no organization' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        if (cleanMid) {
+            const { data: minData } = await supabase
+                .from('organization_ministries')
+                .select('organization_id')
+                .eq('id', cleanMid)
+                .maybeSingle();
+
+            if (minData && minData.organization_id !== callerProfile.organization_id) {
+                return new Response(JSON.stringify({ success: false, message: 'Forbidden: ministry belongs to another organization' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+        }
+    }
+
     const hasAccess = 
         callerProfile.is_super_admin === true ||
-        callerProfile.is_admin === true || 
+        (callerProfile.is_admin === true && callerProfile.organization_id) || 
         (cleanMid && callerProfile.ministry_id === cleanMid) || 
         (cleanMid && callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
 
@@ -175,6 +193,17 @@ Deno.serve(async (req: Request) => {
       targetUserIds = explicitTarget.filter(id => isPrivileged || ministryUserIds.has(id));
     } else {
       targetUserIds = Array.from(ministryUserIds);
+    }
+
+    // Ensure non-superadmins cannot target users outside their organization
+    if (!callerProfile.is_super_admin && targetUserIds.length > 0 && callerProfile.organization_id) {
+      const { data: orgUsers } = await supabase
+        .from('profiles')
+        .select('id')
+        .in('id', targetUserIds)
+        .eq('organization_id', callerProfile.organization_id);
+      const allowedIds = new Set((orgUsers || []).map((u: any) => u.id));
+      targetUserIds = targetUserIds.filter(id => allowedIds.has(id));
     }
 
     if (targetUserIds.length === 0) return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário.' }), { headers: corsHeaders, status: 200 })

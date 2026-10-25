@@ -367,6 +367,7 @@ const InnerApp = () => {
   }, []);
 
   const hasInitialSync = React.useRef(false);
+  const switchSequenceRef = React.useRef(0);
 
   if (spotifyAuthSuccess) {
     return (
@@ -1859,6 +1860,7 @@ const InnerApp = () => {
           isStandalone={window.matchMedia("(display-mode: standalone)").matches}
           onSwitchMinistry={async (id) => {
             if (id === ministryId) return;
+            const currentSwitchId = ++switchSequenceRef.current;
             setIsRefreshing(true);
 
             // Local variables to ensure narrowing for closure
@@ -1901,6 +1903,11 @@ const InnerApp = () => {
                   console.warn("[onSwitchMinistry] updateProfileMinistry warning:", err);
                 }),
               ]);
+
+              // Descarte de resposta zumbi se uma nova troca de ministério foi disparada no intervalo
+              if (currentSwitchId !== switchSequenceRef.current) {
+                return;
+              }
 
               // 5. Determina papel e permissões para o novo ministério
               const isOrgAdminOrSuper = !!(activeUser?.isOrgAdmin || activeUser?.isSuperAdmin);

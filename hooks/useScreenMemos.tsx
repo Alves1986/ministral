@@ -56,6 +56,21 @@ export function useScreenMemos(props: ScreenMemosProps) {
         onMonthChange={setCurrentMonth} 
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
+            // Optimistic update no cache do TanStack Query para sincronia visual imediata
+            queryClient.setQueryData(['availabilityV2', mid, orgId!], (old: any) => {
+                if (!old) return old;
+                return {
+                    ...old,
+                    availability: {
+                        ...(old.availability || {}),
+                        [userId]: d
+                    },
+                    notes: {
+                        ...(old.notes || {}),
+                        ...n
+                    }
+                };
+            });
             await Supabase.saveMemberAvailabilityV2(orgId!, mid, userId, d, n, t); 
             queryClient.invalidateQueries({ queryKey: ['availabilityV2', mid, orgId] });
         }} 
