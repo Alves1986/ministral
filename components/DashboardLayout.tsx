@@ -1,5 +1,5 @@
 
-import React, { ReactNode, useState, useRef } from 'react';
+import React, { ReactNode, useState, useRef, useEffect } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
@@ -60,10 +60,20 @@ export const DashboardLayout: React.FC<Props> = ({
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
-  const isEffectivelyCollapsed = isDesktopCollapsed && !isSidebarHovered;
+  // O menu no mobile NÃO deve iniciar recuado nem colapsar; apenas no desktop pode colapsar
+  const isEffectivelyCollapsed = isDesktop && isDesktopCollapsed && !isSidebarHovered;
 
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
@@ -244,7 +254,7 @@ export const DashboardLayout: React.FC<Props> = ({
       <aside 
         onMouseEnter={() => setIsSidebarHovered(true)}
         onMouseLeave={() => setIsSidebarHovered(false)}
-        className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none print:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 lg:w-72'}`}
+        className={`fixed inset-y-0 left-0 z-[100] bg-white/90 dark:bg-ministral-dark/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none print:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isEffectivelyCollapsed ? 'w-20 lg:w-[5.5rem]' : 'w-72 max-w-[85vw] lg:w-72'}`}
       >
         <div className={`py-8 shrink-0 ${isEffectivelyCollapsed ? 'px-4' : 'px-6'}`}>
            <div className={`flex items-center ${isEffectivelyCollapsed ? 'justify-center' : 'gap-3.5'}`}>

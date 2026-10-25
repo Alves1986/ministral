@@ -78,10 +78,14 @@
      - Adicionada barra de controle com contagem dinâmica ("X de Y trocas selecionadas") e ação rápida "Selecionar todas / Desmarcar todas".
      - `handleApplyAISuggestions` filtra cirurgicamente apenas as trocas marcadas pelo usuário, garantindo que substituições desmarcadas não toquem no banco de dados.
      - Botão de aplicação protegido contra submissões vazias (`disabled` com 0 selecionadas) e texto contextualizado (`Aplicar Trocas (N)`).
-  2. **Suíte de Testes Automatizados**:
-     - Criado `tests/scheduleRebalanceSelection.test.ts` cobrindo seleção padrão, alternância individual, seleção/desmarcação global e aplicação isolada sem tocar nas desmarcadas.
+  2. **Menu Mobile Normal em Tela Cheia (`DashboardLayout.tsx`)**:
+     - Corrigido comportamento do menu mobile para nunca iniciar recuado/colapsado.
+     - Implementada detecção reativa de breakpoint (`isDesktop` para `>= 1024px`), confinando o modo colapsado (`isEffectivelyCollapsed`) exclusivamente ao desktop.
+     - No mobile, a gaveta drawer abre sempre normal (`w-72 max-w-[85vw]`), com rótulos de navegação legíveis, botão `X` de fechar visível, dados do usuário e seletor de ministério.
+  3. **Suíte de Testes Automatizados**:
+     - Criados `tests/scheduleRebalanceSelection.test.ts` e `tests/dashboardMenuResponsive.test.ts` (45 testes aprovados no Vitest).
 - **Validação**:
-  - `npm test`: 9 arquivos e 37 testes aprovados (100% no Vitest).
+  - `npm test`: 11 arquivos e 45 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Implementada seleção cirúrgica de trocas e atribuições no modal de equilíbrio de escalas (`ScheduleEditorV2.tsx`), permitindo ao usuário marcar/desmarcar trocas individualmente, selecionar todas/desmarcar todas, e aplicar apenas as alterações desejadas na escala. Adicionados 5 testes unitários em `tests/scheduleRebalanceSelection.test.ts` (37 testes no total, 100% aprovados no Vitest).
+- Último trabalho: Menu mobile configurado para abrir sempre no formato normal e completo (`DashboardLayout.tsx`), evitando o estado recuado em telas menores que 1024px. Adicionados testes unitários em `tests/dashboardMenuResponsive.test.ts` (45 testes no total, 100% aprovados no Vitest).
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
