@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Exportação de escala em PDF antes da liberação (Rascunho) centralizada no menu superior [Ferramentas] (ToolsMenu), sanitização de Coral para exibir estritamente "Coral" sem lista de nomes, e redimensionamento responsivo inteligente da tabela para ocupar estritamente 1 única página em formato paisagem (A4). 56 testes unitários aprovados no Vitest, lint e build OK.
+- Último trabalho: Isolamento estrito de repertório por culto e evento no Dashboard (NextEventCard, ServiceSchedule, EventDetailsModal), impedindo que o repertório do culto de domingo de manhã apareça no culto de domingo à noite. Criado utilitário `utils/repertoireUtils.ts` e testes em `tests/repertoireEventIsolation.test.ts`. 60 testes unitários aprovados no Vitest, lint e build OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

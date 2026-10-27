@@ -79,8 +79,12 @@
   2. **Sanitização de Coral e Tabela de Escala em Página Única no PDF**:
      - Células com membros de coral agora exportam estritamente `"Coral"` (sem listar nomes e sem contagem extensa), eliminando o esticamento vertical de células.
      - Redimensionamento inteligente da tabela do PDF em orientação paisagem: cabeçalho compacto (`startY ≈ 21mm`), cálculo dinâmico de `fontSize`, `cellPadding` vertical/horizontal e proteção adaptativa que garante estritamente **1 única página**.
+  3. **Isolamento de Repertório por Culto e Evento no Dashboard**:
+     - Criado helper utilitário `isRepertoireItemForEvent` em `utils/repertoireUtils.ts` garantindo que cultos diferentes no mesmo dia (ex: Domingo Manhã e Domingo Noite) nunca compartilhem ou misturem seus louvores.
+     - Corrigido `components/ServiceSchedule.tsx` e `components/EventDetailsModal.tsx` para filtrar estritamente pelo `ruleId`, título e horário do culto selecionado, prevenindo vazamento de repertório matutino no culto noturno.
+     - Aprimorado `addToRepertoire` em `services/supabase/repertoire.ts` para resolver com precisão o `eventRuleId` a partir da observação e regras ativas.
 - **Validação**:
-  - `npm test`: 14 arquivos e 56 testes aprovados (100% no Vitest).
+  - `npm test`: 15 arquivos e 60 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

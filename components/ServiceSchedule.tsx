@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSupabase } from "../services/supabase/client";
 import { User } from "../types";
+import { isRepertoireItemForEvent } from "../utils/repertoireUtils";
 import {
   Music,
   Sparkles,
@@ -14,6 +15,8 @@ import {
 interface Props {
   eventRuleId: string | null | undefined;
   eventDate: string | null | undefined;
+  eventTitle?: string | null | undefined;
+  eventTime?: string | null | undefined;
   currentUser: User | null;
   orgId: string | null | undefined;
   ministryId: string | null | undefined;
@@ -25,6 +28,8 @@ interface Props {
 export const ServiceSchedule: React.FC<Props> = ({
   eventRuleId,
   eventDate,
+  eventTitle,
+  eventTime,
   currentUser,
   orgId,
   ministryId,
@@ -56,7 +61,7 @@ export const ServiceSchedule: React.FC<Props> = ({
      ministryName.toLowerCase().includes("coreograf"));
 
   const { data: songs = [], isLoading: loadingSongs } = useQuery({
-    queryKey: ["repertoire_event_songs", eventRuleId, eventDate, ministryId, orgId],
+    queryKey: ["repertoire_event_songs", eventRuleId, eventDate, eventTitle, eventTime, ministryId, orgId],
     queryFn: async () => {
       const sb = getSupabase();
       if (!sb || !orgId || !ministryId) return [];
@@ -87,7 +92,7 @@ export const ServiceSchedule: React.FC<Props> = ({
         .eq("organization_id", orgId)
         .in("ministry_id", targetMinistryIds);
 
-      // Suporta correspondência por date (YYYY-MM-DD) ou event_rule_id
+      // Suporta correspondência por date (YYYY-MM-DD) ou event_rule_id na busca inicial
       if (eventDate && eventRuleId) {
         query = query.or(`date.eq.${eventDate},event_rule_id.eq.${eventRuleId}`);
       } else if (eventDate) {
@@ -99,7 +104,17 @@ export const ServiceSchedule: React.FC<Props> = ({
       }
 
       const { data } = await query;
-      return data || [];
+      const allSongs = data || [];
+
+      // Filtra com isolamento determinístico para não vazar músicas de outros cultos do mesmo dia
+      return allSongs.filter((song: any) =>
+        isRepertoireItemForEvent(song, {
+          ruleId: eventRuleId,
+          title: eventTitle,
+          time: eventTime,
+          date: eventDate,
+        })
+      );
     },
     enabled: !!orgId && !!ministryId && (!!eventRuleId || !!eventDate),
   });

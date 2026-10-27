@@ -677,8 +677,10 @@ export const NextEventCard: React.FC<Props> = ({
 
       {showServiceSchedule && eventData && (
         <ServiceSchedule
-          eventRuleId={eventData.ruleId || eventData.id}
+          eventRuleId={eventData.ruleId || (typeof eventData.id === 'string' && eventData.id.includes('|') ? eventData.id.split('|')[0] : eventData.id)}
           eventDate={eventData.date}
+          eventTitle={eventData.title}
+          eventTime={eventData.time || (eventData.iso && eventData.iso.includes('T') ? eventData.iso.split('T')[1].substring(0, 5) : null)}
           currentUser={currentUser!}
           orgId={currentUser?.organizationId}
           ministryId={ministryId}

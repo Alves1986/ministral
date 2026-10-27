@@ -447,6 +447,7 @@ export function useMinistryData(
       })
       .map((gen) => ({
         id: gen.id,
+        ruleId: gen.ruleId,
         iso: gen.iso,
         title: gen.title,
         date: gen.date,

@@ -510,23 +510,34 @@ export const addToRepertoire = async (
     const sb = getSupabase();
     if (!sb) return false;
 
-    // Se eventRuleId foi fornecido diretamente, utilize-o; senão tenta resolver de schedule_assignments
+    // Se eventRuleId foi fornecido diretamente, utilize-o
     let eventRuleId = item.eventRuleId || item.event_rule_id || null;
-    if (!eventRuleId) {
+    
+    // Se não tiver eventRuleId explícito, tenta resolver de forma segura e contextual
+    if (!eventRuleId && item.observation && orgId) {
         try {
-            const { data: ass } = await sb
-                .from('schedule_assignments')
-                .select('event_rule_id')
-                .eq('organization_id', orgId)
-                .eq('ministry_id', ministryId)
-                .eq('event_date', item.date)
-                .limit(1)
-                .maybeSingle();
-            if (ass?.event_rule_id) {
-                eventRuleId = ass.event_rule_id;
+            const obsMatch = item.observation.match(/^Culto:\s*([^(]+?)(?:\s*\(([^)]+)\))?$/i);
+            const cultoTitle = obsMatch ? obsMatch[1].trim() : null;
+            const cultoTime = obsMatch && obsMatch[2] ? obsMatch[2].trim() : null;
+
+            if (cultoTitle) {
+                let ruleQuery = sb
+                    .from('event_rules')
+                    .select('id')
+                    .eq('organization_id', orgId)
+                    .ilike('title', cultoTitle);
+                
+                if (cultoTime) {
+                    ruleQuery = ruleQuery.ilike('time', `${cultoTime}%`);
+                }
+
+                const { data: matchedRule } = await ruleQuery.limit(1).maybeSingle();
+                if (matchedRule?.id) {
+                    eventRuleId = matchedRule.id;
+                }
             }
         } catch (e) {
-            console.error("Erro ao resolver event_rule_id:", e);
+            console.warn("[addToRepertoire] Não foi possível resolver eventRuleId por título:", e);
         }
     }
 

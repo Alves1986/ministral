@@ -4,11 +4,12 @@ import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types
 import { generateGoogleCalendarUrl } from '../utils/dateUtils';
 import { getSupabase } from '../services/supabase/client';
 import { formatScheduleForWhatsApp } from '../utils/navigation';
+import { isRepertoireItemForEvent } from '../utils/repertoireUtils';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  event: { id?: string; iso: string; title: string; dateDisplay: string } | null;
+  event: { id?: string; ruleId?: string; iso: string; title: string; dateDisplay: string; time?: string; date?: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
   allMembers?: TeamMemberProfile[]; // Added to lookup avatars
@@ -121,7 +122,19 @@ export const EventDetailsModal: React.FC<Props> = ({
                 .in('ministry_id', targetMids)
                 .eq('date', datePart);
 
-            setEventSongs(songsData || []);
+            const targetRuleId = (event as any)?.ruleId || (event?.id?.includes('|') ? event.id.split('|')[0] : event?.id) || null;
+            const targetTime = (event as any)?.time || (event?.iso?.includes('T') ? event.iso.split('T')[1].substring(0, 5) : null);
+
+            const filteredSongs = (songsData || []).filter((item: any) =>
+                isRepertoireItemForEvent(item, {
+                    ruleId: targetRuleId,
+                    title: event?.title,
+                    time: targetTime,
+                    date: datePart,
+                })
+            );
+
+            setEventSongs(filteredSongs);
             setLoadingSongs(false);
         };
 

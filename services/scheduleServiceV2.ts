@@ -723,6 +723,7 @@ export const fetchNextEventCardData = async (
     return {
         event: {
             id: nextOcc.ruleId,
+            ruleId: nextOcc.ruleId,
             title: nextOcc.title,
             date: nextOcc.date,
             time: nextOcc.time,
