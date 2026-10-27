@@ -70,27 +70,16 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 25/10/2026
+- **Data**: 26/10/2026
 - **Realizações**:
-  1. **Sincronização com o Histórico do Navegador (`App.tsx` & `utils/navigation.ts`)**:
-     - Resolvido o problema do botão "Voltar" no celular/PWA: `handleTabChange` registra cada troca de aba em `window.history.pushState`.
-     - Tratamento reativo de `popstate`: voltar no Android/navegador retorna para a tela anterior em vez de fechar o aplicativo.
-     - Suporte a normalização retroativa de aliases (`schedule` -> `calendar`, `repertoire-manager` -> `repertoire`, etc.).
-  2. **Unificação de Telas Duplicadas e Enxugamento do Menu Lateral**:
-     - Menu de Gestão reduzido de 10 para 6 itens limpos e objetivos.
-     - **Repertório**: Fundido em aba única (`repertoire`). Usuários com permissão de liderança/ministro recebem controles de gestão (`mode="manage"`) naturalmente.
-     - **Avisos**: Central unificada (`announcements`) com botão `+ Novo Comunicado` para líderes abrindo o modal do `AlertsManager`.
-  3. **Central de Escalas Unificada (`schedule-editor`)**:
-     - Adicionada barra superior com sub-abas elegantes: `[ Grade da Escala ]`, `[ Regras de Agenda (Cultos) ]` e `[ Vagas por Função ]`.
-     - Links antigos de regras de agenda e vagas redirecionam automaticamente para a sub-aba correta.
-  4. **Ajuste de Rótulo Mobile (`DashboardLayout.tsx`)**:
-     - Botão central flutuante da barra inferior corrigido de "Agenda" para "Ausências".
-  5. **Compartilhamento Rápido no WhatsApp (`EventDetailsModal.tsx`)**:
-     - Botões de copiar resumo formatado com emojis da escala para o clipboard e abrir diretamente no WhatsApp com 1 clique.
-  6. **Suíte de Testes Automatizados**:
-     - Criados `tests/navigationHistory.test.ts` e `tests/unifiedNav.test.ts` (13 suítes, 51 testes 100% aprovados).
+  1. **Exportação de Escala em PDF Antes de Liberar**:
+     - Habilitada a exportação de PDF da escala completa e fichas individuais diretamente no [`ScheduleEditorV2.tsx`](components/ScheduleEditorV2.tsx), ao lado do botão "Liberar Escala".
+     - Criada a função pura e testada [`preparePdfScheduleData`](utils/pdfGenerator.ts) para mapear assignments e ocorrências (inclusive rascunhos / antes da publicação `__PUBLISHED__`) no formato esperado pelos geradores PDF.
+     - Suporte a escalas normais e agrupamento de Coral de Santa Ceia no PDF.
+     - Corrigida a disponibilização de `rawSchedule` em [`hooks/useMinistryData.ts`](hooks/useMinistryData.ts) e [`App.tsx`](App.tsx) para que o menu de ferramentas superior também permita exportação antes da liberação.
+     - Criada suíte de testes dedicados em [`tests/schedulePdfExport.test.ts`](tests/schedulePdfExport.test.ts).
 - **Validação**:
-  - `npm test`: 13 arquivos e 51 testes aprovados (100% no Vitest).
+  - `npm test`: 14 arquivos e 55 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

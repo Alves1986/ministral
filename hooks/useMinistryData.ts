@@ -466,6 +466,7 @@ export function useMinistryData(
       roles: cleanRoles,
       rawRoles,
       expandedRoles,
+      rawSchedule: assignmentsQuery.data?.schedule || {},
       schedule: (() => {
         const rawSchedule = assignmentsQuery.data?.schedule || {};
         

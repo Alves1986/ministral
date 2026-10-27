@@ -318,3 +318,95 @@ export const generateIndividualPDF = (
   drawFooter(doc);
   doc.save(`Individual_${memberName.replace(/\s/g, '_')}_${monthIso}.pdf`);
 };
+
+export interface PreparePdfScheduleParams {
+  occurrences: Array<{ ruleId: string; date: string; time?: string; title: string }>;
+  assignments: Array<{ event_rule_id: string; event_date: string; role: string; member_id: string }>;
+  members: Array<{ id: string; name: string }>;
+  roles: Role[];
+}
+
+/**
+ * Converte as ocorrências e escalas (inclusive em modo rascunho / antes de liberar)
+ * para a estrutura de dados esperada pelos exportadores de PDF.
+ */
+export const preparePdfScheduleData = ({
+  occurrences,
+  assignments,
+  members,
+  roles,
+}: PreparePdfScheduleParams): {
+  events: Array<{ id: string; iso: string; title: string; dateDisplay: string }>;
+  schedule: Record<string, string>;
+} => {
+  const memberMap = new Map(members.map((m) => [m.id, m.name]));
+
+  // 1. Converte ocorrências para a estrutura esperada pelo gerador de PDF
+  const events = occurrences.map((occ) => {
+    const time = occ.time ? occ.time.substring(0, 5) : "00:00";
+    const dateParts = occ.date.slice(0, 10).split("-");
+    const dateDisplay =
+      dateParts.length >= 3 ? `${dateParts[2]}/${dateParts[1]}` : occ.date;
+
+    return {
+      id: `${occ.ruleId}|${occ.date.slice(0, 10)}`,
+      iso: `${occ.date.slice(0, 10)}T${time}:00`,
+      title: occ.title,
+      dateDisplay,
+    };
+  });
+
+  // 2. Converte assignments para o mapa de chave composta `ruleId|date|role`
+  const schedule: Record<string, string> = {};
+
+  assignments.forEach((a) => {
+    if (
+      !a.member_id ||
+      a.role === "__EVENT_EXCLUDED__" ||
+      a.role === "__PUBLISHED__"
+    ) {
+      return;
+    }
+
+    const dateStr = a.event_date?.slice(0, 10);
+    const memberName = memberMap.get(a.member_id);
+    if (!memberName) return;
+
+    // Se for coral, tratamos agrupando posteriormente
+    if (a.role.toLowerCase().startsWith("coral")) {
+      return;
+    }
+
+    const key = `${a.event_rule_id}|${dateStr}|${a.role}`;
+    schedule[key] = memberName;
+  });
+
+  // 3. Mapeia Coral de Santa Ceia para a primeira função de vocal daquele evento
+  occurrences.forEach((occ) => {
+    const occDate = occ.date.slice(0, 10);
+    const choirAssignments = assignments.filter(
+      (a) =>
+        a.event_date?.slice(0, 10) === occDate &&
+        a.event_rule_id === occ.ruleId &&
+        a.role.toLowerCase().startsWith("coral") &&
+        Boolean(a.member_id)
+    );
+
+    if (choirAssignments.length > 0) {
+      const firstVocalRole = roles.find((r) =>
+        r.toLowerCase().startsWith("vocal")
+      );
+      if (firstVocalRole) {
+        const choirNames = choirAssignments
+          .map((a) => memberMap.get(a.member_id))
+          .filter(Boolean)
+          .join(", ");
+        const key = `${occ.ruleId}|${occDate}|${firstVocalRole}`;
+        schedule[key] = `Coral (${choirAssignments.length})${choirNames ? `: ${choirNames}` : ""}`;
+      }
+    }
+  });
+
+  return { events, schedule };
+};
+

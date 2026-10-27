@@ -610,6 +610,7 @@ const InnerApp = () => {
   const {
     events,
     schedule,
+    rawSchedule,
     attendance,
     membersMap,
     publicMembers,
@@ -1442,7 +1443,7 @@ const InnerApp = () => {
                           .reverse()
                           .join("/"),
                       })),
-                      schedule,
+                      rawSchedule || schedule,
                       organization?.logo_url,
                     )
                   }
@@ -1459,7 +1460,7 @@ const InnerApp = () => {
                           .join("/"),
                       })),
                       expandedRoles,
-                      schedule,
+                      rawSchedule || schedule,
                       organization?.logo_url,
                     )
                   }
@@ -1512,6 +1513,8 @@ const InnerApp = () => {
           <ScheduleEditorV2
             key={ministryId}
             ministryId={ministryId}
+            ministryName={ministryTitle}
+            logoUrl={organization?.logo_url}
             orgId={orgId!}
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}

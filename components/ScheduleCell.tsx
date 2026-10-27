@@ -236,6 +236,7 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
     }, [isOpen]);
 
     const currentMember = members.find(m => m.id === currentMemberId);
+    const currentMemberCount = currentMemberId && memberCounts ? (memberCounts[currentMemberId] || 0) : 0;
     
     const filteredMembers = members.filter(member => 
         member.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -320,9 +321,19 @@ export const ScheduleCell: React.FC<ScheduleCellProps> = ({
             >
                 <div className="flex items-center justify-between w-full min-w-0">
                     {currentMember ? (
-                        <div className="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0" title={currentMember.name}>
+                        <div className="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0" title={`${currentMember.name} • ${currentMemberCount}x no mês`}>
                             <Avatar name={currentMember.name} avatarUrl={currentMember.avatar_url} size="sm" />
                             <span className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-100">{currentMember.name.split(' ')[0]}</span>
+                            <span 
+                                className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none transition-colors ${
+                                    currentMemberCount >= 5
+                                        ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
+                                        : 'bg-secondary/20 text-secondary dark:bg-white/10 dark:text-zinc-200'
+                                }`}
+                                title={`${currentMemberCount} escala(s) no mês`}
+                            >
+                                {currentMemberCount}x
+                            </span>
                         </div>
                     ) : (
                         <div className="flex items-center justify-center gap-1.5 opacity-40 group-hover:opacity-60 transition-opacity flex-1 min-w-0 overflow-hidden">
