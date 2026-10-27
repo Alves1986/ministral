@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { preparePdfScheduleData } from '../utils/pdfGenerator';
+import { preparePdfScheduleData, generateFullSchedulePDF } from '../utils/pdfGenerator';
 
 describe('Exportação de Escala em PDF antes de liberar (Rascunho / Draft)', () => {
   const mockOccurrences = [
@@ -66,7 +66,7 @@ describe('Exportação de Escala em PDF antes de liberar (Rascunho / Draft)', ()
     expect(schedule['rule-1|2026-11-01|__EVENT_EXCLUDED__']).toBeUndefined();
   });
 
-  it('deve mapear Coral da Ceia nos vocais no PDF quando houver membros de coral escalados', () => {
+  it('deve mapear Coral da Ceia apenas como "Coral" (sem nomes e sem contagem)', () => {
     const mockAssignmentsWithChoir = [
       { event_rule_id: 'rule-1', event_date: '2026-11-01', role: 'coral_1', member_id: 'member-1' },
       { event_rule_id: 'rule-1', event_date: '2026-11-01', role: 'coral_2', member_id: 'member-3' },
@@ -80,8 +80,8 @@ describe('Exportação de Escala em PDF antes de liberar (Rascunho / Draft)', ()
       roles: mockRoles,
     });
 
-    // O primeiro vocal deve receber o indicador de Coral com os participantes
-    expect(schedule['rule-1|2026-11-01|Vocal 1']).toContain('Coral (2)');
+    // O primeiro vocal deve ser apenas "Coral", sem os nomes dos membros
+    expect(schedule['rule-1|2026-11-01|Vocal 1']).toBe('Coral');
     expect(schedule['rule-1|2026-11-01|Violão']).toBe('Carlos Souza');
   });
 
@@ -109,5 +109,49 @@ describe('Exportação de Escala em PDF antes de liberar (Rascunho / Draft)', ()
     expect(anaAssignments).toHaveLength(2);
     expect(anaAssignments[0].dateDisplay).toBe('01/11');
     expect(anaAssignments[1].dateDisplay).toBe('08/11');
+  });
+
+  it('deve gerar PDF completo ocupando estritamente 1 única página e sanitizar Coral', () => {
+    // Simula um mês com 16 eventos e 14 funções (cenário real da imagem do usuário)
+    const occurrences16 = Array.from({ length: 16 }, (_, i) => {
+      const day = String(i * 2 + 1).padStart(2, '0');
+      return {
+        id: `rule-1|2026-11-${day}`,
+        iso: `2026-11-${day}T19:00:00`,
+        title: i % 2 === 0 ? 'Culto Dom - Noite' : 'Culto de Quarta',
+        dateDisplay: `${day}/11`,
+      };
+    });
+
+    const roles14 = [
+      'MINISTRO', 'VOCAL 1', 'VOCAL 2', 'VOCAL 3', 'VOCAL 4', 'VOCAL 5',
+      'VIOLÃO', 'GUITARRA', 'BAIXO', 'BATERIA', 'TECLADO', 'AUDIO',
+    ];
+
+    const mockSchedule: Record<string, string> = {};
+    occurrences16.forEach(evt => {
+      roles14.forEach(role => {
+        if (role === 'VOCAL 1' && evt.dateDisplay === '08/11') {
+          // Cenário com texto longo antigo de coral
+          mockSchedule[`${evt.id}|${role}`] = 'Coral (19): Maria Lobato, Marcio Florsz, Isabela Costa, Vanessa Quadros de Oliveira da Silveira';
+        } else {
+          mockSchedule[`${evt.id}|${role}`] = 'Membro de Teste';
+        }
+      });
+    });
+
+    const doc = generateFullSchedulePDF(
+      'Ministério de Louvor',
+      '2026-11',
+      occurrences16,
+      roles14,
+      mockSchedule,
+      null,
+      false
+    );
+
+    // Deve ocupar estritamente 1 página
+    expect(doc).toBeDefined();
+    expect(doc.getNumberOfPages()).toBe(1);
   });
 });

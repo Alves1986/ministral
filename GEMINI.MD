@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Correção dos 4 gargalos de navegação: (1) Sincronização do histórico do navegador com `history.pushState` e `popstate` para corrigir o botão "Voltar" no celular; (2) Unificação de telas duplicadas (Repertório e Avisos unificados, reduzindo menu de gestão de 10 para 6 itens); (3) Central de Escalas com sub-abas (Grade, Regras de Cultos e Vagas); (4) Rótulo da Bottom Bar mobile corrigido para "Ausências"; (5) Compartilhamento da escala no WhatsApp em 1 clique (`EventDetailsModal.tsx`). Adicionados testes em `tests/navigationHistory.test.ts` e `tests/unifiedNav.test.ts` (51 testes aprovados no Vitest, build OK).
+- Último trabalho: Exportação de escala em PDF antes da liberação (Rascunho) centralizada no menu superior [Ferramentas] (ToolsMenu), sanitização de Coral para exibir estritamente "Coral" sem lista de nomes, e redimensionamento responsivo inteligente da tabela para ocupar estritamente 1 única página em formato paisagem (A4). 56 testes unitários aprovados no Vitest, lint e build OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

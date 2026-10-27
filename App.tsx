@@ -1432,7 +1432,7 @@ const InnerApp = () => {
           r.toLowerCase().startsWith('vocal')
         );
         if (firstVocalRole) {
-          base[`${evt.id}|${firstVocalRole}`] = `Coral (${coralMembers.length}): ${coralMembers.join(', ')}`;
+          base[`${evt.id}|${firstVocalRole}`] = 'Coral';
         }
       }
     });

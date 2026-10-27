@@ -75,10 +75,12 @@
   1. **Exportação de Escala em PDF Antes de Liberar no Menu Superior (Ferramentas)**:
      - Centralizada a exportação de PDF no menu superior `[Ferramentas]` (`ToolsMenu.tsx`), no topo da Central de Escalas, evitando sobreposição com o grid de células.
      - Suporte à exportação da escala completa e fichas individuais antes de liberar a escala (modo rascunho), utilizando `rawSchedule` com fallback para `schedule`.
-     - Tratamento para agrupamento de Coral de Santa Ceia nos vocais e toasts de confirmação e erro.
      - Fechamento automático do menu suspenso após o clique de download.
+  2. **Sanitização de Coral e Tabela de Escala em Página Única no PDF**:
+     - Células com membros de coral agora exportam estritamente `"Coral"` (sem listar nomes e sem contagem extensa), eliminando o esticamento vertical de células.
+     - Redimensionamento inteligente da tabela do PDF em orientação paisagem: cabeçalho compacto (`startY ≈ 21mm`), cálculo dinâmico de `fontSize`, `cellPadding` vertical/horizontal e proteção adaptativa que garante estritamente **1 única página**.
 - **Validação**:
-  - `npm test`: 14 arquivos e 55 testes aprovados (100% no Vitest).
+  - `npm test`: 14 arquivos e 56 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
