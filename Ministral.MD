@@ -72,12 +72,11 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 26/10/2026
 - **Realizações**:
-  1. **Exportação de Escala em PDF Antes de Liberar**:
-     - Habilitada a exportação de PDF da escala completa e fichas individuais diretamente no [`ScheduleEditorV2.tsx`](components/ScheduleEditorV2.tsx), ao lado do botão "Liberar Escala".
-     - Criada a função pura e testada [`preparePdfScheduleData`](utils/pdfGenerator.ts) para mapear assignments e ocorrências (inclusive rascunhos / antes da publicação `__PUBLISHED__`) no formato esperado pelos geradores PDF.
-     - Suporte a escalas normais e agrupamento de Coral de Santa Ceia no PDF.
-     - Corrigida a disponibilização de `rawSchedule` em [`hooks/useMinistryData.ts`](hooks/useMinistryData.ts) e [`App.tsx`](App.tsx) para que o menu de ferramentas superior também permita exportação antes da liberação.
-     - Criada suíte de testes dedicados em [`tests/schedulePdfExport.test.ts`](tests/schedulePdfExport.test.ts).
+  1. **Exportação de Escala em PDF Antes de Liberar no Menu Superior (Ferramentas)**:
+     - Centralizada a exportação de PDF no menu superior `[Ferramentas]` (`ToolsMenu.tsx`), no topo da Central de Escalas, evitando sobreposição com o grid de células.
+     - Suporte à exportação da escala completa e fichas individuais antes de liberar a escala (modo rascunho), utilizando `rawSchedule` com fallback para `schedule`.
+     - Tratamento para agrupamento de Coral de Santa Ceia nos vocais e toasts de confirmação e erro.
+     - Fechamento automático do menu suspenso após o clique de download.
 - **Validação**:
   - `npm test`: 14 arquivos e 55 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.

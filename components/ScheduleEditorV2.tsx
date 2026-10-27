@@ -39,14 +39,11 @@ import {
     AlertCircle,
     Bell,
     Send,
-    Mic,
-    FileDown,
-    FileText
+    Mic
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
 import { validateAssignment } from '../services/aiScheduleUtils';
-import { generateFullSchedulePDF, generateIndividualPDF, preparePdfScheduleData } from '../utils/pdfGenerator';
 
 // --- COMPONENTES AUXILIARES ---
 import { ScheduleCell, getMemberAvailStatus, Avatar, isConflict } from './ScheduleCell';
@@ -131,8 +128,6 @@ const MemoizedEditorCell = React.memo<{
 
 interface Props {
     ministryId: string;
-    ministryName?: string;
-    logoUrl?: string | null;
     orgId: string;
     currentMonth: string; // YYYY-MM
     onMonthChange: (month: string) => void;
@@ -145,8 +140,6 @@ interface Props {
 
 export const ScheduleEditorV2: React.FC<Props> = ({ 
     ministryId, 
-    ministryName,
-    logoUrl,
     orgId, 
     currentMonth, 
     onMonthChange, 
@@ -173,21 +166,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({
     const [choirOccurrence, setChoirOccurrence] = useState<OccurrenceV2 | null>(null);
     const [selectedChoirMembers, setSelectedChoirMembers] = useState<string[]>([]);
     const [choirSearchTerm, setChoirSearchTerm] = useState('');
-    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-    const [selectedExportMember, setSelectedExportMember] = useState('');
-    const exportMenuRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (!isExportMenuOpen) return;
-            if (exportMenuRef.current && exportMenuRef.current.contains(event.target as Node)) {
-                return;
-            }
-            setIsExportMenuOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isExportMenuOpen]);
 
     const toggleSelectAiSuggestion = (index: number) => {
         setSelectedAiIndices(prev => 
@@ -904,62 +882,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({
         }
     };
 
-    // Exportação em PDF da escala completa (disponível antes e depois de liberar)
-    const handleExportFullPDF = () => {
-        setIsExportMenuOpen(false);
-        try {
-            const { events: pdfEvents, schedule: pdfSchedule } = preparePdfScheduleData({
-                occurrences: visibleOccurrences,
-                assignments,
-                members,
-                roles,
-            });
-
-            generateFullSchedulePDF(
-                ministryName || 'Ministério',
-                currentMonth,
-                pdfEvents,
-                roles,
-                pdfSchedule,
-                logoUrl
-            );
-            addToast('PDF da escala gerado com sucesso!', 'success');
-        } catch (err) {
-            console.error('Erro ao exportar PDF completo:', err);
-            addToast('Não foi possível gerar o PDF da escala.', 'error');
-        }
-    };
-
-    // Exportação em PDF de ficha individual por voluntário
-    const handleExportIndividualPDF = (memberName: string) => {
-        if (!memberName) {
-            addToast('Selecione um voluntário para exportar a ficha.', 'warning');
-            return;
-        }
-        setIsExportMenuOpen(false);
-        try {
-            const { events: pdfEvents, schedule: pdfSchedule } = preparePdfScheduleData({
-                occurrences: visibleOccurrences,
-                assignments,
-                members,
-                roles,
-            });
-
-            generateIndividualPDF(
-                ministryName || 'Ministério',
-                currentMonth,
-                memberName,
-                pdfEvents,
-                pdfSchedule,
-                logoUrl
-            );
-            addToast(`Ficha individual de ${memberName} gerada com sucesso!`, 'success');
-        } catch (err) {
-            console.error('Erro ao exportar PDF individual:', err);
-            addToast('Não foi possível gerar a ficha individual.', 'error');
-        }
-    };
-
     // Notificar membros escalados hoje para marcar presença
     const handleRemindToday = async () => {
         const todayIso = new Date().toISOString().split('T')[0];
@@ -1131,103 +1053,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                                 <Send size={15} />
                                 <span>{isMonthPublished ? 'Escala Liberada' : 'Liberar Escala'}</span>
                             </button>
-
-                            {/* Exportar Escala em PDF (Disponível antes ou depois de liberar) */}
-                            <div className="relative" ref={exportMenuRef}>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsExportMenuOpen(prev => !prev)}
-                                    className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-sm border ${
-                                        isExportMenuOpen
-                                            ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 border-zinc-300 dark:border-zinc-600'
-                                            : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700'
-                                    }`}
-                                    title="Exportar escala em PDF (disponível antes e depois de liberar a escala)"
-                                >
-                                    <FileDown size={15} className="text-secondary dark:text-gold" />
-                                    <span>Exportar PDF</span>
-                                    <ChevronDown size={13} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-                                </button>
-
-                                {isExportMenuOpen && (
-                                    <>
-                                        {/* Mobile Backdrop */}
-                                        <div 
-                                            className="fixed inset-0 bg-black/50 z-[95] md:hidden" 
-                                            onClick={() => setIsExportMenuOpen(false)}
-                                        />
-                                        
-                                        <div className="
-                                            fixed z-[100] bg-white dark:bg-zinc-800 overflow-hidden animate-slide-up
-                                            bottom-0 left-0 right-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] border-t border-zinc-200 dark:border-zinc-700
-                                            md:absolute md:bottom-auto md:left-auto md:right-0 md:top-full md:mt-2 md:w-80 md:rounded-xl md:shadow-xl md:border md:animate-fade-in
-                                            pb-[calc(env(safe-area-inset-bottom)+1rem)] md:pb-0
-                                        ">
-                                            <div className="flex md:hidden justify-between items-center p-4 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
-                                                <span className="font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                                                    <FileDown size={18} className="text-secondary dark:text-gold" />
-                                                    Exportar Escala em PDF
-                                                </span>
-                                                <button type="button" onClick={() => setIsExportMenuOpen(false)} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full text-zinc-500">
-                                                    <X size={18} />
-                                                </button>
-                                            </div>
-
-                                            <div className="p-4 space-y-3">
-                                                {/* Opção 1: Escala Completa */}
-                                                <button 
-                                                    type="button"
-                                                    onClick={handleExportFullPDF}
-                                                    className="w-full text-left p-3 rounded-xl bg-secondary/5 dark:bg-secondary/10 hover:bg-secondary/10 dark:hover:bg-secondary/20 border border-secondary/20 transition-all flex items-start gap-3 group"
-                                                >
-                                                    <div className="w-8 h-8 rounded-lg bg-secondary/20 dark:bg-secondary/30 text-secondary dark:text-white flex items-center justify-center shrink-0 mt-0.5">
-                                                        <FileDown size={18} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center justify-between">
-                                                            <span>Escala Completa do Mês</span>
-                                                            <span className="text-[10px] text-zinc-400 font-normal">PDF Geral</span>
-                                                        </div>
-                                                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                                            Grade oficial com todos os cultos e voluntários escalados em {monthLabel}.
-                                                        </p>
-                                                    </div>
-                                                </button>
-
-                                                <div className="border-t border-zinc-100 dark:border-zinc-700 my-2" />
-
-                                                {/* Opção 2: Ficha Individual */}
-                                                <div>
-                                                    <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                                                        Ficha Individual por Voluntário
-                                                    </label>
-                                                    <div className="flex gap-2">
-                                                        <select 
-                                                            value={selectedExportMember}
-                                                            onChange={(e) => setSelectedExportMember(e.target.value)}
-                                                            className="w-full text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-secondary text-zinc-800 dark:text-zinc-200"
-                                                        >
-                                                            <option value="">Selecione um voluntário...</option>
-                                                            {members.map(m => (
-                                                                <option key={m.id} value={m.name}>{m.name}</option>
-                                                            ))}
-                                                        </select>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleExportIndividualPDF(selectedExportMember)}
-                                                            disabled={!selectedExportMember}
-                                                            className="p-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 disabled:opacity-40 text-zinc-700 dark:text-zinc-200 transition-colors shrink-0"
-                                                            title="Baixar ficha individual deste voluntário"
-                                                        >
-                                                            <FileText size={18} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
 
                             <button
                                 onClick={handleRemindToday}

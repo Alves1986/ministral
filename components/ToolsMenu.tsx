@@ -31,6 +31,7 @@ export const ToolsMenu: React.FC<Props> = ({
         addToast("Selecione um membro primeiro", "warning");
         return;
     }
+    setIsOpen(false);
     onExportIndividual(selectedMember);
   };
 
@@ -87,7 +88,13 @@ export const ToolsMenu: React.FC<Props> = ({
                 </div>
               </div>
               
-              <button onClick={onExportFull} className="w-full text-left px-3 py-3 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg flex items-center gap-3 transition-colors">
+              <button 
+                onClick={() => {
+                  setIsOpen(false);
+                  onExportFull();
+                }} 
+                className="w-full text-left px-3 py-3 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg flex items-center gap-3 transition-colors font-medium"
+              >
                 <FileDown size={18} /> Baixar PDF Completo
               </button>
               

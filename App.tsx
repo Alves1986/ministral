@@ -1408,6 +1408,38 @@ const InnerApp = () => {
     [ministryId, orgId, currentMonth, queryClient, addToast, refreshData],
   );
 
+  const effectiveSchedule = useMemo(() => {
+    const base: Record<string, string> = { ...(rawSchedule || schedule) };
+
+    // Agrupa Coral da Ceia nos vocais se houver assignments de coral
+    events.forEach((evt) => {
+      const evtPrefix = `${evt.id}|`;
+      const coralMembers: string[] = [];
+      Object.entries(base).forEach(([k, val]) => {
+        if (
+          k.startsWith(evtPrefix) &&
+          k.toLowerCase().includes('|coral') &&
+          val &&
+          val !== '__EXCLUDED__' &&
+          val !== '__PUBLISHED__'
+        ) {
+          coralMembers.push(val);
+        }
+      });
+
+      if (coralMembers.length > 0) {
+        const firstVocalRole = expandedRoles.find((r) =>
+          r.toLowerCase().startsWith('vocal')
+        );
+        if (firstVocalRole) {
+          base[`${evt.id}|${firstVocalRole}`] = `Coral (${coralMembers.length}): ${coralMembers.join(', ')}`;
+        }
+      }
+    });
+
+    return base;
+  }, [rawSchedule, schedule, events, expandedRoles]);
+
   const scheduleEditorScreen = useMemo(
     () => (
       <div className="space-y-6 animate-fade-in">
@@ -1430,40 +1462,44 @@ const InnerApp = () => {
                   <Briefcase size={16} /> <span>Funções</span>
                 </button>
                 <ToolsMenu
-                  onExportIndividual={(member) =>
-                    generateIndividualPDF(
-                      ministryTitle,
-                      currentMonth,
-                      member,
-                      events.map((e) => ({
-                        ...e,
-                        dateDisplay: e.iso
-                          .split("T")[0]
-                          .split("-")
-                          .reverse()
-                          .join("/"),
-                      })),
-                      rawSchedule || schedule,
-                      organization?.logo_url,
-                    )
-                  }
-                  onExportFull={() =>
-                    generateFullSchedulePDF(
-                      ministryTitle,
-                      currentMonth,
-                      events.map((e) => ({
-                        ...e,
-                        dateDisplay: e.iso
-                          .split("T")[0]
-                          .split("-")
-                          .reverse()
-                          .join("/"),
-                      })),
-                      expandedRoles,
-                      rawSchedule || schedule,
-                      organization?.logo_url,
-                    )
-                  }
+                  onExportIndividual={(member) => {
+                    try {
+                      generateIndividualPDF(
+                        ministryTitle,
+                        currentMonth,
+                        member,
+                        events.map((e) => ({
+                          ...e,
+                          dateDisplay: e.dateDisplay || e.iso.split("T")[0].split("-").reverse().slice(0, 2).join("/"),
+                        })),
+                        effectiveSchedule,
+                        organization?.logo_url,
+                      );
+                      addToast(`Ficha individual de ${member} gerada com sucesso!`, "success");
+                    } catch (err) {
+                      console.error("Erro ao gerar PDF individual:", err);
+                      addToast("Não foi possível gerar a ficha individual.", "error");
+                    }
+                  }}
+                  onExportFull={() => {
+                    try {
+                      generateFullSchedulePDF(
+                        ministryTitle,
+                        currentMonth,
+                        events.map((e) => ({
+                          ...e,
+                          dateDisplay: e.dateDisplay || e.iso.split("T")[0].split("-").reverse().slice(0, 2).join("/"),
+                        })),
+                        expandedRoles,
+                        effectiveSchedule,
+                        organization?.logo_url,
+                      );
+                      addToast("PDF da escala completa gerado com sucesso!", "success");
+                    } catch (err) {
+                      console.error("Erro ao exportar PDF completo:", err);
+                      addToast("Não foi possível gerar o PDF da escala.", "error");
+                    }
+                  }}
                   onClearMonth={() => setIsClearScheduleModalOpen(true)}
                   allMembers={publicMembers.map((m) => m.name)}
                 />
@@ -1513,8 +1549,6 @@ const InnerApp = () => {
           <ScheduleEditorV2
             key={ministryId}
             ministryId={ministryId}
-            ministryName={ministryTitle}
-            logoUrl={organization?.logo_url}
             orgId={orgId!}
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
