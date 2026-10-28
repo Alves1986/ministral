@@ -1,8 +1,22 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { safeCompare } from '../_shared/safeCompare.ts';
 
 declare const Deno: any;
+
+/**
+ * Comparação de strings em tempo constante (proteção contra timing attacks).
+ */
+function safeCompare(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  if (bufA.length !== bufB.length) return false;
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
