@@ -8,6 +8,7 @@ import { useToast } from './Toast';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { extractMinistryIdFromNotification, sanitizeNotificationMessage } from '../utils/joinRequestUtils';
+import { deduplicatePlaylistNotifications, extractPlaylistNotificationKey } from '../utils/repertoireUtils';
 
 interface Props {
   notifications: AppNotification[];
@@ -22,7 +23,12 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   const [isAdmin, setIsAdmin] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Deduplica notificações de playlist consolidadas para evitar poluição visual
+  const displayNotifications = React.useMemo(() => {
+    return deduplicatePlaylistNotifications(notifications);
+  }, [notifications]);
+
+  const unreadCount = displayNotifications.filter(n => !n.read).length;
   const { confirmAction, addToast } = useToast();
   const { currentUser } = useAppStore();
   
@@ -85,20 +91,30 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
       e.stopPropagation(); // Prevent opening the link
       if (!orgId || !currentUser?.id) return;
       
+      const playlistKey = extractPlaylistNotificationKey(notification);
+      const targetIds = playlistKey 
+        ? notifications.filter(n => extractPlaylistNotificationKey(n) === playlistKey).map(n => n.id)
+        : [notification.id];
+
       // Optimistic update
-      const updated = notifications.filter(n => n.id !== notification.id);
+      const updated = notifications.filter(n => !targetIds.includes(n.id));
       onNotificationsUpdate(updated, false);
       
-      await clearNotificationsSQL([notification.id], currentUser.id, orgId);
+      await clearNotificationsSQL(targetIds, currentUser.id, orgId);
   };
 
   const handleNotificationClick = async (notification: AppNotification) => {
       if (!notification.read && orgId && currentUser?.id) {
+          const playlistKey = extractPlaylistNotificationKey(notification);
+          const targetIds = playlistKey 
+            ? notifications.filter(n => extractPlaylistNotificationKey(n) === playlistKey && !n.read).map(n => n.id)
+            : [notification.id];
+
           // Optimistic update
-          const updated = notifications.map(n => n.id === notification.id ? { ...n, read: true } : n);
+          const updated = notifications.map(n => targetIds.includes(n.id) ? { ...n, read: true } : n);
           onNotificationsUpdate(updated, false);
           
-          await markNotificationsReadSQL([notification.id], currentUser.id, orgId);
+          await markNotificationsReadSQL(targetIds, currentUser.id, orgId);
       }
 
       // 0. Se for solicitação de entrada PENDENTE (não desfecho de aprovação/recusa), troca de ministério se necessário e vai direto para a aba de membros
@@ -187,7 +203,7 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                         <Check size={12}/> Ler
                     </button>
                 )}
-                {notifications.length > 0 && (
+                {displayNotifications.length > 0 && (
                     <button onClick={handleClearAll} aria-label="Limpar todas as notificações" className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1">
                         <Trash2 size={12}/> Limpar
                     </button>
@@ -196,14 +212,14 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
             </div>
             
             <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                {notifications.length === 0 ? (
+                {displayNotifications.length === 0 ? (
                     <div role="status" className="p-8 text-center text-zinc-400 text-sm">
                         <Bell size={24} className="mx-auto mb-2 opacity-20"/>
                         Nenhuma notificação.
                     </div>
                 ) : (
                     <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                        {notifications.map(n => {
+                        {displayNotifications.map(n => {
                             const isDifferent = n.ministryId && n.ministryId !== ministryId;
                             return (
                                 <div 

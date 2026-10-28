@@ -1,5 +1,6 @@
 import { getSupabase } from './client';
-import { notifySuperAdmins, sendNotificationSQL } from './notifications';
+import { sendNotificationSQL } from './notifications';
+import { canDispatchPlaylistNotification } from '../../utils/repertoireUtils';
 
 export const replicateRepertoireToProjectionAndDance = async (
     item: any,
@@ -230,6 +231,13 @@ export const notifyRepertoirePlaylistPublished = async (
     const sb = getSupabase();
     if (!sb || !orgId) return;
 
+    // Cooldown e idempotência: evita disparos múltiplos para a mesma playlist/culto em cliques seguidos
+    const cooldownKey = `${orgId}_${ministryId}_${details.date}_${details.eventRuleId || details.cultoTitle || 'geral'}`;
+    if (!canDispatchPlaylistNotification(cooldownKey, 15000)) {
+        console.log('[notifyRepertoirePlaylistPublished] Disparo ignorado por cooldown/idempotência:', cooldownKey);
+        return;
+    }
+
     try {
         const dateFormatted = details.date ? details.date.split('-').reverse().join('/') : '';
         const cultoName = details.cultoTitle
@@ -237,7 +245,6 @@ export const notifyRepertoirePlaylistPublished = async (
             : '';
         const cultoDesc = cultoName ? `${cultoName} (${dateFormatted})` : `culto de ${dateFormatted}`;
         const songsText = `${details.songsCount} ${details.songsCount === 1 ? 'música' : 'músicas'}`;
-        const addedByName = details.addedBy || 'Ministro de Louvor';
 
         // 1. Notificação única para o ministério de Louvor
         await sendNotificationSQL(ministryId, orgId, {
@@ -285,7 +292,7 @@ export const notifyRepertoirePlaylistPublished = async (
         const projectionMinistries = (orgMinistries || []).filter(isProjectionMinistry);
         const danceMinistries = (orgMinistries || []).filter(isDanceMinistry);
 
-        // Notificar ministérios de Projeção
+        // Notificar ministérios de Projeção (apenas para o ministério, sem duplicar por membro)
         for (const targetMin of projectionMinistries) {
             sendNotificationSQL(targetMin.id, orgId, {
                 title: '🎵 Playlist para Projeção Disponível!',
@@ -295,7 +302,7 @@ export const notifyRepertoirePlaylistPublished = async (
             }).catch(() => {});
         }
 
-        // Notificar ministérios de Dança
+        // Notificar ministérios de Dança (apenas para o ministério, sem duplicar por membro)
         for (const targetDance of danceMinistries) {
             sendNotificationSQL(targetDance.id, orgId, {
                 title: '💃 Repertório de Louvor para Dança!',
@@ -305,80 +312,83 @@ export const notifyRepertoirePlaylistPublished = async (
             }).catch(() => {});
         }
 
-        // 3. Notificar voluntários com funções de Projeção e Dança via ministry_members
-        const { data: members } = await sb
-            .from('ministry_members')
-            .select('profile_id, functions, profiles!inner(id, name)')
-            .eq('organization_id', orgId);
+        // 3. Fallback: Notificar voluntários específicos APENAS SE a organização NÃO possuir
+        // ministério dedicado de Projeção ou Dança (evitando spam duplicado para quem já está nesses ministérios)
+        const needsIndividualProjection = projectionMinistries.length === 0;
+        const needsIndividualDance = danceMinistries.length === 0;
 
-        const memberMap = new Map<string, { id: string; name: string; funcs: string[] }>();
-        (members || []).forEach((m: any) => {
-            const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-            const pid = m.profile_id || profile?.id;
-            if (!pid) return;
-            const funcs = (m.functions || []).map((f: string) => f.toLowerCase());
-            if (!memberMap.has(pid)) {
-                memberMap.set(pid, {
-                    id: pid,
-                    name: profile?.name || '',
-                    funcs: [...funcs]
+        if (needsIndividualProjection || needsIndividualDance) {
+            const { data: members } = await sb
+                .from('ministry_members')
+                .select('profile_id, functions, profiles!inner(id, name)')
+                .eq('organization_id', orgId);
+
+            const memberMap = new Map<string, { id: string; name: string; funcs: string[] }>();
+            (members || []).forEach((m: any) => {
+                const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+                const pid = m.profile_id || profile?.id;
+                if (!pid) return;
+                const funcs = (m.functions || []).map((f: string) => f.toLowerCase());
+                if (!memberMap.has(pid)) {
+                    memberMap.set(pid, {
+                        id: pid,
+                        name: profile?.name || '',
+                        funcs: [...funcs]
+                    });
+                } else {
+                    const existing = memberMap.get(pid)!;
+                    existing.funcs = Array.from(new Set([...existing.funcs, ...funcs]));
+                }
+            });
+            const memberProfiles = Array.from(memberMap.values());
+
+            if (needsIndividualProjection) {
+                const projectionProfiles = memberProfiles.filter((p) => {
+                    return p.funcs.some((f: string) => 
+                        f.includes('projec') || 
+                        f.includes('projeç') || 
+                        f.includes('mídia') || 
+                        f.includes('midia') || 
+                        f.includes('comunic') ||
+                        f.includes('slide') ||
+                        f.includes('letra')
+                    );
                 });
-            } else {
-                const existing = memberMap.get(pid)!;
-                existing.funcs = Array.from(new Set([...existing.funcs, ...funcs]));
+
+                for (const p of projectionProfiles) {
+                    sendNotificationSQL(ministryId, orgId, {
+                        title: '🎵 Playlist para Projeção Disponível!',
+                        message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para preparar a projeção!`,
+                        type: 'info',
+                        actionLink: 'repertoire',
+                        targetUserId: p.id
+                    }).catch(() => {});
+                }
             }
-        });
-        const memberProfiles = Array.from(memberMap.values());
 
-        const projectionProfiles = memberProfiles.filter((p) => {
-            return p.funcs.some((f: string) => 
-                f.includes('projec') || 
-                f.includes('projeç') || 
-                f.includes('mídia') || 
-                f.includes('midia') || 
-                f.includes('comunic') ||
-                f.includes('slide') ||
-                f.includes('letra')
-            );
-        });
+            if (needsIndividualDance) {
+                const danceProfiles = memberProfiles.filter((p) => {
+                    return p.funcs.some((f: string) => 
+                        f.includes('dança') || 
+                        f.includes('danca') || 
+                        f.includes('coreograf') || 
+                        f.includes('teatro') || 
+                        f.includes('artes') || 
+                        f.includes('dance')
+                    );
+                });
 
-        for (const p of projectionProfiles) {
-            sendNotificationSQL(ministryId, orgId, {
-                title: '🎵 Playlist para Projeção Disponível!',
-                message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para preparar a projeção!`,
-                type: 'info',
-                actionLink: 'repertoire',
-                targetUserId: p.id
-            }).catch(() => {});
+                for (const p of danceProfiles) {
+                    sendNotificationSQL(ministryId, orgId, {
+                        title: '💃 Repertório de Louvor para Dança!',
+                        message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para o ensaio!`,
+                        type: 'info',
+                        actionLink: 'repertoire',
+                        targetUserId: p.id
+                    }).catch(() => {});
+                }
+            }
         }
-
-        const danceProfiles = memberProfiles.filter((p) => {
-            return p.funcs.some((f: string) => 
-                f.includes('dança') || 
-                f.includes('danca') || 
-                f.includes('coreograf') || 
-                f.includes('teatro') || 
-                f.includes('artes') || 
-                f.includes('dance')
-            );
-        });
-
-        for (const p of danceProfiles) {
-            sendNotificationSQL(ministryId, orgId, {
-                title: '💃 Repertório de Louvor para Dança!',
-                message: `Olá ${p.name || ''}, a playlist para o ${cultoDesc} foi publicada com ${songsText}. Acesse o repertório para o ensaio!`,
-                type: 'info',
-                actionLink: 'repertoire',
-                targetUserId: p.id
-            }).catch(() => {});
-        }
-
-        // 4. Notificar Super Admins apenas UMA vez
-        await notifySuperAdmins(
-            'Nova Playlist no Repertório',
-            `${addedByName} publicou a playlist para o ${cultoDesc} com ${songsText}.`,
-            'repertoire'
-        ).catch(() => {});
     } catch (err) {
         console.warn("[notifyRepertoirePlaylistPublished] Erro ao enviar notificações consolidadas de repertório:", err);
     }

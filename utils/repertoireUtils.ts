@@ -1,3 +1,5 @@
+import { AppNotification } from '../types';
+
 /**
  * Utilitários para filtragem e isolamento determinístico de repertório por evento/culto.
  */
@@ -129,4 +131,88 @@ export const isRepertoireItemForEvent = (
 
   return true;
 };
+
+// ── Controle de Cooldown e Idempotência de Notificações de Playlist ──────────
+const playlistNotificationCooldownMap = new Map<string, number>();
+
+export function canDispatchPlaylistNotification(key: string, cooldownMs = 15000): boolean {
+  if (!key) return false;
+  const now = Date.now();
+  const lastDispatch = playlistNotificationCooldownMap.get(key);
+  if (lastDispatch && now - lastDispatch < cooldownMs) {
+    return false;
+  }
+  playlistNotificationCooldownMap.set(key, now);
+  return true;
+}
+
+export function resetPlaylistNotificationCooldown(): void {
+  playlistNotificationCooldownMap.clear();
+}
+
+/**
+ * Extrai uma chave canônica de agrupamento de notificação de playlist.
+ */
+export function extractPlaylistNotificationKey(n: AppNotification): string | null {
+  const isPlaylist = (n.actionLink === 'repertoire') ||
+    (n.title && (n.title.includes('Playlist') || n.title.includes('Repertório'))) ||
+    (n.message && (n.message.includes('playlist') || n.message.includes('repertório')));
+
+  if (!isPlaylist) return null;
+
+  const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
+
+  // Extrai data DD/MM/AAAA ou AAAA-MM-DD
+  const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})|(\d{4}-\d{2}-\d{2})/);
+  const dateStr = dateMatch ? dateMatch[0] : '';
+
+  // Extrai identificador do culto (ex: "dom - noite", "dom - manha", "quarta", etc.)
+  let cultoKey = 'geral';
+  if (text.includes('manha') || text.includes('manhã')) {
+    cultoKey = 'manha';
+  } else if (text.includes('noite')) {
+    cultoKey = 'noite';
+  } else if (text.includes('quarta')) {
+    cultoKey = 'quarta';
+  } else if (text.includes('sabado') || text.includes('sábado')) {
+    cultoKey = 'sabado';
+  } else {
+    const matchCulto = text.match(/para\s+o\s+([^(.,]+)/i);
+    if (matchCulto && matchCulto[1]) {
+      cultoKey = matchCulto[1].trim();
+    }
+  }
+
+  if (dateStr) {
+    return `playlist_${dateStr}_${cultoKey}`;
+  }
+  return null;
+}
+
+/**
+ * Deduplica notificações de playlist repetidas de um mesmo culto para o usuário,
+ * garantindo que ele veja apenas uma notificação limpa em vez de múltiplas cópias
+ * geradas para Louvor, Dança e Projeção.
+ */
+export function deduplicatePlaylistNotifications(notifications: AppNotification[]): AppNotification[] {
+  if (!Array.isArray(notifications)) return [];
+
+  const seenPlaylistKeys = new Set<string>();
+  const result: AppNotification[] = [];
+
+  for (const n of notifications) {
+    const key = extractPlaylistNotificationKey(n);
+    if (!key) {
+      result.push(n);
+      continue;
+    }
+
+    if (!seenPlaylistKeys.has(key)) {
+      seenPlaylistKeys.add(key);
+      result.push(n);
+    }
+  }
+
+  return result;
+}
 

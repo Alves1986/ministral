@@ -70,31 +70,34 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 27/10/2026
+- **Data**: 28/10/2026
 - **Realizações**:
-  1. **Isolamento Estrito de Solicitações de Entrada (`join_request`) entre Ministérios**:
-     - Criado helper utilitário `utils/joinRequestUtils.ts` com funções `extractMinistryIdFromNotification`, `isNotificationForMinistry` e `validateJoinMinistryEligibility`, acompanhado por suíte completa de testes unitários em `tests/joinRequestIsolation.test.ts`.
-     - Atualizado `utils/notificationFilter.ts` e `services/supabase/notifications.ts` (`fetchNotificationsSQL`): `join_request` agora é filtrado estritamente pelos ministérios onde o usuário é administrador (`and(type.eq.join_request,ministry_id.in(...))`). Administradores de outros ministérios (ex: Louvor) nunca mais recebem ou visualizam pedidos de entrada de ministérios dos quais não fazem parte (ex: Dança).
-     - Corrigido `notifySuperAdmins`: para notificações com ministério alvo (`targetMinistryId`), os destinatários de Web Push e notificações são restritos estritamente aos administradores daquele ministério e Super Admins globais da plataforma, impedindo vazamento de push para líderes de outros ministérios.
-     - Corrigido `components/MembersScreen.tsx`: eliminada a brecha `!nMinId || nMinId === currentUser.ministryId`. Agora utiliza `isNotificationForMinistry(n, currentUser.ministryId)`, garantindo que solicitações de entrada nunca vazem na aba de membros de um ministério diferente.
-     - Corrigido `components/DashboardLayout.tsx` e `App.tsx`: badges e banners de solicitações de entrada pendentes agora filtram estritamente pelo ministério ativo.
-     - Corrigido `components/NotificationCenter.tsx`: ao clicar em notificação de solicitação de entrada de outro ministério ao qual o admin não pertence, emite aviso informativo sem navegar para a tela de membros do ministério incorreto.
-  2. **Trava contra Solicitações Duplicadas ou em Ministérios já Integrados**:
-     - Em `services/supabase/ministries.ts` (`joinMinistry`): adicionadas travas de segurança antes de processar o pedido. Se o usuário já fizer parte de `ministry_members` ou `profiles.allowed_ministries`, o sistema sincroniza permissões e retorna aviso amigável sem disparar notificações. Se já houver um pedido pendente no banco para o mesmo usuário e ministério, bloqueia disparos repetidos.
-     - Em `fetchUserAllowedMinistries`: unificadas as listas de `ministry_members`, `profiles.allowed_ministries` e `profiles.ministry_id`, evitando que membros com permissões válidas percam visibilidade de ministérios no dropdown ao trocar de contexto.
-  3. **Higienização de Mensagens de Solicitação de Entrada (Vazamento de JSON e Metadados)**:
-     - Implementada a função pura `sanitizeNotificationMessage` em `utils/joinRequestUtils.ts` com testes em `tests/joinRequestIsolation.test.ts`.
-     - Remove marcadores internos `[DADOS_SOLICITACAO:...]`, marcadores legados `<!--JOIN_DATA:...-->`, payloads JSON soltos e repetições acidentais `(Ministério: X) (Ministério: X)`.
-     - Em `services/supabase/ministries.ts`, a mensagem gravada é limpa e elegante ("O voluntário X solicitou entrada no ministério Y"), preservando metadados estruturados exclusivamente na coluna segura `action_link`.
-     - Em `services/supabase/notifications.ts` (`fetchNotificationsSQL`, `notifySuperAdmins`) e `components/NotificationCenter.tsx`, aplicada sanitização tanto na montagem de push quanto na renderização de notificações in-app.
-  4. **Integração do Gateway de Pagamentos Asaas (Coexistência com Stripe)**:
-     - Criadas as Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` com suporte a ambiente Sandbox e Produção, autenticação JWT, validação de permissões administrativas e prevenção contra timing attacks (`safeCompare`).
-     - Criada migration SQL `supabase/migrations/20261028_add_asaas_billing.sql` adicionando colunas `asaas_customer_id`, `asaas_subscription_id`, `payment_gateway` e tabela com RLS `asaas_event_log` para idempotência estrita.
-     - Desenvolvido `utils/asaasUtils.ts` e suíte de testes unitários em `tests/asaasPayment.test.ts` (12 testes cobrindo preços Pro/Enterprise, mapeamento de eventos `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `PAYMENT_DELETED`, `SUBSCRIPTION_DELETED`, validação de token e resolução de gateway).
-     - Atualizado `components/PlanScreen.tsx` com seletor visual e intuitivo de gateway (`Stripe` vs `Asaas`), permitindo testar pagamentos via PIX, Boleto e Cartão de Crédito sem alterar o funcionamento do Stripe.
-     - Criada a nova aba **"Testar Pagamentos"** (`sa-payments`) no painel do Super Admin (`SuperAdminDashboard.tsx` e `SuperAdminLayout.tsx`), fornecendo laboratório interativo para testes de checkout Sandbox, simulador de webhooks (`PAYMENT_CONFIRMED`, `PAYMENT_OVERDUE`, `SUBSCRIPTION_DELETED`) e monitoramento em tempo real da tabela `asaas_event_log`.
+  1. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
+     - **Causa Raiz Identificada**: Ao publicar uma playlist, `notifyRepertoirePlaylistPublished` disparava simultaneamente: broadcast para o Louvor, broadcast para ministérios de Projeção, broadcast para ministérios de Dança, loops individuais por voluntário com funções de dança/projeção (`targetUserId: p.id`) e disparo global para todos os administradores da plataforma via `notifySuperAdmins`. Um líder/admin com múltiplos papéis (ex: Louvor + Dança + Super Admin) recebia de 3 a 5 notificações simultâneas para o mesmo culto.
+     - **Correção no Backend (`services/supabase/repertoire.ts`)**:
+       - Adicionado controle de idempotência e cooldown com `canDispatchPlaylistNotification` (trava em memória de 15s por organização, ministério, data e regra de evento), evitando disparos repetidos por múltiplos cliques no salvamento.
+       - Removido disparo desnecessário para Super Admins (`notifySuperAdmins`), pois a publicação de playlist é evento interno/operacional do ministério e não evento crítico de plataforma.
+       - Eliminada duplicação de notificações individuais: quando a organização já possui ministérios dedicados de Projeção ou Dança, dispara apenas o broadcast para o ministério correspondente. O envio individual para membros com função específica via `targetUserId` passa a atuar estritamente como fallback quando a igreja não possui ministérios parceiros cadastrados.
+     - **Deduplicação na Interface (`components/NotificationCenter.tsx` e `utils/repertoireUtils.ts`)**:
+       - Implementadas as funções `extractPlaylistNotificationKey` e `deduplicatePlaylistNotifications` para consolidar notificações legadas ou repetidas da mesma playlist/culto em uma única notificação limpa no dropdown e no badge de contagem (`unreadCount`).
+       - Ao marcar como lida ou dispensar uma notificação de playlist consolidada, todas as notificações irmãs daquele culto são marcadas como lidas ou removidas no banco de dados em conjunto.
+     - **Suíte de Testes Unitários**:
+       - Criado `tests/repertoirePlaylistNotification.test.ts` com 5 testes aprovados cobrindo extração de chaves canônicas de culto/data, debounce/cooldown e consolidação de múltiplas notificações de Louvor, Dança e Projeção.
+  2. **Isolamento Estrito de Solicitações de Entrada (`join_request`) entre Ministérios**:
+     - Criado helper utilitário `utils/joinRequestUtils.ts` com funções `extractMinistryIdFromNotification`, `isNotificationForMinistry` e `validateJoinMinistryEligibility`, acompanhado por testes em `tests/joinRequestIsolation.test.ts`.
+     - `join_request` filtrado estritamente pelos ministérios onde o usuário é administrador (`and(type.eq.join_request,ministry_id.in(...))`).
+     - Corrigido `notifySuperAdmins`: restringe notificações e Web Push estritamente aos administradores do ministério alvo.
+     - Corrigido `components/MembersScreen.tsx`: eliminada exibição de solicitações de entrada de outros ministérios na aba de membros.
+     - Corrigido `components/NotificationCenter.tsx`: bloqueio seguro de navegação cruzada indevida entre ministérios.
+  3. **Trava contra Solicitações Duplicadas ou em Ministérios já Integrados**:
+     - Em `services/supabase/ministries.ts` (`joinMinistry`): travas ativas impedindo criação de novas solicitações se o voluntário já for membro ou já possuir solicitação pendente.
+  4. **Higienização de Mensagens de Solicitação de Entrada**:
+     - Sanitização ativa em `utils/joinRequestUtils.ts` removendo metadados brutos e JSON expostos na interface e em Web Push.
+  5. **Integração do Gateway de Pagamentos Asaas**:
+     - Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` com Sandbox e Produção.
+     - Painel "Testar Pagamentos" no Super Admin (`sa-payments`).
 - **Validação**:
-  - `npm test`: 18 arquivos e 86 testes aprovados (100% no Vitest).
+  - `npm test`: 19 arquivos e 91 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Integração do gateway de pagamentos Asaas e aba "Testar Pagamentos" no Super Admin (`sa-payments`). Coexistência com Stripe, checkout PIX/Boleto/Cartão, simulador de webhooks e histórico de `asaas_event_log`. 86 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Correção e consolidação das notificações de playlist no Repertório (`repertoirePlaylistNotification`). Eliminados disparos duplicados para Super Admins e voluntários individuais quando ministérios dedicados de Projeção e Dança já existem; adicionada trava de cooldown/idempotência no backend (`services/supabase/repertoire.ts`) e deduplicação visual na Central de Notificações (`NotificationCenter.tsx`). 91 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
