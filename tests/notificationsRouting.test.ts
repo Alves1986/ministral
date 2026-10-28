@@ -145,3 +145,4 @@ describe('Isolamento e Roteamento Seguro de Notificações (notificationsRouting
     expect(receivedIds).not.toContain('notif-5');
   });
 });
+

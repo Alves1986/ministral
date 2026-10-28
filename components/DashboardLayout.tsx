@@ -8,6 +8,7 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { useSession } from '../context/SessionContext';
 import { getSystemLogo, getPublicUrl } from '../utils/branding';
+import { isNotificationForMinistry } from '../utils/joinRequestUtils';
 
 export interface NavItem {
   id: string;
@@ -627,11 +628,15 @@ export const DashboardLayout: React.FC<Props> = ({
 
                     if (isOutcome) return false;
 
-                    return (
+                    const isJoin = (
                       n.type === 'join_request' || 
                       titleLower.includes('solicita') || 
                       (typeof n.message === 'string' && n.message.includes('solicitou entrada'))
                     );
+                    if (!isJoin) return false;
+
+                    // Restringe estritamente ao ministério ativo no momento
+                    return currentMinistryId ? isNotificationForMinistry(n, currentMinistryId) : true;
                   }).length;
                   if (pendingCount === 0) return null;
                   return (

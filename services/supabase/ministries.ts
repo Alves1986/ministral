@@ -100,7 +100,7 @@ export const fetchUserAllowedMinistries = async (
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
-  // Buscar ministérios onde o usuário é membro na tabela canônica ministry_members
+  // 1. Buscar ministérios onde o usuário é membro na tabela canônica ministry_members
   const { data: members, error } = await sb
     .from("ministry_members")
     .select("ministry_id")
@@ -114,23 +114,20 @@ export const fetchUserAllowedMinistries = async (
     .map((m: any) => m.ministry_id)
     .filter(Boolean);
 
-  let candidateIds = memberMinistryIds;
+  // 2. Consulta também o perfil para unir allowed_ministries e ministry_id,
+  // garantindo que permissões concedidas em ambos os locais sejam sempre reconhecidas
+  const { data: profile } = await sb
+    .from("profiles")
+    .select("allowed_ministries, ministry_id")
+    .eq("id", userId)
+    .maybeSingle();
 
-  // Fallback seguro: apenas se o usuário não possuir nenhum registro em ministry_members
-  // (ex: usuários antigos ou pendentes de sincronização), consulta o perfil
-  if (candidateIds.length === 0) {
-    const { data: profile } = await sb
-      .from("profiles")
-      .select("allowed_ministries, ministry_id")
-      .eq("id", userId)
-      .maybeSingle();
+  const profileAllowed = Array.isArray(profile?.allowed_ministries)
+    ? profile.allowed_ministries.filter(Boolean)
+    : [];
+  const profileMinId = profile?.ministry_id ? [profile.ministry_id] : [];
 
-    const profileAllowed = Array.isArray(profile?.allowed_ministries)
-      ? profile.allowed_ministries.filter(Boolean)
-      : [];
-    const profileMinId = profile?.ministry_id ? [profile.ministry_id] : [];
-    candidateIds = Array.from(new Set([...profileAllowed, ...profileMinId]));
-  }
+  const candidateIds = Array.from(new Set([...memberMinistryIds, ...profileAllowed, ...profileMinId]));
 
   if (candidateIds.length === 0) return [];
 
@@ -249,6 +246,49 @@ export const joinMinistry = async (
     .maybeSingle();
   const ministryName = minData?.label || "Ministério";
 
+  // ── TRAVA 1: Verifica se o usuário já é membro deste ministério ───────────
+  const { data: existingMember } = await sb
+    .from("ministry_members")
+    .select("id")
+    .eq("ministry_id", ministryId)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  const isAlreadyAllowed = Array.isArray(profile?.allowed_ministries) && profile.allowed_ministries.includes(ministryId);
+
+  if (existingMember || isAlreadyAllowed) {
+    // Sincroniza allowed_ministries no perfil caso ainda não estivesse sincronizado
+    if (profile && !isAlreadyAllowed) {
+      const allowed = new Set(profile.allowed_ministries || []);
+      allowed.add(ministryId);
+      await sb
+        .from("profiles")
+        .update({ allowed_ministries: Array.from(allowed) })
+        .eq("id", user.id);
+    }
+    return { success: true, alreadyMember: true, message: `Você já faz parte do ministério ${ministryName}.` };
+  }
+
+  // ── TRAVA 2: Verifica se já existe solicitação pendente no banco ──────────
+  const { data: existingRequests } = await sb
+    .from("notifications")
+    .select("id, message, action_link")
+    .eq("organization_id", orgId)
+    .eq("type", "join_request")
+    .eq("ministry_id", ministryId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  const isAlreadyPending = (existingRequests || []).some(n => {
+    const al = n.action_link || '';
+    const msg = n.message || '';
+    return al.includes(user.id) || msg.includes(user.id) || (profile?.email && msg.includes(profile.email));
+  });
+
+  if (isAlreadyPending) {
+    return { success: true, alreadyPending: true, message: `Sua solicitação de entrada para o ministério ${ministryName} já foi enviada e está aguardando aprovação.` };
+  }
+
   if (canJoinDirectly) {
     // Check if it's the first member, so we make them admin
     const { count: membersCount } = await sb
@@ -301,10 +341,10 @@ export const joinMinistry = async (
       ministryId,
       orgId,
       "info",
-      user.id,
     );
+    return { success: true, joinedDirectly: true };
   } else {
-    // Regular user: Create a join request via weight notifications
+    // Regular user: Create a join request via notifications
     const cleanName =
       profile?.name?.trim() ||
       user.user_metadata?.full_name?.trim() ||
@@ -318,6 +358,8 @@ export const joinMinistry = async (
       userId: user.id,
       userName: cleanName,
       userEmail,
+      ministryId,
+      ministryName,
       roles: roles || [],
     });
 
@@ -328,7 +370,6 @@ export const joinMinistry = async (
       ministryId,
       orgId,
       "join_request",
-      user.id,
     );
 
     if (response?.error) {
@@ -340,6 +381,7 @@ export const joinMinistry = async (
         "Não foi possível enviar a solicitação. Tente novamente.",
       );
     }
+    return { success: true, requested: true };
   }
 };
 

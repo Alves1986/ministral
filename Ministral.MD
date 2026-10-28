@@ -72,16 +72,18 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 27/10/2026
 - **Realizações**:
-  1. **Isolamento Estrito de Notificações Individuais de Escala (In-App e Web Push)**:
-     - Criado helper puro de segurança `filterNotificationsForUser` em `utils/notificationFilter.ts` com testes em `tests/notificationsRouting.test.ts`. Garante que notificações direcionadas a um membro (`target_user_id`) NUNCA sejam entregues a outros voluntários ou administradores de outros ministérios.
-     - Corrigida a consulta PostgREST em `services/supabase/notifications.ts` (`fetchNotificationsSQL`): para admins, não busca mais indiscriminadamente `ministry_id.in.(idsList)` sem checar `target_user_id.is.null`. Agora combina condições OR seguras (`and(ministry_id.in(...), target_user_id.is.null)` + `target_user_id.eq.${userId}`), além de aplicar sanitização estrita em memória antes do retorno à interface.
-     - Corrigido `sendNotificationSQL`: impedido o fallback de descartar `target_user_id` em caso de erro inicial no banco de dados, eliminando o risco de transformar notificações privadas de escala em broadcast coletivo.
-     - Corrigido `ScheduleEditorV2.tsx`: adicionado envio de notificação geral de broadcast para todo o ministério ao liberar a escala ("Escala liberada no calendário"), mantendo os dias escalados de cada membro em suas notificações individuais protegidas.
-     - Corrigida a Edge Function `supabase/functions/push-notification/index.ts`: requisições com alvo explícito (`userId` ou `userIds`) nunca mais realizam fallback para broadcast a todos os membros caso o alvo seja vazio ou inválido.
-  2. **Isolamento de Repertório por Culto e Evento no Dashboard**:
-     - Criado helper utilitário `isRepertoireItemForEvent` em `utils/repertoireUtils.ts` garantindo que cultos diferentes no mesmo dia (ex: Domingo Manhã e Domingo Noite) nunca compartilhem ou misturem seus louvores.
+  1. **Isolamento Estrito de Solicitações de Entrada (`join_request`) entre Ministérios**:
+     - Criado helper utilitário `utils/joinRequestUtils.ts` com funções `extractMinistryIdFromNotification`, `isNotificationForMinistry` e `validateJoinMinistryEligibility`, acompanhado por suíte completa de testes unitários em `tests/joinRequestIsolation.test.ts`.
+     - Atualizado `utils/notificationFilter.ts` e `services/supabase/notifications.ts` (`fetchNotificationsSQL`): `join_request` agora é filtrado estritamente pelos ministérios onde o usuário é administrador (`and(type.eq.join_request,ministry_id.in(...))`). Administradores de outros ministérios (ex: Louvor) nunca mais recebem ou visualizam pedidos de entrada de ministérios dos quais não fazem parte (ex: Dança).
+     - Corrigido `notifySuperAdmins`: para notificações com ministério alvo (`targetMinistryId`), os destinatários de Web Push e notificações são restritos estritamente aos administradores daquele ministério e Super Admins globais da plataforma, impedindo vazamento de push para líderes de outros ministérios.
+     - Corrigido `components/MembersScreen.tsx`: eliminada a brecha `!nMinId || nMinId === currentUser.ministryId`. Agora utiliza `isNotificationForMinistry(n, currentUser.ministryId)`, garantindo que solicitações de entrada nunca vazem na aba de membros de um ministério diferente.
+     - Corrigido `components/DashboardLayout.tsx` e `App.tsx`: badges e banners de solicitações de entrada pendentes agora filtram estritamente pelo ministério ativo.
+     - Corrigido `components/NotificationCenter.tsx`: ao clicar em notificação de solicitação de entrada de outro ministério ao qual o admin não pertence, emite aviso informativo sem navegar para a tela de membros do ministério incorreto.
+  2. **Trava contra Solicitações Duplicadas ou em Ministérios já Integrados**:
+     - Em `services/supabase/ministries.ts` (`joinMinistry`): adicionadas travas de segurança antes de processar o pedido. Se o usuário já fizer parte de `ministry_members` ou `profiles.allowed_ministries`, o sistema sincroniza permissões e retorna aviso amigável sem disparar notificações. Se já houver um pedido pendente no banco para o mesmo usuário e ministério, bloqueia disparos repetidos.
+     - Em `fetchUserAllowedMinistries`: unificadas as listas de `ministry_members`, `profiles.allowed_ministries` e `profiles.ministry_id`, evitando que membros com permissões válidas percam visibilidade de ministérios no dropdown ao trocar de contexto.
 - **Validação**:
-  - `npm test`: 16 arquivos e 63 testes aprovados (100% no Vitest).
+  - `npm test`: 17 arquivos e 71 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

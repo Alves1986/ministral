@@ -52,7 +52,12 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
     // 4. Solicitações administrativas de entrada (join_request) para admins
     if (isAdmin) {
-        orConditions.push(`type.eq.join_request`);
+        if (validMinistryIds.length > 0) {
+            const idsList = validMinistryIds.join(',');
+            orConditions.push(`and(type.eq.join_request,ministry_id.in.(${idsList}))`);
+        } else {
+            orConditions.push(`type.eq.join_request`);
+        }
     }
 
     const applyFilters = (q: any) => {
@@ -97,7 +102,11 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                 retryOr.push(`ministry_id.in.(${validMinistryIds.join(',')})`);
             }
             if (isAdmin) {
-                retryOr.push(`type.eq.join_request`);
+                if (validMinistryIds.length > 0) {
+                    retryOr.push(`and(type.eq.join_request,ministry_id.in.(${validMinistryIds.join(',')}))`);
+                } else {
+                    retryOr.push(`type.eq.join_request`);
+                }
             }
             if (userId && targetUserIdSupported) {
                 retryOr.push(`target_user_id.eq.${userId}`);
@@ -404,7 +413,7 @@ export const notifySuperAdmins = async (
     // ── 1. Busca admins em uma única query ────────────────────────────────
     let query = sb
       .from('profiles')
-      .select('id, organization_id')
+      .select('id, organization_id, is_super_admin')
       .or(`is_super_admin.eq.true${orgId ? `,and(is_admin.eq.true,organization_id.eq.${orgId})` : ''}`);
       // REMOVIDO: .not('organization_id', 'is', null)
 
@@ -422,8 +431,21 @@ export const notifySuperAdmins = async (
         }
     }
 
-    const allAdmins = [...(admins || []), ...ministryAdmins];
-    const uniqueAdmins = Array.from(new Map(allAdmins.map(a => [a.id, a])).values());
+    // Se a notificação for de um ministério específico (ex: join_request),
+    // restringe os destinatários para os admins do ministério alvo e super admins globais,
+    // evitando notificar líderes de outros ministérios.
+    let recipients: any[] = [];
+    if (targetMinistryId) {
+        const superAdmins = (admins || []).filter(a => a.is_super_admin);
+        recipients = [...superAdmins, ...ministryAdmins];
+        if (recipients.length === 0) {
+            recipients = admins || [];
+        }
+    } else {
+        recipients = admins || [];
+    }
+
+    const uniqueAdmins = Array.from(new Map(recipients.map(a => [a.id, a])).values());
 
     // Se não temos admins e também não temos um alvo explícito, não há para quem enviar
     if (!uniqueAdmins.length && !(orgId && targetMinistryId)) return;
@@ -516,7 +538,7 @@ export const notifySuperAdmins = async (
             message: finalMessage,
             type,
             ...(actionLinkSupported && actionLink ? { action_link: actionLink } : {}),
-            ...(targetUserIdSupported && resolvedTargetUserId ? { target_user_id: resolvedTargetUserId } : {})
+            ...(targetUserIdSupported && resolvedTargetUserId && type !== 'join_request' ? { target_user_id: resolvedTargetUserId } : {})
         });
     }
 

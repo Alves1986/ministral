@@ -7,6 +7,7 @@ import { getSupabase } from '../services/supabase/client';
 import { useToast } from './Toast';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
+import { extractMinistryIdFromNotification } from '../utils/joinRequestUtils';
 
 interface Props {
   notifications: AppNotification[];
@@ -22,7 +23,7 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const unreadCount = notifications.filter(n => !n.read).length;
-  const { confirmAction } = useToast();
+  const { confirmAction, addToast } = useToast();
   const { currentUser } = useAppStore();
   
   // FIX: ERRO 1 - Strict organizationId check
@@ -114,8 +115,18 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
         msgLower.includes('recusada por');
 
       if (!isOutcome && (notification.type === 'join_request' || titleLower.includes('solicita') || msgLower.includes('solicitou entrada'))) {
-          if (notification.ministryId && onSwitchMinistry && notification.ministryId !== ministryId) {
-              onSwitchMinistry(notification.ministryId);
+          const targetMinId = notification.ministryId || extractMinistryIdFromNotification(notification);
+          const userAllowed = currentUser?.allowedMinistries || [];
+
+          // Se for uma solicitação de outro ministério ao qual o admin não pertence, avisa e não navega
+          if (targetMinId && !userAllowed.includes(targetMinId) && !currentUser?.isSuperAdmin) {
+              addToast('Esta solicitação pertence a outro ministério no qual você não participa.', 'warning');
+              setIsOpen(false);
+              return;
+          }
+
+          if (targetMinId && onSwitchMinistry && targetMinId !== ministryId) {
+              onSwitchMinistry(targetMinId);
           }
           if (onNavigate) {
               onNavigate('members');

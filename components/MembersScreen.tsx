@@ -8,6 +8,7 @@ import { useSession } from '../context/SessionContext';
 import { fetchAuditLogs, AuditLogEntry, AUDIT_ACTION_LABELS, AUDIT_ACTION_COLORS, AuditAction } from '../services/supabase/audit';
 import { getSupabase } from '../services/supabase/client';
 import { cleanupStaleJoinNotifications } from '../services/supabase/ministries';
+import { isNotificationForMinistry, extractMinistryIdFromNotification } from '../utils/joinRequestUtils';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -280,10 +281,9 @@ export const MembersScreen: React.FC<Props> = ({
                                msgLower.includes('solicitou entrada') ||
                                msgLower.includes('entrou diretamente');
             const hasJoinData = typeof n.actionLink === 'string' && (n.actionLink.includes('"userId"') || n.actionLink.includes('join'));
-            const nMinId = n.ministryId || (n as any).ministry_id;
             
-            // Permite ver solicitações apenas do ministério ativo
-            const matchesMinistry = !nMinId || nMinId === currentUser.ministryId;
+            // Permite ver solicitações estritamente do ministério ativo (nunca aceita !nMinId como coringa)
+            const matchesMinistry = currentUser.ministryId ? isNotificationForMinistry(n, currentUser.ministryId) : false;
             return (isJoinType || hasJoinData) && matchesMinistry;
         })
         .map(n => {
@@ -306,7 +306,7 @@ export const MembersScreen: React.FC<Props> = ({
 
                 return {
                     id: n.id,
-                    ministryId: n.ministryId || currentUser.ministryId,
+                    ministryId: extractMinistryIdFromNotification(n) || n.ministryId || currentUser.ministryId,
                     ministryName: n.ministryName || 'Ministério',
                     userId: parsed.userId,
                     userName: parsed.userName,

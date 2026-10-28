@@ -97,16 +97,9 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
     setSubmitting(true);
     try {
         await onJoin(selectedMinistry, selectedRoles);
-        
-        // Se for super admin entra direto, senão avisa que enviou solicitação
-        if (!isSuperAdmin) {
-            addToast("Solicitação enviada com sucesso! Aguarde a aprovação dos administradores deste ministério.", "success");
-        }
-        
         onClose();
     } catch (error) {
         console.error("Erro ao entrar no ministério:", error);
-        addToast("Ocorreu um erro ao processar sua solicitação.", "error");
     } finally {
         setSubmitting(false);
     }

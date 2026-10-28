@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Isolamento estrito de notificações individuais de escala no `ScheduleEditorV2` e `notifications.ts`. Criado utilitário `utils/notificationFilter.ts` e testes em `tests/notificationsRouting.test.ts`. Corrigido o envio e a consulta PostgREST para que notificações com `target_user_id` sejam recebidas exclusivamente pelo voluntário escalado, além de adicionar notificação geral de broadcast para todo o ministério ao liberar a escala. Corrigida Edge Function de push para evitar broadcast acidental em requisições direcionadas. 63 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Isolamento estrito de solicitações de entrada (`join_request`) entre ministérios e travas contra solicitações duplicadas ou em ministérios já integrados. Criado `utils/joinRequestUtils.ts` e testes em `tests/joinRequestIsolation.test.ts`. Corrigidos `fetchNotificationsSQL`, `notifySuperAdmins`, `MembersScreen`, `DashboardLayout`, `NotificationCenter` e `joinMinistry`. 71 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

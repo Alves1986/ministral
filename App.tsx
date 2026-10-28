@@ -91,6 +91,7 @@ import { ToolsMenu } from "./components/ToolsMenu";
 
 import { InstallModal } from "./components/InstallModal";
 import { JoinMinistryModal } from "./components/JoinMinistryModal";
+import { isNotificationForMinistry } from "./utils/joinRequestUtils";
 import { InstallBanner } from "./components/InstallBanner";
 import { NotificationPermissionBanner } from "./components/NotificationPermissionBanner";
 import {
@@ -807,6 +808,11 @@ const InnerApp = () => {
 
       if (!isCandidate) return false;
 
+      // Filtrar estritamente pelo ministério ativo
+      if (ministryId && !isNotificationForMinistry(n, ministryId)) {
+        return false;
+      }
+
       // Excluir membros que já estão na equipe pública (publicMembers)
       const targetUid = n.targetUserId || (n as any).target_user_id;
       const alreadyMember = (publicMembers || []).some((m) => {
@@ -818,7 +824,7 @@ const InnerApp = () => {
 
       return !alreadyMember;
     }).length;
-  }, [isAdmin, notifications, publicMembers]);
+  }, [isAdmin, notifications, publicMembers, ministryId]);
 
   const RAW_MANAGEMENT_NAV = useMemo(
     () => [
@@ -2418,11 +2424,23 @@ const InnerApp = () => {
                   return;
                 }
                 try {
-                  await Supabase.joinMinistry(id, orgId, r);
+                  const result: any = await Supabase.joinMinistry(id, orgId, r);
+
+                  if (result?.alreadyMember) {
+                    addToast(result.message || "Você já faz parte deste ministério!", "info");
+                    await refreshSession();
+                    await refreshData();
+                    return;
+                  }
+
+                  if (result?.alreadyPending) {
+                    addToast(result.message || "Sua solicitação já está pendente de aprovação.", "info");
+                    return;
+                  }
 
                   // Se for super admin ou org admin, refresha e avisa que entrou
                   // Senão, avisa que a solicitação foi enviada
-                  if (activeUser?.isSuperAdmin || activeUser?.isOrgAdmin) {
+                  if (result?.joinedDirectly || activeUser?.isSuperAdmin || activeUser?.isOrgAdmin) {
                     addToast(
                       "Você entrou no ministério com sucesso!",
                       "success",
