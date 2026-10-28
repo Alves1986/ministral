@@ -92,6 +92,7 @@
      - Criada migration SQL `supabase/migrations/20261028_add_asaas_billing.sql` adicionando colunas `asaas_customer_id`, `asaas_subscription_id`, `payment_gateway` e tabela com RLS `asaas_event_log` para idempotência estrita.
      - Desenvolvido `utils/asaasUtils.ts` e suíte de testes unitários em `tests/asaasPayment.test.ts` (12 testes cobrindo preços Pro/Enterprise, mapeamento de eventos `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `PAYMENT_DELETED`, `SUBSCRIPTION_DELETED`, validação de token e resolução de gateway).
      - Atualizado `components/PlanScreen.tsx` com seletor visual e intuitivo de gateway (`Stripe` vs `Asaas`), permitindo testar pagamentos via PIX, Boleto e Cartão de Crédito sem alterar o funcionamento do Stripe.
+     - Criada a nova aba **"Testar Pagamentos"** (`sa-payments`) no painel do Super Admin (`SuperAdminDashboard.tsx` e `SuperAdminLayout.tsx`), fornecendo laboratório interativo para testes de checkout Sandbox, simulador de webhooks (`PAYMENT_CONFIRMED`, `PAYMENT_OVERDUE`, `SUBSCRIPTION_DELETED`) e monitoramento em tempo real da tabela `asaas_event_log`.
 - **Validação**:
   - `npm test`: 18 arquivos e 86 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.

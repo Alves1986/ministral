@@ -212,6 +212,7 @@ export const ALL_TABS = [
   "sa-telemetry",
   "sa-broadcast",
   "sa-billing",
+  "sa-payments",
   "sa-users",
   "sa-support",
   "sa-audit",

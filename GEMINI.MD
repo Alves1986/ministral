@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Integração do gateway de pagamentos Asaas (coexistência com Stripe, checkout PIX/Boleto/Cartão, webhooks e idempotência com asaas_event_log). Criados testes em `tests/asaasPayment.test.ts`, utilitários em `utils/asaasUtils.ts` e Edge Functions. 86 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Integração do gateway de pagamentos Asaas e aba "Testar Pagamentos" no Super Admin (`sa-payments`). Coexistência com Stripe, checkout PIX/Boleto/Cartão, simulador de webhooks e histórico de `asaas_event_log`. 86 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

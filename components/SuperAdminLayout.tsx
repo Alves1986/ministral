@@ -3,7 +3,7 @@ import {
     Shield, LogOut, Sun, Moon, Menu, X, Bell,
     Building2, MessageSquare, Activity, Settings,
     ChevronRight, User as UserIcon, Megaphone, CreditCard,
-    Headset, ShieldCheck, Gauge
+    Headset, ShieldCheck, Gauge, FlaskConical
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { getSystemLogo } from '../utils/branding';
@@ -27,6 +27,7 @@ const SA_NAV_ITEMS: SuperAdminNavItem[] = [
     { id: 'sa-users',        label: 'Usuários',          icon: <UserIcon size={20} /> },
     { id: 'sa-broadcast',    label: 'Comunicados',       icon: <Megaphone size={20} /> },
     { id: 'sa-billing',      label: 'Financeiro',        icon: <CreditCard size={20} /> },
+    { id: 'sa-payments',     label: 'Testar Pagamentos', icon: <FlaskConical size={20} /> },
     { id: 'sa-telemetry',    label: 'Telemetria',        icon: <Activity size={20} /> },
     { id: 'sa-support',      label: 'Suporte',           icon: <Headset size={20} /> },
     { id: 'sa-audit',        label: 'Auditoria',         icon: <ShieldCheck size={20} /> },

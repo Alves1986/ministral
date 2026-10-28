@@ -40,6 +40,11 @@ import {
   TrendingUp,
   Check,
   Shield,
+  FlaskConical,
+  ExternalLink,
+  QrCode,
+  Play,
+  ArrowRight,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "../services/supabase/client";
@@ -641,6 +646,183 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
   const [ministrySaving, setMinistrySaving] = useState(false);
 
   const { addToast, confirmAction } = useToast();
+
+  // Estados e Handlers para a aba "sa-payments" (Laboratório de Teste de Gateways)
+  const [testGateway, setTestGateway] = useState<'asaas' | 'stripe'>('asaas');
+  const [testOrgId, setTestOrgId] = useState<string>('');
+  const [testPlanType, setTestPlanType] = useState<'pro' | 'enterprise'>('pro');
+  const [testUserEmail, setTestUserEmail] = useState<string>('admin.teste@ministral.com');
+  const [testCustomerName, setTestCustomerName] = useState<string>('');
+  const [testCpfCnpj, setTestCpfCnpj] = useState<string>('');
+  const [testPhone, setTestPhone] = useState<string>('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    url?: string;
+    subscriptionId?: string;
+    customerId?: string;
+    details?: any;
+    error?: string;
+    timestamp: string;
+  } | null>(null);
+
+  const [simWebhookLoading, setSimWebhookLoading] = useState(false);
+  const [simWebhookResult, setSimWebhookResult] = useState<{
+    event: string;
+    success: boolean;
+    message: string;
+    timestamp: string;
+  } | null>(null);
+
+  const { data: asaasEventLogs = [], refetch: refetchAsaasLogs, isLoading: loadingAsaasLogs } = useQuery({
+    queryKey: ['asaas_event_logs'],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb) return [];
+      const { data, error } = await sb
+        .from('asaas_event_log')
+        .select('*')
+        .order('processed_at', { ascending: false })
+        .limit(15);
+      if (error) {
+        console.warn('Erro ao carregar asaas_event_log:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: activeTab === 'sa-payments',
+  });
+
+  const handleRunCheckoutTest = async () => {
+    const targetOrg = organizations.find(o => o.id === testOrgId) || organizations[0];
+    if (!targetOrg) {
+      addToast("Nenhuma organização disponível para teste", "warning");
+      return;
+    }
+
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const sb = getSupabase();
+      if (!sb) throw new Error("Supabase não inicializado");
+
+      const functionName = testGateway === 'asaas' ? 'asaas-create-checkout' : 'stripe-create-checkout';
+      const bodyPayload = {
+        orgId: targetOrg.id,
+        planType: testPlanType,
+        userEmail: testUserEmail || 'admin.teste@ministral.com',
+        customerName: testCustomerName || targetOrg.name,
+        cpfCnpj: testCpfCnpj,
+        phone: testPhone
+      };
+
+      const res = await sb.functions.invoke(functionName, { body: bodyPayload });
+
+      if (res.error) {
+        throw new Error(res.error.message || `Erro ao invocar ${functionName}`);
+      }
+
+      setTestResult({
+        success: true,
+        url: res.data?.url,
+        subscriptionId: res.data?.subscriptionId,
+        customerId: res.data?.customerId,
+        details: res.data,
+        timestamp: new Date().toLocaleTimeString('pt-BR')
+      });
+      addToast(`Sessão de teste ${testGateway.toUpperCase()} gerada com sucesso!`, "success");
+      loadData();
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toLocaleTimeString('pt-BR')
+      });
+      addToast(`Erro no teste ${testGateway.toUpperCase()}: ${err.message}`, "error");
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const handleSimulateAsaasWebhook = async (eventType: 'PAYMENT_CONFIRMED' | 'PAYMENT_OVERDUE' | 'SUBSCRIPTION_DELETED') => {
+    const targetOrg = organizations.find(o => o.id === testOrgId) || organizations[0];
+    if (!targetOrg) {
+      addToast("Selecione uma organização para simular o webhook", "warning");
+      return;
+    }
+
+    setSimWebhookLoading(true);
+    setSimWebhookResult(null);
+
+    try {
+      const sb = getSupabase();
+      if (!sb) throw new Error("Supabase não inicializado");
+
+      const simulatedEventId = `sim_${eventType}_${Date.now()}`;
+      let simulatedPayload: any = {
+        id: simulatedEventId,
+        event: eventType,
+        dateCreated: new Date().toISOString()
+      };
+
+      if (eventType === 'PAYMENT_CONFIRMED') {
+        simulatedPayload.payment = {
+          id: `pay_sim_${Date.now()}`,
+          customer: targetOrg.asaas_customer_id || `cus_sim_${Date.now()}`,
+          subscription: targetOrg.asaas_subscription_id || `sub_sim_${Date.now()}`,
+          externalReference: targetOrg.id,
+          value: testPlanType === 'enterprise' ? 99.90 : 49.90,
+          status: 'CONFIRMED',
+          billingType: 'PIX',
+          description: `Assinatura Plano ${testPlanType === 'enterprise' ? 'Enterprise' : 'Pro'} - Ministral`
+        };
+      } else if (eventType === 'PAYMENT_OVERDUE') {
+        simulatedPayload.payment = {
+          id: `pay_sim_${Date.now()}`,
+          customer: targetOrg.asaas_customer_id || `cus_sim_${Date.now()}`,
+          externalReference: targetOrg.id,
+          value: 49.90,
+          status: 'OVERDUE'
+        };
+      } else if (eventType === 'SUBSCRIPTION_DELETED') {
+        simulatedPayload.subscription = {
+          id: targetOrg.asaas_subscription_id || `sub_sim_${Date.now()}`,
+          customer: targetOrg.asaas_customer_id || `cus_sim_${Date.now()}`,
+          externalReference: targetOrg.id,
+          status: 'INACTIVE'
+        };
+      }
+
+      const res = await sb.functions.invoke('asaas-webhook', {
+        body: simulatedPayload
+      });
+
+      if (res.error) {
+        throw new Error(res.error.message || "Erro no webhook");
+      }
+
+      setSimWebhookResult({
+        event: eventType,
+        success: true,
+        message: `Evento ${eventType} disparado com sucesso! A organização ${targetOrg.name} foi atualizada.`,
+        timestamp: new Date().toLocaleTimeString('pt-BR')
+      });
+
+      addToast(`Webhook ${eventType} simulado com sucesso!`, "success");
+      loadData();
+      refetchAsaasLogs();
+    } catch (err: any) {
+      setSimWebhookResult({
+        event: eventType,
+        success: false,
+        message: err.message,
+        timestamp: new Date().toLocaleTimeString('pt-BR')
+      });
+      addToast(`Falha ao simular webhook: ${err.message}`, "error");
+    } finally {
+      setSimWebhookLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -1773,6 +1955,442 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                 Novos clientes em teste
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "sa-payments" && (
+        <div className="space-y-6 animate-slide-up">
+          {/* Cabeçalho da Aba */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0 border border-emerald-500/20">
+                  <FlaskConical size={28} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-black text-zinc-900 dark:text-white">
+                      Laboratório de Pagamentos
+                    </h2>
+                    <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Sandbox & Testes
+                    </span>
+                  </div>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                    Simulação de criação de assinaturas, links de pagamento e disparo de webhooks do Asaas e Stripe sem afetar o faturamento real.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Status dos Gateways */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 relative overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <h3 className="text-zinc-500 font-bold uppercase tracking-wider text-xs">
+                    Gateway Asaas (Sandbox)
+                  </h3>
+                </div>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-bold">
+                  v3 Ativo
+                </span>
+              </div>
+              <div className="text-3xl font-black text-zinc-900 dark:text-white">
+                {organizations.filter(o => o.payment_gateway === 'asaas' || o.asaas_customer_id).length}
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Organizações com identificador Asaas
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 relative overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <h3 className="text-zinc-500 font-bold uppercase tracking-wider text-xs">
+                    Gateway Stripe (Coexistindo)
+                  </h3>
+                </div>
+                <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md font-bold">
+                  Produção
+                </span>
+              </div>
+              <div className="text-3xl font-black text-zinc-900 dark:text-white">
+                {organizations.filter(o => o.stripe_customer_id).length}
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Organizações com assinatura ativa no Stripe
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 relative overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-zinc-500 font-bold uppercase tracking-wider text-xs">
+                  Total de Organizações
+                </h3>
+              </div>
+              <div className="text-3xl font-black text-zinc-900 dark:text-white">
+                {organizations.length}
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Base total para testes e migração
+              </p>
+            </div>
+          </div>
+
+          {/* Simulador de Checkout e Simulador de Webhook */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Bloco 1: Simulador de Checkout */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-zinc-900 dark:text-white text-base">
+                      1. Testar Criação de Checkout
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Gera cliente e cobrança real no Sandbox do Asaas ou sessão do Stripe
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seletor do Gateway */}
+              <div>
+                <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2 block">
+                  Gateway Selecionado para Teste
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTestGateway('asaas')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                      testGateway === 'asaas'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                        : 'border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <span>⚡ Asaas (PIX / Boleto / Cartão)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTestGateway('stripe')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                      testGateway === 'stripe'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
+                        : 'border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <span>💳 Stripe (Cartão)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Seleção de Organização de Teste */}
+              <div>
+                <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 block">
+                  Organização Alvo
+                </label>
+                <select
+                  value={testOrgId || (organizations[0]?.id || '')}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setTestOrgId(id);
+                    const org = organizations.find(o => o.id === id);
+                    if (org) setTestCustomerName(org.name);
+                  }}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
+                >
+                  {organizations.map(org => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.plan_type || 'trial'} - {org.billing_status || 'active'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Plano */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 block">
+                    Plano de Teste
+                  </label>
+                  <select
+                    value={testPlanType}
+                    onChange={(e) => setTestPlanType(e.target.value as 'pro' | 'enterprise')}
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
+                  >
+                    <option value="pro">Plano Pro (R$ 49,90/mês)</option>
+                    <option value="enterprise">Plano Enterprise (R$ 99,90/mês)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 block">
+                    E-mail do Pagador
+                  </label>
+                  <input
+                    type="email"
+                    value={testUserEmail}
+                    onChange={(e) => setTestUserEmail(e.target.value)}
+                    placeholder="admin@igreja.com"
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {testGateway === 'asaas' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 block">
+                      CPF ou CNPJ (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={testCpfCnpj}
+                      onChange={(e) => setTestCpfCnpj(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 block">
+                      Telefone / WhatsApp (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={testPhone}
+                      onChange={(e) => setTestPhone(e.target.value)}
+                      placeholder="(11) 99999-9999"
+                      className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleRunCheckoutTest}
+                disabled={testLoading}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {testLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Gerando Sessão de Teste...
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} />
+                    Executar Teste de Checkout ({testGateway.toUpperCase()})
+                  </>
+                )}
+              </button>
+
+              {/* Exibição do Resultado do Checkout */}
+              {testResult && (
+                <div className={`p-4 rounded-2xl border text-sm space-y-3 ${
+                  testResult.success 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-900 dark:text-red-200'
+                }`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <span>{testResult.success ? '✅ Sessão de Teste Gerada' : '❌ Falha no Teste'}</span>
+                    <span className="text-xs opacity-75">{testResult.timestamp}</span>
+                  </div>
+
+                  {testResult.url && (
+                    <div className="pt-2">
+                      <a
+                        href={testResult.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm"
+                      >
+                        <ExternalLink size={14} /> Abrir Checkout no Asaas Sandbox ↗
+                      </a>
+                    </div>
+                  )}
+
+                  {testResult.subscriptionId && (
+                    <div className="text-xs space-y-1 font-mono pt-1">
+                      <div>Assinatura: <strong>{testResult.subscriptionId}</strong></div>
+                      {testResult.customerId && <div>Cliente Asaas: <strong>{testResult.customerId}</strong></div>}
+                    </div>
+                  )}
+
+                  {testResult.error && (
+                    <div className="text-xs text-red-600 dark:text-red-400 font-mono">
+                      {testResult.error}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bloco 2: Simulador de Webhook */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
+                    <Activity size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-zinc-900 dark:text-white text-base">
+                      2. Simulador de Webhook do Asaas
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Dispare eventos diretamente para validar ativação, suspensão e cancelamento
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200/80 dark:border-zinc-700/80 text-xs text-zinc-600 dark:text-zinc-400 space-y-2 leading-relaxed">
+                <p>
+                  Estes botões enviam payloads reais para a Edge Function <code>asaas-webhook</code>, simulando o comportamento exato que o Asaas executa quando um voluntário ou igreja paga a fatura.
+                </p>
+              </div>
+
+              {/* Botões de Ação do Webhook */}
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAsaasWebhook('PAYMENT_CONFIRMED')}
+                  disabled={simWebhookLoading}
+                  className="w-full py-3 px-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold rounded-2xl text-xs transition-all flex items-center justify-between group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span>Simular Pagamento Confirmado (PAYMENT_CONFIRMED)</span>
+                  </div>
+                  <span className="text-[11px] bg-emerald-500 text-white px-2 py-0.5 rounded-md font-semibold">
+                    Ativar Org
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAsaasWebhook('PAYMENT_OVERDUE')}
+                  disabled={simWebhookLoading}
+                  className="w-full py-3 px-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold rounded-2xl text-xs transition-all flex items-center justify-between group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span>Simular Pagamento Vencido (PAYMENT_OVERDUE)</span>
+                  </div>
+                  <span className="text-[11px] bg-amber-500 text-white px-2 py-0.5 rounded-md font-semibold">
+                    Marcar Past Due
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAsaasWebhook('SUBSCRIPTION_DELETED')}
+                  disabled={simWebhookLoading}
+                  className="w-full py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-700 dark:text-red-300 font-bold rounded-2xl text-xs transition-all flex items-center justify-between group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                    <span>Simular Assinatura Cancelada (SUBSCRIPTION_DELETED)</span>
+                  </div>
+                  <span className="text-[11px] bg-red-500 text-white px-2 py-0.5 rounded-md font-semibold">
+                    Cancelar Acesso
+                  </span>
+                </button>
+              </div>
+
+              {/* Resultado do Webhook */}
+              {simWebhookResult && (
+                <div className={`p-4 rounded-2xl border text-xs space-y-1.5 ${
+                  simWebhookResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                    : 'bg-red-500/10 border-red-500/30 text-red-800 dark:text-red-200'
+                }`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <span>{simWebhookResult.event}</span>
+                    <span>{simWebhookResult.timestamp}</span>
+                  </div>
+                  <p>{simWebhookResult.message}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Seção 3: Histórico de Logs do Asaas (asaas_event_log) */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-zinc-900 dark:text-white text-base">
+                  Logs de Eventos Recebidos (asaas_event_log)
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Verificação de idempotência e histórico dos webhooks processados pelo sistema
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => refetchAsaasLogs()}
+                disabled={loadingAsaasLogs}
+                className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Recarregar Logs"
+              >
+                <RefreshCw size={16} className={loadingAsaasLogs ? 'animate-spin' : ''} />
+              </button>
+            </div>
+
+            {asaasEventLogs.length === 0 ? (
+              <div className="text-center py-8 text-zinc-400 text-xs">
+                Nenhum evento registrado ainda na tabela <code>asaas_event_log</code>.
+                Execute uma simulação ou aguarde um webhook do Sandbox.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+                    <tr>
+                      <th className="py-2.5 px-3">Data / Hora</th>
+                      <th className="py-2.5 px-3">Evento</th>
+                      <th className="py-2.5 px-3">Event ID</th>
+                      <th className="py-2.5 px-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {asaasEventLogs.map((log: any) => (
+                      <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                        <td className="py-2.5 px-3 font-mono text-zinc-500">
+                          {new Date(log.processed_at).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-zinc-800 dark:text-zinc-200">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] ${
+                            log.event_type?.includes('CONFIRMED') || log.event_type?.includes('RECEIVED')
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : log.event_type?.includes('OVERDUE')
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}>
+                            {log.event_type || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-zinc-400 truncate max-w-xs">
+                          {log.event_id}
+                        </td>
+                        <td className="py-2.5 px-3 text-emerald-600 dark:text-emerald-400 font-bold">
+                          Processado
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
