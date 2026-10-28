@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const getAsaasBaseUrl = (env?: string) => {
   const isProd = (env || '').toLowerCase() === 'production';
-  return isProd ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3';
+  return isProd ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
 };
 
 serve(async (req: Request) => {
@@ -25,7 +25,7 @@ serve(async (req: Request) => {
     }
     const token = authHeader.replace('Bearer ', '');
 
-    const { orgId, planType, userEmail, customerName, cpfCnpj } = await req.json();
+    const { orgId, planType, userEmail, customerName, cpfCnpj, phone } = await req.json();
 
     if (!orgId || !planType || !userEmail) {
       return new Response(JSON.stringify({ error: 'Missing required parameters (orgId, planType, userEmail)' }), { status: 400, headers: corsHeaders });
@@ -129,7 +129,12 @@ serve(async (req: Request) => {
             notificationDisabled: false
           };
           if (cpfCnpj) {
-            createCustomerPayload.cpfCnpj = cpfCnpj;
+            createCustomerPayload.cpfCnpj = String(cpfCnpj).replace(/\D/g, '');
+          }
+          if (phone) {
+            const cleanPhone = String(phone).replace(/\D/g, '');
+            createCustomerPayload.phone = cleanPhone;
+            createCustomerPayload.mobilePhone = cleanPhone;
           }
 
           const createRes = await fetch(`${baseUrl}/customers`, {

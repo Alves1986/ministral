@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const getAsaasBaseUrl = (env?: string) => {
   const isProd = (env || '').toLowerCase() === 'production';
-  return isProd ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3';
+  return isProd ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
 };
 
 serve(async (req: Request) => {

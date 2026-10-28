@@ -21,9 +21,9 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
     });
 
     it('deve resolver a URL base correta para Sandbox e Produção', () => {
-      expect(getAsaasBaseUrl('sandbox')).toBe('https://sandbox.asaas.com/api/v3');
+      expect(getAsaasBaseUrl('sandbox')).toBe('https://api-sandbox.asaas.com/v3');
       expect(getAsaasBaseUrl('production')).toBe('https://api.asaas.com/v3');
-      expect(getAsaasBaseUrl()).toBe('https://sandbox.asaas.com/api/v3');
+      expect(getAsaasBaseUrl()).toBe('https://api-sandbox.asaas.com/v3');
     });
   });
 

@@ -23,10 +23,13 @@ export const ASAAS_PLANS = {
 
 /**
  * Retorna o endpoint base da API v3 do Asaas conforme o ambiente.
+ * Conforme documentação oficial do Asaas (https://docs.asaas.com/docs/criando-um-cliente):
+ * - Sandbox: https://api-sandbox.asaas.com/v3
+ * - Produção: https://api.asaas.com/v3
  */
 export function getAsaasBaseUrl(env?: string): string {
   const isProd = (env || '').toLowerCase() === 'production';
-  return isProd ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3';
+  return isProd ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
 }
 
 /**
