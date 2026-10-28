@@ -21,6 +21,9 @@ export interface Organization {
   access_locked?: boolean;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  asaas_customer_id?: string;
+  asaas_subscription_id?: string;
+  payment_gateway?: "stripe" | "asaas";
   // AI Quotas & Control
   ai_enabled?: boolean;
   ai_tier?: "free" | "pro" | "enterprise" | "custom";

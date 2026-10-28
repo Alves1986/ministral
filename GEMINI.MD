@@ -5,7 +5,7 @@
 - Stack: React 18 + TypeScript + Vite + TailwindCSS + Supabase + Zustand + TanStack Query
 - Deploy: Vercel. Backend: Supabase Edge Functions (Deno/TypeScript)
 - IA: Gemini API (@google/genai) via `services/aiOrchestrator.ts`
-- Pagamentos: Stripe. Notificações: Web Push + WhatsApp (Baileys/CodeChat)
+- Pagamentos: Stripe e Asaas. Notificações: Web Push + WhatsApp (Baileys/CodeChat)
 
 ## Convenções arquiteturais — NÃO quebre estas regras
 - Chave de escala usa pipe: `ruleId|date|role` (nunca mudar separador)
@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Higienização de mensagens de solicitação de entrada (eliminação de vazamento de JSON `[DADOS_SOLICITACAO]` e repetições) e isolamento estrito de `join_request` entre ministérios com travas contra solicitações duplicadas. Criados testes em `tests/joinRequestIsolation.test.ts` e utilitários em `utils/joinRequestUtils.ts`. 74 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Integração do gateway de pagamentos Asaas (coexistência com Stripe, checkout PIX/Boleto/Cartão, webhooks e idempotência com asaas_event_log). Criados testes em `tests/asaasPayment.test.ts`, utilitários em `utils/asaasUtils.ts` e Edge Functions. 86 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

@@ -11,7 +11,7 @@
 - **Backend**: Supabase (PostgreSQL, Auth, RLS, Storage) + Supabase Edge Functions (Deno/TypeScript).
 - **Hospedagem & Deploy**: Vercel (Frontend/Serverless) + Supabase Cloud.
 - **Inteligência Artificial**: Google Gemini API (`@google/genai`) via `services/aiOrchestrator.ts` e `services/aiScheduleUtils.ts`.
-- **Pagamentos**: Stripe (Checkout, Customer Portal e Webhooks).
+- **Pagamentos**: Stripe e Asaas (PIX, Boleto, Cartão de Crédito, Checkout e Webhooks).
 - **Notificações**: Web Push Notifications (Service Worker + Edge Function `push-notification` + VAPID) e Notificações In-App.
 
 ---
@@ -87,8 +87,13 @@
      - Remove marcadores internos `[DADOS_SOLICITACAO:...]`, marcadores legados `<!--JOIN_DATA:...-->`, payloads JSON soltos e repetições acidentais `(Ministério: X) (Ministério: X)`.
      - Em `services/supabase/ministries.ts`, a mensagem gravada é limpa e elegante ("O voluntário X solicitou entrada no ministério Y"), preservando metadados estruturados exclusivamente na coluna segura `action_link`.
      - Em `services/supabase/notifications.ts` (`fetchNotificationsSQL`, `notifySuperAdmins`) e `components/NotificationCenter.tsx`, aplicada sanitização tanto na montagem de push quanto na renderização de notificações in-app.
+  4. **Integração do Gateway de Pagamentos Asaas (Coexistência com Stripe)**:
+     - Criadas as Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` com suporte a ambiente Sandbox e Produção, autenticação JWT, validação de permissões administrativas e prevenção contra timing attacks (`safeCompare`).
+     - Criada migration SQL `supabase/migrations/20261028_add_asaas_billing.sql` adicionando colunas `asaas_customer_id`, `asaas_subscription_id`, `payment_gateway` e tabela com RLS `asaas_event_log` para idempotência estrita.
+     - Desenvolvido `utils/asaasUtils.ts` e suíte de testes unitários em `tests/asaasPayment.test.ts` (12 testes cobrindo preços Pro/Enterprise, mapeamento de eventos `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `PAYMENT_DELETED`, `SUBSCRIPTION_DELETED`, validação de token e resolução de gateway).
+     - Atualizado `components/PlanScreen.tsx` com seletor visual e intuitivo de gateway (`Stripe` vs `Asaas`), permitindo testar pagamentos via PIX, Boleto e Cartão de Crédito sem alterar o funcionamento do Stripe.
 - **Validação**:
-  - `npm test`: 17 arquivos e 74 testes aprovados (100% no Vitest).
+  - `npm test`: 18 arquivos e 86 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
