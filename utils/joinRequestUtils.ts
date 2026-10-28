@@ -127,3 +127,28 @@ export function validateJoinMinistryEligibility(
 
   return { canJoin: true, reason: 'eligible' };
 }
+
+/**
+ * Remove dados estruturados técnicos (JSON, UUIDs e tags) de mensagens de notificação,
+ * garantindo uma leitura humana limpa e sem vazamento de metadados internos.
+ */
+export function sanitizeNotificationMessage(msg: string): string {
+  if (!msg || typeof msg !== 'string') return '';
+
+  let cleaned = msg
+    // Remove marcadores de dados internos [DADOS_SOLICITACAO:...]
+    .replace(/\[DADOS_SOLICITACAO:[\s\S]*?\]/gi, '')
+    // Remove marcadores legados <!--JOIN_DATA:...-->
+    .replace(/<!--JOIN_DATA:[\s\S]*?-->/gi, '')
+    // Remove payloads JSON crus caso tenham sido injetados
+    .replace(/\{[\s\S]*?"userId"[\s\S]*?\}/gi, '')
+    // Remove quebras de linha múltiplas ou sobras
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\s*\n/g, '\n')
+    // Remove repetições acidentais de "(Ministério: X) (Ministério: X)"
+    .replace(/\(Ministério:\s*([^)]+)\)\s*\(Ministério:\s*\1\)/gi, '(Ministério: $1)')
+    .trim();
+
+  return cleaned;
+}
+

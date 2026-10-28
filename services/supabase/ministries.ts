@@ -363,9 +363,13 @@ export const joinMinistry = async (
       roles: roles || [],
     });
 
+    const userMessage = roles && roles.length > 0
+      ? `O voluntário ${cleanName} solicitou entrada no ministério ${ministryName} para as funções: ${roles.join(', ')}.`
+      : `O voluntário ${cleanName} solicitou entrada no ministério ${ministryName}.`;
+
     const response = await notifySuperAdmins(
       "Solicitação de Entrada",
-      `O usuário ${cleanName} solicitou entrada no ministério ${ministryName}.\n[DADOS_SOLICITACAO:${actionData}]`,
+      userMessage,
       actionData,
       ministryId,
       orgId,

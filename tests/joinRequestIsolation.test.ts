@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { filterNotificationsForUser } from '../utils/notificationFilter';
 import { 
   isNotificationForMinistry, 
-  validateJoinMinistryEligibility 
+  validateJoinMinistryEligibility,
+  sanitizeNotificationMessage
 } from '../utils/joinRequestUtils';
 
 describe('Isolamento de Solicitações de Entrada e Travas (joinRequestIsolation)', () => {
@@ -156,4 +157,30 @@ describe('Isolamento de Solicitações de Entrada e Travas (joinRequestIsolation
       expect(result.reason).toBe('eligible');
     });
   });
+
+  describe('sanitizeNotificationMessage (higienização contra vazamento de JSON e metadados)', () => {
+    it('deve remover marcadores [DADOS_SOLICITACAO:{...}] e manter a mensagem limpa', () => {
+      const dirty = 'O usuário Lucas solicitou entrada no ministério Dança.\n[DADOS_SOLICITACAO:{"userId":"uuid-123","userName":"Lucas","userEmail":"lucas@email.com"}]';
+      const clean = sanitizeNotificationMessage(dirty);
+      expect(clean).toBe('O usuário Lucas solicitou entrada no ministério Dança.');
+      expect(clean).not.toContain('DADOS_SOLICITACAO');
+      expect(clean).not.toContain('uuid-123');
+      expect(clean).not.toContain('lucas@email.com');
+    });
+
+    it('deve remover marcadores legados <!--JOIN_DATA:...--> e payloads JSON soltos', () => {
+      const dirty = 'O voluntário Ana pediu entrada. <!--JOIN_DATA:{"userId":"abc"}--> {"userId":"abc","email":"a@b.com"}';
+      const clean = sanitizeNotificationMessage(dirty);
+      expect(clean).toBe('O voluntário Ana pediu entrada.');
+      expect(clean).not.toContain('JOIN_DATA');
+      expect(clean).not.toContain('userId');
+    });
+
+    it('deve deduplicar repetição de (Ministério: ...)', () => {
+      const duplicated = 'O usuário Marcos entrou no ministério Louvor (Ministério: Louvor) (Ministério: Louvor)';
+      const clean = sanitizeNotificationMessage(duplicated);
+      expect(clean).toBe('O usuário Marcos entrou no ministério Louvor (Ministério: Louvor)');
+    });
+  });
 });
+

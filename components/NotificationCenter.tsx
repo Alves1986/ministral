@@ -7,7 +7,7 @@ import { getSupabase } from '../services/supabase/client';
 import { useToast } from './Toast';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
-import { extractMinistryIdFromNotification } from '../utils/joinRequestUtils';
+import { extractMinistryIdFromNotification, sanitizeNotificationMessage } from '../utils/joinRequestUtils';
 
 interface Props {
   notifications: AppNotification[];
@@ -253,7 +253,7 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                                             </div>
                                             </div>
                                             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                                                {n.message}
+                                                {sanitizeNotificationMessage(n.message)}
                                             </p>
                                             {(() => {
                                                 const titleL = (n.title || '').toLowerCase();

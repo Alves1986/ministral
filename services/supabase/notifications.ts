@@ -1,5 +1,6 @@
 import { getSupabase } from './client';
 import { filterNotificationsForUser } from '../../utils/notificationFilter';
+import { sanitizeNotificationMessage } from '../../utils/joinRequestUtils';
 
 // Cache em memória e localStorage para evitar erros 400 se as migrações SQL ainda não foram executadas no Supabase
 let targetUserIdSupported: boolean = (() => {
@@ -177,7 +178,7 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
                 ministryName: m?.label || (isGlobal ? globalLabel : undefined),
                 organizationId: n.organization_id,
                 title: n.title,
-                message: n.message,
+                message: sanitizeNotificationMessage(n.message),
                 type: n.type,
                 timestamp: n.created_at,
                 read: readSet.has(n.id),
@@ -509,7 +510,7 @@ export const notifySuperAdmins = async (
     );
 
     // ── 6. Monta notificações em memória e insere em lote ─────────────────
-    const cleanRawMessage = stripHtml(message);
+    const cleanRawMessage = sanitizeNotificationMessage(stripHtml(message));
     const notificationsToInsert: any[] = [];
 
     // Tenta resolver o target_user_id a partir do actionLink (se for JSON ou UUID) caso não tenha sido passado
@@ -529,7 +530,9 @@ export const notifySuperAdmins = async (
     for (const [, target] of targetMap.entries()) {
         const { orgId: tOrgId, minId: tMinId } = target;
         const displayLabel = labelById.get(tMinId) || 'Ministério';
-        const finalMessage = `${cleanRawMessage} (Ministério: ${displayLabel})`;
+        const finalMessage = cleanRawMessage.toLowerCase().includes(displayLabel.toLowerCase())
+            ? cleanRawMessage
+            : `${cleanRawMessage} (Ministério: ${displayLabel})`;
 
         notificationsToInsert.push({
             organization_id: tOrgId,

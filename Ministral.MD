@@ -82,8 +82,13 @@
   2. **Trava contra Solicitações Duplicadas ou em Ministérios já Integrados**:
      - Em `services/supabase/ministries.ts` (`joinMinistry`): adicionadas travas de segurança antes de processar o pedido. Se o usuário já fizer parte de `ministry_members` ou `profiles.allowed_ministries`, o sistema sincroniza permissões e retorna aviso amigável sem disparar notificações. Se já houver um pedido pendente no banco para o mesmo usuário e ministério, bloqueia disparos repetidos.
      - Em `fetchUserAllowedMinistries`: unificadas as listas de `ministry_members`, `profiles.allowed_ministries` e `profiles.ministry_id`, evitando que membros com permissões válidas percam visibilidade de ministérios no dropdown ao trocar de contexto.
+  3. **Higienização de Mensagens de Solicitação de Entrada (Vazamento de JSON e Metadados)**:
+     - Implementada a função pura `sanitizeNotificationMessage` em `utils/joinRequestUtils.ts` com testes em `tests/joinRequestIsolation.test.ts`.
+     - Remove marcadores internos `[DADOS_SOLICITACAO:...]`, marcadores legados `<!--JOIN_DATA:...-->`, payloads JSON soltos e repetições acidentais `(Ministério: X) (Ministério: X)`.
+     - Em `services/supabase/ministries.ts`, a mensagem gravada é limpa e elegante ("O voluntário X solicitou entrada no ministério Y"), preservando metadados estruturados exclusivamente na coluna segura `action_link`.
+     - Em `services/supabase/notifications.ts` (`fetchNotificationsSQL`, `notifySuperAdmins`) e `components/NotificationCenter.tsx`, aplicada sanitização tanto na montagem de push quanto na renderização de notificações in-app.
 - **Validação**:
-  - `npm test`: 17 arquivos e 71 testes aprovados (100% no Vitest).
+  - `npm test`: 17 arquivos e 74 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

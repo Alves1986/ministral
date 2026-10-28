@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Isolamento estrito de solicitações de entrada (`join_request`) entre ministérios e travas contra solicitações duplicadas ou em ministérios já integrados. Criado `utils/joinRequestUtils.ts` e testes em `tests/joinRequestIsolation.test.ts`. Corrigidos `fetchNotificationsSQL`, `notifySuperAdmins`, `MembersScreen`, `DashboardLayout`, `NotificationCenter` e `joinMinistry`. 71 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Higienização de mensagens de solicitação de entrada (eliminação de vazamento de JSON `[DADOS_SOLICITACAO]` e repetições) e isolamento estrito de `join_request` entre ministérios com travas contra solicitações duplicadas. Criados testes em `tests/joinRequestIsolation.test.ts` e utilitários em `utils/joinRequestUtils.ts`. 74 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
