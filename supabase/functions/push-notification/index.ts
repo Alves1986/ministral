@@ -161,10 +161,22 @@ Deno.serve(async (req: Request) => {
 
     // Determina os DESTINATÁRIOS:
     // - `userIds` (array) ou `userId` no body: envio DIRECIONADO (ex: avisar voluntário escalado ou solicitação).
-    // - caso contrário: todos os membros do ministério.
+    //   IMPORTANTE: Em requisições direcionadas, NUNCA fazer fallback para broadcast geral se a lista estiver vazia.
+    // - caso contrário: todos os membros do ministério (comunicado geral).
+    const isExplicitRequest = requestData.userId !== undefined || requestData.userIds !== undefined;
     let explicitTarget: string[] = [];
-    if (Array.isArray(userIds) && userIds.length) explicitTarget = userIds.map(String);
-    else if (userId) explicitTarget = [String(userId)];
+    if (Array.isArray(requestData.userIds)) {
+      explicitTarget = requestData.userIds.map(String).map((s: string) => s.trim()).filter(Boolean);
+    } else if (requestData.userId) {
+      explicitTarget = [String(requestData.userId).trim()].filter(Boolean);
+    }
+
+    if (isExplicitRequest && explicitTarget.length === 0) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Nenhum usuário alvo válido especificado para envio direcionado.' 
+      }), { headers: corsHeaders, status: 200 });
+    }
 
     // Busca os usuários vinculados ao ministério:
     // 1. Pela tabela canônica ministry_members
@@ -189,8 +201,14 @@ Deno.serve(async (req: Request) => {
     const isPrivileged = callerProfile?.is_super_admin === true || callerProfile?.is_admin === true || isMinistryAdmin;
 
     let targetUserIds: string[];
-    if (explicitTarget.length > 0) {
+    if (isExplicitRequest) {
       targetUserIds = explicitTarget.filter(id => isPrivileged || ministryUserIds.has(id));
+      if (targetUserIds.length === 0) {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Usuários especificados não pertencem a este ministério.' 
+        }), { headers: corsHeaders, status: 200 });
+      }
     } else {
       targetUserIds = Array.from(ministryUserIds);
     }

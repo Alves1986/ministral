@@ -858,6 +858,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                     });
 
                 await Promise.all(Array.from(byMember.entries()).map(([memberId, items]) => {
+                    if (!memberId || typeof memberId !== 'string' || memberId === 'undefined' || memberId.trim() === '') return;
                     const member = members.find(m => m.id === memberId);
                     return sendNotificationSQL(ministryId, orgId, {
                         title: `📅 Escala de ${monthLabel} liberada`,
@@ -867,6 +868,15 @@ export const ScheduleEditorV2: React.FC<Props> = ({
                         targetUserId: memberId
                     }).catch(() => {});
                 }));
+
+                // Notificação geral para toda a equipe do ministério (visível a todos os voluntários e liderança)
+                await sendNotificationSQL(ministryId, orgId, {
+                    title: `📅 Escala de ${monthLabel} liberada`,
+                    message: `A escala oficial de ${monthLabel} já está liberada e disponível no calendário.`,
+                    type: 'info',
+                    actionLink: 'calendar'
+                }).catch(() => {});
+
                 addToast(`Escala de ${monthLabel} liberada! ${byMember.size} membro(s) notificado(s).`, 'success');
             } else {
                 addToast(`Escala de ${monthLabel} em modo rascunho (oculta do calendário).`, 'info');

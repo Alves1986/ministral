@@ -70,21 +70,18 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 26/10/2026
+- **Data**: 27/10/2026
 - **Realizações**:
-  1. **Exportação de Escala em PDF Antes de Liberar no Menu Superior (Ferramentas)**:
-     - Centralizada a exportação de PDF no menu superior `[Ferramentas]` (`ToolsMenu.tsx`), no topo da Central de Escalas, evitando sobreposição com o grid de células.
-     - Suporte à exportação da escala completa e fichas individuais antes de liberar a escala (modo rascunho), utilizando `rawSchedule` com fallback para `schedule`.
-     - Fechamento automático do menu suspenso após o clique de download.
-  2. **Sanitização de Coral e Tabela de Escala em Página Única no PDF**:
-     - Células com membros de coral agora exportam estritamente `"Coral"` (sem listar nomes e sem contagem extensa), eliminando o esticamento vertical de células.
-     - Redimensionamento inteligente da tabela do PDF em orientação paisagem: cabeçalho compacto (`startY ≈ 21mm`), cálculo dinâmico de `fontSize`, `cellPadding` vertical/horizontal e proteção adaptativa que garante estritamente **1 única página**.
-  3. **Isolamento de Repertório por Culto e Evento no Dashboard**:
+  1. **Isolamento Estrito de Notificações Individuais de Escala (In-App e Web Push)**:
+     - Criado helper puro de segurança `filterNotificationsForUser` em `utils/notificationFilter.ts` com testes em `tests/notificationsRouting.test.ts`. Garante que notificações direcionadas a um membro (`target_user_id`) NUNCA sejam entregues a outros voluntários ou administradores de outros ministérios.
+     - Corrigida a consulta PostgREST em `services/supabase/notifications.ts` (`fetchNotificationsSQL`): para admins, não busca mais indiscriminadamente `ministry_id.in.(idsList)` sem checar `target_user_id.is.null`. Agora combina condições OR seguras (`and(ministry_id.in(...), target_user_id.is.null)` + `target_user_id.eq.${userId}`), além de aplicar sanitização estrita em memória antes do retorno à interface.
+     - Corrigido `sendNotificationSQL`: impedido o fallback de descartar `target_user_id` em caso de erro inicial no banco de dados, eliminando o risco de transformar notificações privadas de escala em broadcast coletivo.
+     - Corrigido `ScheduleEditorV2.tsx`: adicionado envio de notificação geral de broadcast para todo o ministério ao liberar a escala ("Escala liberada no calendário"), mantendo os dias escalados de cada membro em suas notificações individuais protegidas.
+     - Corrigida a Edge Function `supabase/functions/push-notification/index.ts`: requisições com alvo explícito (`userId` ou `userIds`) nunca mais realizam fallback para broadcast a todos os membros caso o alvo seja vazio ou inválido.
+  2. **Isolamento de Repertório por Culto e Evento no Dashboard**:
      - Criado helper utilitário `isRepertoireItemForEvent` em `utils/repertoireUtils.ts` garantindo que cultos diferentes no mesmo dia (ex: Domingo Manhã e Domingo Noite) nunca compartilhem ou misturem seus louvores.
-     - Corrigido `components/ServiceSchedule.tsx` e `components/EventDetailsModal.tsx` para filtrar estritamente pelo `ruleId`, título e horário do culto selecionado, prevenindo vazamento de repertório matutino no culto noturno.
-     - Aprimorado `addToRepertoire` em `services/supabase/repertoire.ts` para resolver com precisão o `eventRuleId` a partir da observação e regras ativas.
 - **Validação**:
-  - `npm test`: 15 arquivos e 60 testes aprovados (100% no Vitest).
+  - `npm test`: 16 arquivos e 63 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

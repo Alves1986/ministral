@@ -1,4 +1,5 @@
 import { getSupabase } from './client';
+import { filterNotificationsForUser } from '../../utils/notificationFilter';
 
 // Cache em memória e localStorage para evitar erros 400 se as migrações SQL ainda não foram executadas no Supabase
 let targetUserIdSupported: boolean = (() => {
@@ -27,27 +28,31 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     const validMinistryIds = (ministryIds || []).filter(Boolean);
     const orConditions: string[] = [];
 
-    // Comunicados Globais / Avisos da Organização (ministry_id nulo)
-    orConditions.push('ministry_id.is.null');
+    // 1. Notificações privadas direcionadas especificamente a este usuário
+    if (userId && targetUserIdSupported) {
+        orConditions.push(`target_user_id.eq.${userId}`);
+    }
 
+    // 2. Comunicados Globais da Organização (sem ministério e sem target específico)
+    if (targetUserIdSupported) {
+        orConditions.push('and(ministry_id.is.null,target_user_id.is.null)');
+    } else {
+        orConditions.push('ministry_id.is.null');
+    }
+
+    // 3. Comunicados dos ministérios do usuário (sem target específico)
     if (validMinistryIds.length > 0) {
         const idsList = validMinistryIds.join(',');
-        if (isAdmin) {
-            orConditions.push(`ministry_id.in.(${idsList})`);
-            orConditions.push(`type.eq.join_request`);
-        } else if (targetUserIdSupported) {
+        if (targetUserIdSupported) {
             orConditions.push(`and(ministry_id.in.(${idsList}),target_user_id.is.null)`);
         } else {
             orConditions.push(`ministry_id.in.(${idsList})`);
         }
-    } else if (!isAdmin && targetUserIdSupported) {
-        orConditions.push(`target_user_id.is.null`);
-    } else if (isAdmin) {
-        orConditions.push(`type.eq.join_request`);
     }
 
-    if (userId && targetUserIdSupported) {
-        orConditions.push(`target_user_id.eq.${userId}`);
+    // 4. Solicitações administrativas de entrada (join_request) para admins
+    if (isAdmin) {
+        orConditions.push(`type.eq.join_request`);
     }
 
     const applyFilters = (q: any) => {
@@ -83,7 +88,6 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
         try {
             // Busca direta compatível: filtra estritamente por organization_id e ministry_id
-            // sem referenciar target_user_id ou embeds que possam não existir no banco
             let retryQuery = sb.from('notifications')
                 .select('*')
                 .eq('organization_id', orgId);
@@ -117,15 +121,9 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         }
     }
 
-    let finalNotifs = globalNotifs || [];
-
-    // Se o usuário não for administrador, filtra notificações restritas aos administradores
-    if (!isAdmin) {
-        finalNotifs = finalNotifs.filter((n: any) => 
-            n.action_link !== 'super-admin-message' && 
-            n.action_link !== 'super-admin-broadcast-admins'
-        );
-    }
+    // 3. Sanitização estrita em memória: isolamento inegociável de notificações individuais
+    // Garante que notificações direcionadas a um membro NUNCA sejam entregues a outros voluntários ou admins
+    let finalNotifs = filterNotificationsForUser(globalNotifs || [], userId, validMinistryIds, isAdmin);
         
     const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
@@ -254,11 +252,11 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
     }
 
     if (insertError) {
-        console.warn("[Notifications] Falha no insert inicial, tentando fallback com schema base:", insertError);
+        console.warn("[Notifications] Falha no insert inicial, tentando fallback seguro:", insertError);
         
-        // Fallback: remove colunas adicionais que possam não existir no schema do Postgres
-        // (ex: target_user_id ou action_link) e tenta inserir com colunas estritamente essenciais
-        const minimalPayload: any = {
+        // Se a notificação for DIRECIONADA a um usuário específico,
+        // NUNCA remova target_user_id para salvá-la como broadcast coletivo, pois vazaria dados privados!
+        const retryPayload: any = {
             organization_id: orgId,
             ministry_id: ministryId,
             title: notification.title,
@@ -266,14 +264,18 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
             type: notification.type || 'info'
         };
 
+        if (notification.targetUserId) {
+            retryPayload.target_user_id = notification.targetUserId;
+        }
+
         try {
-            const { error: retryError } = await sb.from('notifications').insert(minimalPayload);
+            const { error: retryError } = await sb.from('notifications').insert(retryPayload);
             if (!retryError) {
-                console.log("[Notifications] Inserção in-app recuperada com schema básico.");
+                console.log("[Notifications] Inserção in-app recuperada com payload seguro.");
                 insertError = null;
             } else {
                 insertError = retryError;
-                console.warn("[Notifications] Fallback de inserção in-app também falhou:", retryError);
+                console.warn("[Notifications] Fallback de inserção in-app falhou:", retryError);
             }
         } catch (retryEx) {
             insertError = retryEx;

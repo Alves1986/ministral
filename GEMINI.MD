@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Isolamento estrito de repertório por culto e evento no Dashboard (NextEventCard, ServiceSchedule, EventDetailsModal), impedindo que o repertório do culto de domingo de manhã apareça no culto de domingo à noite. Criado utilitário `utils/repertoireUtils.ts` e testes em `tests/repertoireEventIsolation.test.ts`. 60 testes unitários aprovados no Vitest, lint e build OK.
+- Último trabalho: Isolamento estrito de notificações individuais de escala no `ScheduleEditorV2` e `notifications.ts`. Criado utilitário `utils/notificationFilter.ts` e testes em `tests/notificationsRouting.test.ts`. Corrigido o envio e a consulta PostgREST para que notificações com `target_user_id` sejam recebidas exclusivamente pelo voluntário escalado, além de adicionar notificação geral de broadcast para todo o ministério ao liberar a escala. Corrigida Edge Function de push para evitar broadcast acidental em requisições direcionadas. 63 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

@@ -86,3 +86,4 @@ describe('Isolamento de Repertório por Culto e Evento (repertoireEventIsolation
     expect(nightFiltered.map(s => s.id)).toEqual(['3']);
   });
 });
+
