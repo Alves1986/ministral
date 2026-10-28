@@ -3,7 +3,8 @@ import {
   Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, 
   Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, 
   FileText, AlignLeft, ListPlus, Clock, Sun, Moon, ChevronLeft, 
-  ChevronRight, Eye, EyeOff, Sparkles, Check, CheckCircle2
+  ChevronRight, Eye, EyeOff, Sparkles, Check, CheckCircle2,
+  Trophy, Archive, History, ChevronDown, ChevronUp, BarChart3, TrendingUp, Music2
 } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
@@ -17,6 +18,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSystemLogo } from '../utils/branding';
 import { getLocalDateISOString, getMonthName, adjustMonth } from '../utils/dateUtils';
 import { generateEvents } from '../domain/events/generateEvents';
+import { 
+  calculateSongsRanking, 
+  partitionPlaylists, 
+  filterSongRanking, 
+  SongRankingItem 
+} from '../utils/repertoireUtils';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -46,12 +53,18 @@ export const RepertoireScreen: React.FC<Props> = ({
   const { addToast, confirmAction } = useToast();
   const queryClient = useQueryClient();
   
-  // UI State
+  // UI State: Sub-Aba Principal (Playlists vs Ranking de Louvores)
+  const [mainView, setMainView] = useState<'playlists' | 'ranking'>('playlists');
   const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('youtube');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const cultoSelectRef = useRef<HTMLSelectElement>(null);
   const [selectedChordItem, setSelectedChordItem] = useState<RepertoireItem | null>(null);
+
+  // Controle de Arquivo de Playlists Passadas e Ranking
+  const [expandedPastKeys, setExpandedPastKeys] = useState<Set<string>>(new Set());
+  const [rankingSearch, setRankingSearch] = useState('');
+  const [expandedSongHistoryKey, setExpandedSongHistoryKey] = useState<string | null>(null);
   
   // Staging / Draft State
   const [draftItems, setDraftItems] = useState<{title: string, link: string, content?: string}[]>([]);
@@ -737,17 +750,242 @@ export const RepertoireScreen: React.FC<Props> = ({
     });
   }, [repertoire, nextCulto]);
 
-  // Lista filtrada para exibição conforme a aba selecionada
-  const filteredRepertoire = useMemo(() => {
-    if (playlistFilter === 'upcoming') {
-      // Mostra os próximos cultos e cultos vigentes do mês atual; cultos anteriores de outros meses são filtrados
-      return groupedRepertoire.filter(g => !g.isPast || g.date.startsWith(viewMonth));
-    }
-    if (playlistFilter === 'past') {
-      return groupedRepertoire.filter(g => g.isPast);
-    }
-    return groupedRepertoire;
-  }, [groupedRepertoire, playlistFilter, viewMonth]);
+  // Particionamento determinístico das playlists (Próximo Culto em Destaque, Futuras e Passadas Arquivadas)
+  const { nextPlaylist, upcomingPlaylists, pastPlaylists } = useMemo(() => {
+    return partitionPlaylists(groupedRepertoire);
+  }, [groupedRepertoire]);
+
+  // Contabilização e Ranking Histórico de Louvores Escolhidos
+  const songsRanking = useMemo(() => {
+    return calculateSongsRanking(repertoire);
+  }, [repertoire]);
+
+  const filteredRanking = useMemo(() => {
+    return filterSongRanking(songsRanking, rankingSearch);
+  }, [songsRanking, rankingSearch]);
+
+  const totalSongPlays = repertoire.length;
+  const topSong = songsRanking[0] || null;
+
+  const togglePastCulto = (groupKey: string) => {
+    setExpandedPastKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  const handleExpandAllPast = () => {
+    setExpandedPastKeys(new Set(pastPlaylists.map(p => p.groupKey)));
+  };
+
+  const handleCollapseAllPast = () => {
+    setExpandedPastKeys(new Set());
+  };
+
+  const handleAddFromRankingToDraft = (song: SongRankingItem) => {
+    const existingLink = song.links[0] || '';
+    setDraftItems(prev => [...prev, {
+      title: song.displayTitle,
+      link: existingLink,
+      content: song.content
+    }]);
+    addToast(`"${song.displayTitle}" adicionada ao rascunho da playlist!`, "success");
+    setMainView('playlists');
+  };
+
+  const renderPlaylistCard = (group: typeof groupedRepertoire[0], isHighlight = false, isCollapsible = false) => {
+    const [y, m, d] = (group.date || '').split('-');
+    const isMorning = group.cultoTitle.toLowerCase().includes('manh');
+    const isNight = group.cultoTitle.toLowerCase().includes('noite');
+    const isExpanded = !isCollapsible || expandedPastKeys.has(group.groupKey);
+
+    return (
+      <div 
+        key={group.groupKey} 
+        className={`animate-slide-up transition-all ${
+          isHighlight 
+            ? 'p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-secondary/15 via-secondary/5 to-white dark:to-zinc-800 border-2 border-secondary shadow-lg shadow-secondary/15 ring-2 ring-secondary/20' 
+            : isCollapsible
+              ? 'p-3 rounded-xl bg-zinc-50/90 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 shadow-xs'
+              : 'p-1 rounded-2xl'
+        }`}
+      >
+        <div 
+          onClick={isCollapsible ? () => togglePastCulto(group.groupKey) : undefined}
+          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 pb-2 ${
+            isCollapsible ? 'cursor-pointer select-none hover:opacity-90' : 'border-b border-zinc-100 dark:border-zinc-700'
+          }`}
+        >
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className={`p-2.5 rounded-xl flex items-center justify-center shadow-xs shrink-0 ${
+              isHighlight 
+                ? 'bg-secondary text-white shadow-md shadow-secondary/30' 
+                : isMorning 
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-700/40' 
+                  : isNight 
+                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-700/40' 
+                    : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200'
+            }`}>
+              {isHighlight ? <Sparkles size={20} className="animate-pulse" /> : isMorning ? <Sun size={18} /> : isNight ? <Moon size={18} /> : <Calendar size={18} />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={`font-extrabold ${isHighlight ? 'text-lg sm:text-xl text-zinc-900 dark:text-white' : 'text-base text-zinc-800 dark:text-zinc-100'}`}>
+                  {group.cultoTitle}
+                </h3>
+                {isHighlight && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-secondary text-white shadow-xs">
+                    ⭐ PRÓXIMO CULTO
+                  </span>
+                )}
+                {group.isPast && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                    ⏳ Realizado
+                  </span>
+                )}
+                {group.cultoTime && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200/60 dark:border-zinc-600">
+                    <Clock size={11} /> {group.cultoTime}
+                  </span>
+                )}
+                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-700">
+                  {d}/{m}/{y}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200/60 dark:border-zinc-700">
+              {group.items.length} {group.items.length === 1 ? 'louvor' : 'louvores'}
+            </span>
+            {isCollapsible && (
+              <button 
+                type="button" 
+                aria-label={isExpanded ? 'Recolher louvores' : 'Ver louvores'}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+              >
+                {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className={`mt-3 rounded-xl border overflow-hidden shadow-sm ${
+            isHighlight 
+              ? 'bg-white dark:bg-zinc-800 border-secondary/30' 
+              : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700'
+          }`}>
+            {group.items.map((item, idx) => (
+              <div 
+                key={item.id} 
+                className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${
+                  idx !== group.items.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''
+                }`}
+              >
+                {item.link ? (
+                  <a 
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer group/song"
+                    title="Abrir no YouTube / Link"
+                  >
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/song:scale-105 ${
+                      item.link?.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : 
+                      item.link?.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 
+                      'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                    }`}>
+                      {item.link?.includes('youtu') ? <Youtube size={20}/> : (item.link?.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2 group-hover/song:text-red-600 dark:group-hover/song:text-red-400 transition-colors">
+                        {item.title}
+                      </h4>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
+                        {item.isFromWorship ? (
+                          <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                            <Music size={10} /> Louvor
+                          </span>
+                        ) : (
+                          <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                        )}
+                        {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
+                        {item.content && (
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedChordItem(item);
+                            }}
+                            className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
+                            title="Ver cifra"
+                          >
+                            CIFRA
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                      {item.content ? <FileText size={20}/> : <Music size={20} />}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
+                        {item.isFromWorship ? (
+                          <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                            <Music size={10} /> Louvor
+                          </span>
+                        ) : (
+                          <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
+                        )}
+                        {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
+                        {item.content && (
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedChordItem(item);
+                            }}
+                            className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
+                            title="Ver cifra"
+                          >
+                            CIFRA
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {item.link && (
+                    <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Abrir no YouTube">
+                      <ExternalLink size={18} />
+                    </a>
+                  )}
+                  {mode === 'manage' && (
+                    <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir música">
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
@@ -804,592 +1042,692 @@ export const RepertoireScreen: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Banner de Destaque: PRÓXIMO CULTO DA AGENDA SEMPRE */}
-      {nextCulto && (
-        <div className="p-4 bg-gradient-to-r from-secondary/15 via-secondary/5 to-transparent border border-secondary/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-secondary text-white flex items-center justify-center font-bold shadow-md shadow-secondary/25 shrink-0">
-              <Sparkles size={22} className="animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black tracking-wider uppercase bg-secondary text-white px-2 py-0.5 rounded-full shadow-xs">
-                  ⭐ Próximo Culto da Agenda
-                </span>
-                <span className="text-xs font-bold text-secondary capitalize">
-                  {nextCulto.weekdayFull}
-                </span>
+      {/* Sub-Abas de Navegação: Playlists de Culto vs Ranking de Louvores */}
+      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-700 pb-2">
+        <button
+          type="button"
+          onClick={() => setMainView('playlists')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            mainView === 'playlists'
+              ? 'bg-secondary text-white shadow-md shadow-secondary/25'
+              : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          }`}
+        >
+          <ListMusic size={16} />
+          <span>Playlists de Culto</span>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+            mainView === 'playlists' ? 'bg-white/20 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+          }`}>
+            {groupedRepertoire.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainView('ranking')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            mainView === 'ranking'
+              ? 'bg-secondary text-white shadow-md shadow-secondary/25'
+              : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          }`}
+        >
+          <Trophy size={16} />
+          <span>Ranking de Louvores</span>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+            mainView === 'ranking' ? 'bg-white/20 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+          }`}>
+            {songsRanking.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Visão de Playlists */}
+      {mainView === 'playlists' && (
+        <div className="space-y-6">
+          {/* Banner de Destaque: PRÓXIMO CULTO DA AGENDA SEMPRE */}
+          {nextCulto && (
+            <div className="p-4 bg-gradient-to-r from-secondary/15 via-secondary/5 to-transparent border border-secondary/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-secondary text-white flex items-center justify-center font-bold shadow-md shadow-secondary/25 shrink-0">
+                  <Sparkles size={22} className="animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black tracking-wider uppercase bg-secondary text-white px-2 py-0.5 rounded-full shadow-xs">
+                      ⭐ Próximo Culto da Agenda
+                    </span>
+                    <span className="text-xs font-bold text-secondary capitalize">
+                      {nextCulto.weekdayFull}
+                    </span>
+                  </div>
+                  <h3 className="font-extrabold text-base text-zinc-900 dark:text-white mt-0.5">
+                    {nextCulto.title}
+                  </h3>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 mt-0.5">
+                    <Clock size={12} className="text-secondary" />
+                    <span>{nextCulto.dateDisplay} às {nextCulto.time}</span>
+                  </p>
+                </div>
               </div>
-              <h3 className="font-extrabold text-base text-zinc-900 dark:text-white mt-0.5">
-                {nextCulto.title}
-              </h3>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 mt-0.5">
-                <Clock size={12} className="text-secondary" />
-                <span>{nextCulto.dateDisplay} às {nextCulto.time}</span>
-              </p>
+
+              {mode === 'manage' && (
+                <button
+                  onClick={() => handleSelectCulto(nextCulto)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shrink-0 shadow-md ${selectedCultoKey === nextCulto.key ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20' : 'bg-secondary hover:bg-secondaryHover text-white shadow-secondary/25 active:scale-95'}`}
+                >
+                  {selectedCultoKey === nextCulto.key ? <><Check size={14} /> Culto Selecionado</> : 'Selecionar Próximo Culto'}
+                </button>
+              )}
             </div>
-          </div>
+          )}
 
           {mode === 'manage' && (
-            <button
-              onClick={() => handleSelectCulto(nextCulto)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shrink-0 shadow-md ${selectedCultoKey === nextCulto.key ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20' : 'bg-secondary hover:bg-secondaryHover text-white shadow-secondary/25 active:scale-95'}`}
-            >
-              {selectedCultoKey === nextCulto.key ? <><Check size={14} /> Culto Selecionado</> : 'Selecionar Próximo Culto'}
-            </button>
+              <div className="flex flex-col lg:flex-row gap-6">
+                  <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in w-full overflow-hidden">
+                      
+                      {/* Tabs de Fontes de Músicas - Apenas YouTube ativo conforme solicitado */}
+                      <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
+                          <button onClick={() => setActiveTab('youtube')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10">
+                              <Youtube size={14}/> YouTube
+                          </button>
+                      </div>
+
+                      {activeTab === 'youtube' && (
+                          <div className="space-y-4 animate-fade-in">
+                              <div className="relative">
+                                  <input 
+                                      type="text" 
+                                      placeholder="Pesquisar louvor no YouTube (ex: Bondade de Deus)..." 
+                                      value={youtubeQuery} 
+                                      onChange={e => setYoutubeQuery(e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()}
+                                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 pl-10 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+                                  />
+                                  <Search className="absolute left-3.5 top-3.5 text-zinc-400" size={16}/>
+                                  <button 
+                                      onClick={handleYouTubeSearch} 
+                                      disabled={youtubeLoading || !youtubeQuery.trim()} 
+                                      className="absolute right-2 top-2 bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all disabled:opacity-50"
+                                  >
+                                      {youtubeLoading ? <Loader2 className="animate-spin" size={14}/> : 'Buscar'}
+                                  </button>
+                              </div>
+
+                              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                                  {youtubeResults.map(item => (
+                                      <div key={item.id} className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-900/40 hover:bg-red-50/50 dark:hover:bg-red-900/10 rounded-xl border border-zinc-200/60 dark:border-zinc-800 transition-all">
+                                          <div className="flex items-center gap-3 overflow-hidden flex-1 mr-2">
+                                              {item.thumbnail ? (
+                                                  <img src={item.thumbnail} alt="" className="w-12 h-9 object-cover rounded-md shrink-0 shadow-xs"/>
+                                              ) : (
+                                                  <div className="w-12 h-9 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center rounded-md shrink-0">
+                                                      <Youtube size={16}/>
+                                                  </div>
+                                              )}
+                                              <div className="min-w-0">
+                                                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{item.title}</p>
+                                                  <p className="text-[10px] text-zinc-400 truncate">{item.channelTitle || 'YouTube'}</p>
+                                              </div>
+                                          </div>
+                                          <button 
+                                              onClick={() => handleAddToDraft(item.title, item.link)}
+                                              className="bg-red-500/10 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg text-xs font-bold transition-all shrink-0"
+                                              title="Adicionar à playlist"
+                                          >
+                                              <Plus size={16}/>
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Staging / Rascunho da Playlist */}
+                  <div className="w-full lg:w-80 bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col justify-between shrink-0">
+                      <div>
+                          <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-200 dark:border-zinc-700">
+                              <h4 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                                  <ListPlus size={16} className="text-secondary" />
+                                  <span>Playlist em Montagem</span>
+                              </h4>
+                              <span className="text-[10px] font-bold bg-secondary/15 text-secondary px-2 py-0.5 rounded-full">
+                                  {draftItems.length} {draftItems.length === 1 ? 'música' : 'músicas'}
+                              </span>
+                          </div>
+
+                          <div className="mb-3">
+                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">
+                                  Culto da Agenda
+                              </label>
+                              <select
+                                  ref={cultoSelectRef}
+                                  value={selectedCultoKey}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === 'custom') {
+                                      setSelectedCultoKey('custom');
+                                      localStorage.setItem('repertoire_draft_culto_key', 'custom');
+                                    } else {
+                                      const c = allCalendarCultos.find(item => item.key === val);
+                                      if (c) handleSelectCulto(c);
+                                    }
+                                  }}
+                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
+                              >
+                                  <option value="">Selecione o Culto...</option>
+
+                                  {/* Próximo Culto da Agenda Sempre no Topo */}
+                                  {nextCulto && (
+                                      <optgroup label="⭐ Próximo Culto da Agenda">
+                                          <option value={nextCulto.key}>
+                                              ⭐ [PRÓXIMO] {nextCulto.weekdayFull}, {nextCulto.dateDisplay} às {nextCulto.time} - {nextCulto.title}
+                                          </option>
+                                      </optgroup>
+                                  )}
+
+                                  {/* Cultos Agendados do Mês Vigente */}
+                                  {upcomingMonthCultos.filter(c => !nextCulto || c.key !== nextCulto.key).length > 0 && (
+                                      <optgroup label={`📅 Cultos Agendados de ${getMonthName(viewMonth)}`}>
+                                          {upcomingMonthCultos
+                                              .filter(c => !nextCulto || c.key !== nextCulto.key)
+                                              .map(c => (
+                                                  <option key={c.key} value={c.key}>
+                                                      {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title}
+                                                  </option>
+                                              ))}
+                                      </optgroup>
+                                  )}
+
+                                  {/* Cultos Anteriores */}
+                                  {showPastCultos && pastMonthCultos.length > 0 && (
+                                      <optgroup label="⏳ Cultos Anteriores do Mês (Já Realizados)">
+                                          {pastMonthCultos.map(c => (
+                                              <option key={c.key} value={c.key} className="text-zinc-400">
+                                                  ⏳ {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title} (Realizado)
+                                              </option>
+                                          ))}
+                                      </optgroup>
+                                  )}
+
+                                  <optgroup label="Outro">
+                                      <option value="custom">✏️ Culto Avulso / Extra (Data personalizada)</option>
+                                  </optgroup>
+                              </select>
+
+                              {pastMonthCultos.length > 0 && (
+                                  <div className="mt-1.5 flex justify-end">
+                                      <button
+                                          type="button"
+                                          onClick={() => setShowPastCultos(prev => !prev)}
+                                          className="text-[10px] text-zinc-500 hover:text-secondary flex items-center gap-1 transition-colors"
+                                      >
+                                          {showPastCultos ? <EyeOff size={11} /> : <Eye size={11} />}
+                                          <span>{showPastCultos ? 'Ocultar cultos anteriores' : `Ver cultos anteriores (${pastMonthCultos.length})`}</span>
+                                      </button>
+                                  </div>
+                              )}
+
+                              {selectedCultoKey === 'custom' && (
+                                  <div className="mt-3 space-y-2 p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
+                                      <div>
+                                          <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
+                                          <input
+                                              type="text"
+                                              placeholder="Ex: Culto de Vigília, Ensaio Geral..."
+                                              value={customCultoTitle}
+                                              onChange={e => handleCustomCultoChange(e.target.value)}
+                                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                              autoFocus
+                                          />
+                                      </div>
+                                      <div>
+                                          <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data</label>
+                                          <input
+                                              ref={dateInputRef}
+                                              type="date"
+                                              value={date}
+                                              onChange={e => handleDateChange(e.target.value)}
+                                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                          />
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* Prévia do culto selecionado */}
+                          {date && selectedCultoInfo.title && (
+                              <div className="mb-4 p-3 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs space-y-1">
+                                  <div className="flex items-center justify-between text-secondary">
+                                      <span className="font-extrabold truncate text-sm flex items-center gap-1.5">
+                                          {selectedCultoInfo.title.toLowerCase().includes('manh') ? <Sun size={15}/> : selectedCultoInfo.title.toLowerCase().includes('noite') ? <Moon size={15}/> : <Music size={15}/>}
+                                          {selectedCultoInfo.title}
+                                      </span>
+                                      {selectedCultoInfo.time && (
+                                          <span className="font-mono text-[11px] font-bold bg-white/70 dark:bg-zinc-800/80 px-2 py-0.5 rounded shadow-xs">
+                                              {selectedCultoInfo.time}
+                                          </span>
+                                      )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300 flex-wrap">
+                                      <span className="font-semibold">{date.split('-').reverse().join('/')}</span>
+                                      {selectedCultoInfo.culto?.isNext && (
+                                          <span className="text-[10px] font-black text-secondary bg-secondary/15 px-1.5 py-0.2 rounded-full">
+                                              ⭐ PRÓXIMO CULTO
+                                          </span>
+                                      )}
+                                      {selectedCultoInfo.culto?.isPast && (
+                                          <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full">
+                                              ⏳ Culto Realizado
+                                          </span>
+                                      )}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Lista de músicas em rascunho */}
+                          {draftItems.length === 0 ? (
+                              <div className="py-7 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
+                                  <p className="text-xs">Nenhuma música selecionada.</p>
+                              </div>
+                          ) : (
+                              <div className="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                                  {draftItems.map((item, idx) => (
+                                      <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
+                                          <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">
+                                              {item.title}
+                                          </span>
+                                          <button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1 transition-colors">
+                                              <X size={14}/>
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+
+                          <button 
+                              onClick={handleCommitDraft} 
+                              disabled={isSubmitting || draftItems.length === 0} 
+                              className="w-full bg-secondary hover:bg-secondaryHover text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                          >
+                              {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                              {isSubmitting ? 'Salvando...' : `Salvar no Repertório (${draftItems.length})`}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* 1. SEÇÃO DE DESTAQUE: PLAYLIST DO PRÓXIMO CULTO */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-700 pb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-secondary" />
+                <h3 className="text-base font-extrabold text-zinc-900 dark:text-white">
+                  Playlist em Destaque (Próximo Culto)
+                </h3>
+              </div>
+              {nextPlaylist && (
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-secondary/15 text-secondary">
+                  ⭐ Destaque Oficial
+                </span>
+              )}
+            </div>
+
+            {nextPlaylist ? (
+              renderPlaylistCard(nextPlaylist, true, false)
+            ) : (
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-secondary/15 via-secondary/5 to-transparent border-2 border-dashed border-secondary/40 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center shrink-0 shadow-xs">
+                    <Music2 size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black tracking-wider uppercase bg-secondary text-white px-2 py-0.5 rounded-full">
+                      ⭐ Próximo Culto da Agenda
+                    </span>
+                    <h4 className="text-base font-bold text-zinc-800 dark:text-zinc-100 mt-1">
+                      {nextCulto ? `${nextCulto.title} (${nextCulto.dateDisplay} às ${nextCulto.time})` : 'Próximo culto da agenda'}
+                    </h4>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      A playlist para este culto ainda não foi publicada pela equipe de louvor.
+                    </p>
+                  </div>
+                </div>
+                {mode === 'manage' && nextCulto && (
+                  <button
+                    onClick={() => handleSelectCulto(nextCulto)}
+                    className="px-4 py-2 bg-secondary hover:bg-secondaryHover text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-secondary/20 flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus size={14} /> Montar Playlist do Próximo Culto
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 2. OUTRAS PLAYLISTS FUTURAS (SE HOUVER) */}
+          {upcomingPlaylists.length > 0 && (
+            <div className="space-y-4 pt-4">
+              <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-700 pb-2">
+                <Calendar size={18} className="text-secondary" />
+                <h3 className="text-base font-bold text-zinc-800 dark:text-white">
+                  Outras Playlists Agendadas ({upcomingPlaylists.length})
+                </h3>
+              </div>
+              <div className="space-y-4">
+                {upcomingPlaylists.map(g => renderPlaylistCard(g, false, false))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. ARMAZENAMENTO DE PLAYLISTS QUE JÁ PASSARAM (HISTÓRICO ACORDEÃO) */}
+          {pastPlaylists.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-xl">
+                    <Archive size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                      Histórico de Playlists Anteriores
+                      <span className="text-xs font-semibold px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-full border border-zinc-200 dark:border-zinc-700">
+                        {pastPlaylists.length} {pastPlaylists.length === 1 ? 'culto realizado' : 'cultos realizados'}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Playlists de cultos já realizados mantidas de forma compacta. Clique em qualquer culto para abrir ou recolher.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleExpandAllPast}
+                    className="text-xs font-bold text-secondary hover:underline px-2 py-1"
+                  >
+                    Expandir todos
+                  </button>
+                  <span className="text-zinc-300 dark:text-zinc-600">•</span>
+                  <button
+                    type="button"
+                    onClick={handleCollapseAllPast}
+                    className="text-xs font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1"
+                  >
+                    Recolher todos
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {pastPlaylists.map(g => renderPlaylistCard(g, false, true))}
+              </div>
+            </div>
+          )}
+
+          {groupedRepertoire.length === 0 && (
+            <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+              <Music className="mx-auto mb-3 opacity-20" size={48}/>
+              <p>Nenhuma playlist encontrada no repertório.</p>
+            </div>
           )}
         </div>
       )}
 
-      {mode === 'manage' && (
-          <div className="flex flex-col lg:flex-row gap-6">
-              <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in w-full overflow-hidden">
-                  
-                  {/* Tabs de Fontes de Músicas - Apenas YouTube ativo conforme solicitado */}
-                  <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
-                      <button onClick={() => setActiveTab('youtube')} className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap text-red-500 border-red-500 bg-red-50 dark:bg-red-900/10">
-                          <Youtube size={14}/> YouTube
-                      </button>
-                      {/* As opções Cifras / Letras, Spotify e Manual foram ocultadas conforme solicitado pelo usuário */}
-                  </div>
-
-                  {activeTab === 'spotify' && (
-                      <div className="space-y-4 animate-fade-in">
-                          {isSpotifyLoggedIn ? (
-                              <div className="flex items-center justify-between p-3.5 bg-green-500/10 dark:bg-green-500/5 border border-green-500/25 dark:border-green-500/10 rounded-xl">
-                                  <div className="flex items-center gap-3 overflow-hidden">
-                                      {spotifyUser?.images?.[0]?.url ? (
-                                          <img src={spotifyUser.images[0].url} className="w-9 h-9 rounded-full object-cover shadow-sm border border-green-500/20 shrink-0" referrerPolicy="no-referrer" />
-                                      ) : (
-                                          <div className="w-9 h-9 rounded-full bg-[#1DB954] text-white flex items-center justify-center font-bold text-sm shrink-0">
-                                              {spotifyUser?.display_name?.[0]?.toUpperCase() || 'S'}
-                                          </div>
-                                      )}
-                                      <div className="min-w-0">
-                                          <span className="inline-flex items-center gap-1.5 text-[10px] font-black tracking-wider text-green-600 dark:text-green-400 uppercase">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Spotify Conectado
-                                          </span>
-                                          <p className="text-sm font-bold text-zinc-800 dark:text-white truncate leading-tight">{spotifyUser?.display_name || 'Sua Conta Spotify'}</p>
-                                      </div>
-                                  </div>
-                                  <button 
-                                      onClick={() => {
-                                          logoutSpotify();
-                                          setIsSpotifyLoggedIn(false);
-                                          setSpotifyUser(null);
-                                          setUserPlaylists([]);
-                                          setPlaylistTracks([]);
-                                          setSelectedPlaylist(null);
-                                          localStorage.removeItem('spotify_just_connected');
-                                          localStorage.removeItem('spotify_login_origin_tab');
-                                          addToast("Desconectado do Spotify com sucesso.", "info");
-                                      }} 
-                                      className="text-xs text-red-500 font-bold px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-all shrink-0 active:scale-95"
-                                  >
-                                      Desconectar
-                                  </button>
-                              </div>
-                          ) : (
-                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-700/60 rounded-xl">
-                                  <div className="space-y-1">
-                                      <h4 className="text-xs font-black tracking-wider text-[#1DB954] uppercase flex items-center gap-1.5">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-ping" /> Desconectado (Modo Público Ativo)
-                                      </h4>
-                                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal max-w-md">
-                                          Você pode buscar músicas públicas de imediato. Conecte sua conta do Spotify se quiser sincronizar e adicionar músicas de suas <strong>Playlists particulares</strong>.
-                                      </p>
-                                  </div>
-                                  <button 
-                                      onClick={handleSpotifyLogin} 
-                                      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#1DB954] hover:bg-[#1ed760] active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-all shrink-0 shadow-md shadow-[#1DB954]/15"
-                                  >
-                                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.565.387-.86.207-2.377-1.454-5.37-1.782-8.892-.98-.336.075-.668-.135-.744-.47-.077-.336.135-.668.47-.743 3.856-.88 7.15-.502 9.822 1.13.295.178.387.563.204.856zm1.225-2.72c-.227.367-.707.487-1.074.26-2.72-1.672-6.87-2.157-10.075-1.182-.413.125-.847-.107-.972-.52-.125-.413.107-.847.52-.972 3.666-1.112 8.232-.574 11.34 1.334.368.228.488.708.26 1.08zm.105-2.833C14.492 8.89 8.784 8.7 5.467 9.707a1 1 0 01-.577-1.915c3.81-1.155 10.12-.93 14.07 1.417a1 1 0 01-1.042 1.708z"/></svg>
-                                      Conectar Spotify
-                                  </button>
-                              </div>
-                          )}
-
-                          <div className="flex gap-2">
-                              <input type="text" placeholder="Digite música ou artista..." value={spotifyQuery} onChange={e => setSpotifyQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100" />
-                              <button onClick={handleSpotifySearch} disabled={spotifyLoading} className="bg-secondary hover:bg-secondaryHover text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{spotifyLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
-                          </div>
-                          {spotifyResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{spotifyResults.map(track => (<div key={track.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 overflow-hidden"><img src={track.album.images[2]?.url || track.album.images[0]?.url} className="w-10 h-10 rounded shadow-sm shrink-0" /><div className="min-w-0"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{track.name}</p><p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p></div></div><button onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-secondary/10 text-secondary hover:bg-secondary/20 flex items-center gap-1"><Plus size={14}/> Add</button></div>))}</div>}
-                      </div>
-                  )}
-
-                  {activeTab === 'youtube' && (
-                      <div className="space-y-4 animate-fade-in">
-                          <div className="flex gap-2">
-                              <input 
-                                  type="text" 
-                                  placeholder="Cole a URL da Playlist, do Vídeo ou busque por música..." 
-                                  value={youtubeQuery} 
-                                  onChange={e => setYoutubeQuery(e.target.value)} 
-                                  onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()} 
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" 
-                              />
-                              <button 
-                                  onClick={handleYouTubeSearch} 
-                                  disabled={youtubeLoading} 
-                                  className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50 transition-colors shrink-0"
-                                  title="Buscar no YouTube"
-                              >
-                                  {youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
-                              </button>
-                          </div>
-
-                          {youtubeResults.length > 0 && (
-                              <div className="flex items-center justify-between p-2.5 bg-red-500/10 dark:bg-red-900/20 border border-red-500/20 rounded-xl">
-                                  <div className="flex items-center gap-2 text-xs font-bold text-red-700 dark:text-red-400">
-                                      <Youtube size={16} />
-                                      <span>
-                                          {extractPlaylistId(youtubeQuery) 
-                                              ? `Playlist: ${youtubeResults.length} louvor(es)` 
-                                              : `${youtubeResults.length} vídeo(s) encontrado(s)`}
-                                      </span>
-                                  </div>
-                                  <button
-                                      onClick={handleAddAllYouTubeToDraft}
-                                      className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-                                  >
-                                      <ListPlus size={14} />
-                                      <span>Adicionar Todas</span>
-                                  </button>
-                              </div>
-                          )}
-
-                          {youtubeResults.length > 0 && (
-                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
-                                  {youtubeResults.map(video => (
-                                      <div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
-                                          <div className="flex items-center gap-3 overflow-hidden w-full">
-                                              <img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" alt={video.title} />
-                                              <div className="min-w-0 flex-1">
-                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>
-                                                      {video.title}
-                                                  </p>
-                                                  {video.channelTitle && (
-                                                      <p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p>
-                                                  )}
-                                              </div>
-                                          </div>
-                                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                              <a 
-                                                  href={video.link} 
-                                                  target="_blank" 
-                                                  rel="noopener noreferrer" 
-                                                  className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                                                  title="Ouvir no YouTube"
-                                              >
-                                                  <ExternalLink size={14} />
-                                              </a>
-                                              <button 
-                                                  onClick={() => handleAddToDraft(video.title, video.link)} 
-                                                  className="text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1"
-                                              >
-                                                  <Plus size={14}/> Add
-                                              </button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-                  )}
-
-                  {activeTab === 'cifra' && (
-                      <div className="space-y-4 animate-fade-in">
-                          <div className="flex gap-2">
-                              <input type="text" placeholder="Música ou Artista..." value={cifraQuery} onChange={e => setCifraQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCifraSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-accent text-zinc-900 dark:text-zinc-100" />
-                              <button onClick={handleCifraSearch} disabled={cifraLoading} className="bg-accent hover:bg-accent/80 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
-                          </div>
-                          {cifraResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{cifraResults.map((result, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 w-full overflow-hidden"><div className="w-10 h-10 rounded bg-accent/10 dark:bg-accent/20 text-accent flex items-center justify-center shrink-0"><span className="font-bold text-xs">{result.key || '?'}</span></div><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p><p className="text-xs text-zinc-500 truncate">{result.artist}</p></div></div><button onClick={() => handleAddVagalumeToDraft(result, idx)} disabled={addingToDraftId === `vagalume-${idx}`} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-accent/10 dark:bg-accent/20 text-accent hover:bg-accent/20 dark:hover:bg-accent/30 flex items-center gap-1 ml-1 disabled:opacity-50">{addingToDraftId === `vagalume-${idx}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14}/>} Add</button></div>))}</div>}
-                      </div>
-                  )}
-
-                  {activeTab === 'playlists' && isSpotifyLoggedIn && (
-                      <div className="animate-fade-in">
-                          {selectedPlaylist ? (
-                              <div>
-                                  <button onClick={() => setSelectedPlaylist(null)} className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 mb-2"><ArrowLeft size={14}/> Voltar</button>
-                                  {isLoadingPlaylists ? <div className="py-8 text-center"><Loader2 className="animate-spin mx-auto text-secondary dark:text-white" /></div> : <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1">{playlistTracks.map((track, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg group"><div className="flex-1 min-w-0 pr-2"><p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{track.name}</p><p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p></div><button onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)} className="text-[10px] font-bold px-2 py-1 rounded transition-colors bg-zinc-200 dark:bg-zinc-700 hover:bg-secondary hover:text-white"><Plus size={12}/></button></div>))}</div>}
-                              </div>
-                          ) : (
-                              <div>
-                                  {isLoadingPlaylists ? <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-secondary dark:text-white"/></div> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">{userPlaylists.map(pl => (<button key={pl.id} onClick={() => handleOpenPlaylist(pl)} className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"><img src={pl.images?.[0]?.url || getSystemLogo('light')} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm bg-zinc-200" /><span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span></button>))}</div>}
-                              </div>
-                          )}
-                      </div>
-                  )}
-
-                  {activeTab === 'manual' && (
-                      <div className="space-y-4 animate-fade-in">
-                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label><input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"/></div>
-                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label><input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"/></div>
-                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Cifra / Letra</label><textarea placeholder="Cole a cifra aqui..." value={content} onChange={e => setContent(e.target.value)} className="w-full h-32 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 resize-none" /></div>
-                          <div className="flex justify-end"><button onClick={() => handleAddToDraft()} className="bg-secondary hover:bg-secondaryHover text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2"><Plus size={16}/> Adicionar</button></div>
-                      </div>
-                  )}
+      {/* Sub-Aba: Ranking de Louvores */}
+      {mainView === 'ranking' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Métricas do Catálogo de Louvores */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs">
+              <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider">Louvores Únicos</span>
+                <Music size={16} className="text-secondary" />
               </div>
+              <p className="text-2xl font-black text-zinc-900 dark:text-white">
+                {songsRanking.length}
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">músicas no catálogo</p>
+            </div>
 
-              {/* Sidebar: Seletor de Culto Real do Calendário & Músicas Selecionadas */}
-              <div className="w-full lg:w-80 bg-zinc-50 dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 h-fit sticky top-4 shadow-sm">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
-                      <ListMusic size={14}/> Músicas Selecionadas
-                  </h3>
-
-                  {/* Campo Selecionar Culto do Calendário */}
-                  <div className="mb-4">
-                      <label className="text-[10px] uppercase text-zinc-500 dark:text-zinc-400 font-bold mb-1 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5"><Calendar size={12} className="text-secondary" /> Culto do Calendário</span>
-                          {selectedCultoInfo.time && (
-                              <span className="text-[10px] font-mono font-bold text-secondary bg-secondary/10 px-1.5 py-0.5 rounded">
-                                  {selectedCultoInfo.time}
-                              </span>
-                          )}
-                      </label>
-                      <select
-                          ref={cultoSelectRef}
-                          value={selectedCultoKey}
-                          onChange={e => {
-                            const val = e.target.value;
-                            if (val === 'custom') {
-                              setSelectedCultoKey('custom');
-                              localStorage.setItem('repertoire_draft_culto_key', 'custom');
-                            } else {
-                              const c = allCalendarCultos.find(item => item.key === val);
-                              if (c) handleSelectCulto(c);
-                            }
-                          }}
-                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
-                      >
-                          <option value="">Selecione o Culto...</option>
-
-                          {/* Próximo Culto da Agenda Sempre no Topo */}
-                          {nextCulto && (
-                              <optgroup label="⭐ Próximo Culto da Agenda">
-                                  <option value={nextCulto.key}>
-                                      ⭐ [PRÓXIMO] {nextCulto.weekdayFull}, {nextCulto.dateDisplay} às {nextCulto.time} - {nextCulto.title}
-                                  </option>
-                              </optgroup>
-                          )}
-
-                          {/* Cultos Agendados do Mês Vigente */}
-                          {upcomingMonthCultos.filter(c => !nextCulto || c.key !== nextCulto.key).length > 0 && (
-                              <optgroup label={`📅 Cultos Agendados de ${getMonthName(viewMonth)}`}>
-                                  {upcomingMonthCultos
-                                      .filter(c => !nextCulto || c.key !== nextCulto.key)
-                                      .map(c => (
-                                          <option key={c.key} value={c.key}>
-                                              {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title}
-                                          </option>
-                                      ))}
-                              </optgroup>
-                          )}
-
-                          {/* Cultos Anteriores (Exibidos apenas se showPastCultos for true, com estilo apagado/dimmed) */}
-                          {showPastCultos && pastMonthCultos.length > 0 && (
-                              <optgroup label="⏳ Cultos Anteriores do Mês (Já Realizados)">
-                                  {pastMonthCultos.map(c => (
-                                      <option key={c.key} value={c.key} className="text-zinc-400">
-                                          ⏳ {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title} (Realizado)
-                                      </option>
-                                  ))}
-                              </optgroup>
-                          )}
-
-                          {/* Opção para culto avulso se necessário */}
-                          <optgroup label="Outro">
-                              <option value="custom">✏️ Culto Avulso / Extra (Data personalizada)</option>
-                          </optgroup>
-                      </select>
-
-                      {/* Toggle para mostrar/ocultar cultos anteriores ("nem mostra" por padrão) */}
-                      {pastMonthCultos.length > 0 && (
-                          <div className="mt-1.5 flex justify-end">
-                              <button
-                                  type="button"
-                                  onClick={() => setShowPastCultos(prev => !prev)}
-                                  className="text-[10px] text-zinc-500 hover:text-secondary flex items-center gap-1 transition-colors"
-                              >
-                                  {showPastCultos ? <EyeOff size={11} /> : <Eye size={11} />}
-                                  <span>{showPastCultos ? 'Ocultar cultos anteriores' : `Ver cultos anteriores (${pastMonthCultos.length})`}</span>
-                              </button>
-                          </div>
-                      )}
-
-                      {/* Se for culto avulso/customizado, exibe os campos de título e data manual */}
-                      {selectedCultoKey === 'custom' && (
-                          <div className="mt-3 space-y-2 p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
-                              <div>
-                                  <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
-                                  <input
-                                      type="text"
-                                      placeholder="Ex: Culto de Vigília, Ensaio Geral..."
-                                      value={customCultoTitle}
-                                      onChange={e => handleCustomCultoChange(e.target.value)}
-                                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                      autoFocus
-                                  />
-                              </div>
-                              <div>
-                                  <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data</label>
-                                  <input
-                                      ref={dateInputRef}
-                                      type="date"
-                                      value={date}
-                                      onChange={e => handleDateChange(e.target.value)}
-                                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                  />
-                              </div>
-                          </div>
-                      )}
-                  </div>
-
-                  {/* Prévia da playlist sendo montada com identificação de próximo culto / realizado */}
-                  {date && selectedCultoInfo.title && (
-                      <div className="mb-4 p-3 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs space-y-1">
-                          <div className="flex items-center justify-between text-secondary">
-                              <span className="font-extrabold truncate text-sm flex items-center gap-1.5">
-                                  {selectedCultoInfo.title.toLowerCase().includes('manh') ? <Sun size={15}/> : selectedCultoInfo.title.toLowerCase().includes('noite') ? <Moon size={15}/> : <Music size={15}/>}
-                                  {selectedCultoInfo.title}
-                              </span>
-                              {selectedCultoInfo.time && (
-                                  <span className="font-mono text-[11px] font-bold bg-white/70 dark:bg-zinc-800/80 px-2 py-0.5 rounded shadow-xs">
-                                      {selectedCultoInfo.time}
-                                  </span>
-                              )}
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300 flex-wrap">
-                              <span className="font-semibold">{date.split('-').reverse().join('/')}</span>
-                              {selectedCultoInfo.culto?.isNext && (
-                                  <span className="text-[10px] font-black text-secondary bg-secondary/15 px-1.5 py-0.2 rounded-full">
-                                      ⭐ PRÓXIMO CULTO
-                                  </span>
-                              )}
-                              {selectedCultoInfo.culto?.isPast && (
-                                  <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full">
-                                      ⏳ Culto Realizado
-                                  </span>
-                              )}
-                          </div>
-                      </div>
-                  )}
-
-                  {/* Lista de músicas em rascunho */}
-                  {draftItems.length === 0 ? (
-                      <div className="py-7 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
-                          <p className="text-xs">Nenhuma música selecionada.</p>
-                      </div>
-                  ) : (
-                      <div className="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scrollbar pr-1">
-                          {draftItems.map((item, idx) => (
-                              <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
-                                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">
-                                      {item.title}
-                                  </span>
-                                  <button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1 transition-colors">
-                                      <X size={14}/>
-                                  </button>
-                              </div>
-                          ))}
-                      </div>
-                  )}
-
-                  <button 
-                      onClick={handleCommitDraft} 
-                      disabled={isSubmitting || draftItems.length === 0} 
-                      className="w-full bg-secondary hover:bg-secondaryHover text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                  >
-                      {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-                      {isSubmitting ? 'Salvando...' : `Salvar no Repertório (${draftItems.length})`}
-                  </button>
+            <div className="p-4 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs">
+              <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider">Ministrações</span>
+                <TrendingUp size={16} className="text-green-500" />
               </div>
+              <p className="text-2xl font-black text-zinc-900 dark:text-white">
+                {totalSongPlays}
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">escolhas em cultos</p>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider">Mais Tocada (#1)</span>
+                <Trophy size={16} className="text-amber-500" />
+              </div>
+              <p className="text-base font-black text-zinc-900 dark:text-white truncate" title={topSong?.displayTitle || '-'}>
+                {topSong?.displayTitle || '-'}
+              </p>
+              <p className="text-[11px] text-secondary font-bold mt-0.5">
+                {topSong ? `${topSong.count} ${topSong.count === 1 ? 'vez escolhida' : 'vezes escolhida'}` : 'Nenhuma'}
+              </p>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider">Última Atualização</span>
+                <Clock size={16} className="text-blue-500" />
+              </div>
+              <p className="text-base font-black text-zinc-900 dark:text-white">
+                {topSong?.lastDate ? topSong.lastDate.split('-').reverse().join('/') : '-'}
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">culto mais recente</p>
+            </div>
           </div>
+
+          {/* Barra de Pesquisa e Filtros do Ranking */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-800 p-3 sm:p-4 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xs">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Buscar louvor pelo título (ex: Bondade de Deus, Porque Ele Vive)..."
+                value={rankingSearch}
+                onChange={e => setRankingSearch(e.target.value)}
+                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 pl-9 pr-8 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+              />
+              <Search className="absolute left-3 top-3 text-zinc-400" size={16} />
+              {rankingSearch && (
+                <button
+                  onClick={() => setRankingSearch('')}
+                  className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 p-0.5"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 self-end sm:self-auto">
+              <BarChart3 size={14} className="text-secondary" />
+              <span>
+                Exibindo <strong className="text-zinc-800 dark:text-zinc-200">{filteredRanking.length}</strong> de {songsRanking.length} louvores
+              </span>
+            </div>
+          </div>
+
+          {/* Lista do Ranking de Músicas */}
+          {filteredRanking.length === 0 ? (
+            <div className="text-center py-14 text-zinc-400 bg-white dark:bg-zinc-800 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700">
+              <Trophy className="mx-auto mb-3 opacity-20" size={48} />
+              <p className="font-semibold text-sm">Nenhum louvor encontrado para a busca.</p>
+              {rankingSearch && (
+                <button
+                  onClick={() => setRankingSearch('')}
+                  className="mt-2 text-xs font-bold text-secondary hover:underline"
+                >
+                  Limpar termo de busca
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredRanking.map((song, index) => {
+                const isFirst = index === 0 && !rankingSearch;
+                const isSecond = index === 1 && !rankingSearch;
+                const isThird = index === 2 && !rankingSearch;
+                const maxCount = topSong?.count || 1;
+                const frequencyPercent = Math.max(8, Math.round((song.count / maxCount) * 100));
+                const isHistoryOpen = expandedSongHistoryKey === song.normalizedTitle;
+                const [y, m, d] = song.lastDate ? song.lastDate.split('-') : ['', '', ''];
+
+                return (
+                  <div
+                    key={song.normalizedTitle}
+                    className={`p-4 rounded-2xl border transition-all animate-slide-up ${
+                      isFirst
+                        ? 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-white dark:to-zinc-800 border-amber-500/40 shadow-md ring-1 ring-amber-500/20'
+                        : isSecond
+                          ? 'bg-zinc-50/80 dark:bg-zinc-800/80 border-zinc-300 dark:border-zinc-700 shadow-xs'
+                          : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700/80 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                        {/* Medalha / Posição no Ranking */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${
+                          isFirst
+                            ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-amber-500/30 ring-2 ring-amber-300'
+                            : isSecond
+                              ? 'bg-gradient-to-br from-zinc-300 to-zinc-400 text-zinc-900 shadow-zinc-400/20'
+                              : isThird
+                                ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-amber-700/20'
+                                : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 font-mono text-xs'
+                        }`}>
+                          {isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : `#${index + 1}`}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-extrabold text-base text-zinc-900 dark:text-white truncate">
+                              {song.displayTitle}
+                            </h4>
+                            {isFirst && (
+                              <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-xs">
+                                Mais Tocada
+                              </span>
+                            )}
+                            {song.key && (
+                              <span className="text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded">
+                                Tom: {song.key}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mt-1 flex-wrap">
+                            <span className="font-semibold text-secondary">
+                              {song.count} {song.count === 1 ? 'vez escolhida' : 'vezes escolhida'}
+                            </span>
+                            <span>•</span>
+                            <span>Última vez em {d}/{m}/{y} ({song.lastCultoTitle})</span>
+                          </div>
+
+                          {/* Barra de Frequência Proporcional */}
+                          <div className="w-full max-w-xs bg-zinc-100 dark:bg-zinc-700 rounded-full h-1.5 mt-2 overflow-hidden">
+                            <div
+                              className={`h-1.5 rounded-full transition-all ${isFirst ? 'bg-amber-500' : 'bg-secondary'}`}
+                              style={{ width: `${frequencyPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação do Louvor */}
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        {song.links[0] && (
+                          <a
+                            href={song.links[0]}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Ouvir no YouTube"
+                          >
+                            <ExternalLink size={16} />
+                          </a>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSongHistoryKey(isHistoryOpen ? null : song.normalizedTitle)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1 ${
+                            isHistoryOpen
+                              ? 'bg-secondary/15 text-secondary border-secondary/30'
+                              : 'bg-zinc-100 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200'
+                          }`}
+                          title="Ver histórico de cultos"
+                        >
+                          <History size={13} />
+                          <span>Histórico ({song.occurrences.length})</span>
+                          {isHistoryOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+
+                        {mode === 'manage' && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddFromRankingToDraft(song)}
+                            className="px-3 py-1.5 bg-secondary hover:bg-secondaryHover text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 active:scale-95"
+                            title="Adicionar à playlist do culto selecionado"
+                          >
+                            <Plus size={14} />
+                            <span className="hidden sm:inline">Adicionar</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Acordeão de Histórico dos Cultos onde a música foi tocada */}
+                    {isHistoryOpen && (
+                      <div className="mt-3 pt-3 border-t border-zinc-200/80 dark:border-zinc-700/80 space-y-2 animate-fade-in">
+                        <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                          Cultos em que "{song.displayTitle}" foi ministrada:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {song.occurrences.map((occ, oIdx) => {
+                            const [oy, om, od] = occ.date.split('-');
+                            return (
+                              <div
+                                key={oIdx}
+                                className="p-2 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-xs flex items-center justify-between"
+                              >
+                                <div>
+                                  <p className="font-bold text-zinc-800 dark:text-zinc-200">{occ.cultoTitle}</p>
+                                  <p className="text-[11px] text-zinc-500">{od}/{om}/{oy} {occ.cultoTime ? `às ${occ.cultoTime}` : ''}</p>
+                                </div>
+                                {occ.link && (
+                                  <a
+                                    href={occ.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-zinc-400 hover:text-red-500 p-1"
+                                    title="Link do culto"
+                                  >
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
-
-      {/* Listagem do Repertório com Filtros e Destaque Visual */}
-      <div className="space-y-6 mt-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-700 pb-3">
-              <div className="flex items-center gap-2">
-                  <ListMusic size={18} className="text-secondary" />
-                  <h3 className="text-base font-bold text-zinc-800 dark:text-white">
-                      Playlists de Culto
-                  </h3>
-              </div>
-
-              {/* Filtro: Próximos & Vigentes, Todos, Anteriores */}
-              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl text-xs">
-                  <button
-                      onClick={() => setPlaylistFilter('upcoming')}
-                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'upcoming' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
-                  >
-                      Próximos & Vigentes
-                  </button>
-                  <button
-                      onClick={() => setPlaylistFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'all' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
-                  >
-                      Todos ({groupedRepertoire.length})
-                  </button>
-                  <button
-                      onClick={() => setPlaylistFilter('past')}
-                      className={`px-3 py-1.5 rounded-lg font-bold transition-all ${playlistFilter === 'past' ? 'bg-white dark:bg-zinc-700 text-secondary shadow-xs' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
-                  >
-                      Anteriores ({groupedRepertoire.filter(g => g.isPast).length})
-                  </button>
-              </div>
-          </div>
-
-          {filteredRepertoire.length === 0 ? (
-              <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                  <Music className="mx-auto mb-3 opacity-20" size={48}/>
-                  <p>Nenhuma playlist encontrada para o filtro selecionado.</p>
-              </div>
-          ) : filteredRepertoire.map(group => {
-              const [y, m, d] = (group.date || '').split('-');
-              const isMorning = group.cultoTitle.toLowerCase().includes('manh');
-              const isNight = group.cultoTitle.toLowerCase().includes('noite');
-
-              return (
-                  <div 
-                      key={group.groupKey} 
-                      className={`animate-slide-up transition-all ${group.isNext ? 'p-1 rounded-2xl ring-2 ring-secondary/40 shadow-md' : ''} ${group.isPast ? 'opacity-65 grayscale-[15%] hover:opacity-100 transition-opacity' : ''}`}
-                  >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 px-1 border-b border-zinc-100 dark:border-zinc-700 pb-2">
-                          <div className="flex items-center gap-3 flex-wrap">
-                              <div className={`p-2 rounded-xl flex items-center justify-center shadow-xs ${group.isNext ? 'bg-secondary text-white shadow-md shadow-secondary/30' : isMorning ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-700/40' : isNight ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-700/40' : 'bg-secondary/10 dark:bg-secondary/20 text-secondary dark:text-white border border-secondary/20'}`}>
-                                  {group.isNext ? <Sparkles size={18} /> : isMorning ? <Sun size={18} /> : isNight ? <Moon size={18} /> : <Calendar size={18} />}
-                              </div>
-                              <div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                      <h3 className="font-bold text-zinc-800 dark:text-zinc-100 text-lg">
-                                          {group.cultoTitle}
-                                      </h3>
-                                      {group.isNext && (
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-secondary text-white shadow-xs">
-                                              ⭐ PRÓXIMO CULTO
-                                          </span>
-                                      )}
-                                      {group.isPast && (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                                              ⏳ Realizado
-                                          </span>
-                                      )}
-                                      {group.cultoTime && (
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-zinc-100 dark:bg-zinc-700/80 text-zinc-700 dark:text-zinc-200 border border-zinc-200/60 dark:border-zinc-600">
-                                              <Clock size={11} /> {group.cultoTime}
-                                          </span>
-                                      )}
-                                      <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-700">
-                                          {d}/{m}/{y}
-                                      </span>
-                                  </div>
-                              </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-zinc-200/60 dark:border-zinc-700">
-                                  {group.items.length} {group.items.length === 1 ? 'louvor' : 'louvores'}
-                              </span>
-                          </div>
-                      </div>
-
-                      <div className={`rounded-xl border overflow-hidden shadow-sm ${group.isNext ? 'bg-white dark:bg-zinc-800 border-secondary/40' : group.isPast ? 'bg-zinc-50/70 dark:bg-zinc-900/40 border-dashed border-zinc-300 dark:border-zinc-700' : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700'}`}>
-                          {group.items.map((item, idx) => (
-                              <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== group.items.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
-                                  {item.link ? (
-                                      <a 
-                                          href={item.link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer group/song"
-                                          title="Abrir no YouTube / Link"
-                                      >
-                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/song:scale-105 ${item.link?.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link?.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
-                                              {item.link?.includes('youtu') ? <Youtube size={20}/> : (item.link?.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
-                                          </div>
-                                          <div className="min-w-0">
-                                              <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2 group-hover/song:text-red-600 dark:group-hover/song:text-red-400 transition-colors">
-                                                  {item.title}
-                                              </h4>
-                                              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
-                                                  {item.isFromWorship ? (
-                                                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
-                                                          <Music size={10} /> Louvor
-                                                      </span>
-                                                  ) : (
-                                                      <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
-                                                  )}
-                                                  {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
-                                                  {item.content && (
-                                                      <button 
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                              e.preventDefault();
-                                                              e.stopPropagation();
-                                                              setSelectedChordItem(item);
-                                                          }}
-                                                          className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
-                                                          title="Ver cifra"
-                                                      >
-                                                          CIFRA
-                                                      </button>
-                                                  )}
-                                              </div>
-                                          </div>
-                                      </a>
-                                  ) : (
-                                      <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1">
-                                          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
-                                              {item.content ? <FileText size={20}/> : <Music size={20} />}
-                                          </div>
-                                          <div className="min-w-0">
-                                              <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
-                                              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap mt-0.5">
-                                                  {item.isFromWorship ? (
-                                                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-black border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
-                                                          <Music size={10} /> Louvor
-                                                      </span>
-                                                  ) : (
-                                                      <span>• Adicionado por {(item.addedBy || 'Admin').split(' ')[0]}</span>
-                                                  )}
-                                                  {item.key && <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-bold">Tom: {item.key}</span>}
-                                                  {item.content && (
-                                                      <button 
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                              e.stopPropagation();
-                                                              setSelectedChordItem(item);
-                                                          }}
-                                                          className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600 transition-colors cursor-pointer"
-                                                          title="Ver cifra"
-                                                      >
-                                                          CIFRA
-                                                      </button>
-                                                  )}
-                                              </div>
-                                          </div>
-                                      </div>
-                                  )}
-                                  <div className="flex items-center gap-2 shrink-0">
-                                      {item.link && (
-                                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Abrir no YouTube">
-                                              <ExternalLink size={18} />
-                                          </a>
-                                      )}
-                                      {mode === 'manage' && (
-                                          <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir música">
-                                              <Trash2 size={18} />
-                                          </button>
-                                      )}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              );
-          })}
-      </div>
 
       {/* Chord Viewer Modal */}
       {selectedChordItem && (

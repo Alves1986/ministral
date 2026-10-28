@@ -216,3 +216,179 @@ export function deduplicatePlaylistNotifications(notifications: AppNotification[
   return result;
 }
 
+// ── Normalização e Ranking de Músicas do Repertório ─────────────────────────
+
+export interface SongOccurrence {
+  id: string;
+  date: string;
+  cultoTitle: string;
+  cultoTime?: string;
+  link?: string;
+  key?: string;
+  content?: string;
+}
+
+export interface SongRankingItem {
+  normalizedTitle: string;
+  displayTitle: string;
+  count: number;
+  lastDate: string;
+  lastCultoTitle: string;
+  lastCultoTime?: string;
+  links: string[];
+  content?: string;
+  key?: string;
+  occurrences: SongOccurrence[];
+}
+
+export function normalizeSongTitle(title?: string | null): string {
+  if (!title) return '';
+  return title
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+export function calculateSongsRanking(items: RepertoireItemLike[]): SongRankingItem[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const map = new Map<string, {
+    normalizedTitle: string;
+    displayTitle: string;
+    count: number;
+    lastDate: string;
+    lastCultoTitle: string;
+    lastCultoTime?: string;
+    links: string[];
+    content?: string;
+    key?: string;
+    occurrences: SongOccurrence[];
+  }>();
+
+  for (const item of items) {
+    if (!item.title) continue;
+    const norm = normalizeSongTitle(item.title);
+    if (!norm) continue;
+
+    const itemDate = item.date ? item.date.slice(0, 10) : '0000-00-00';
+    let cultoTitle = item.eventRuleTitle || '';
+    let cultoTime = item.eventRuleTime || '';
+
+    if (!cultoTitle && item.observation) {
+      const obsMatch = item.observation.match(/^Culto:\s*([^(]+?)(?:\s*\(([^)]+)\))?$/i);
+      if (obsMatch) {
+        cultoTitle = obsMatch[1].trim();
+        if (obsMatch[2]) cultoTime = obsMatch[2].trim();
+      }
+    }
+
+    if (!cultoTitle) {
+      cultoTitle = 'Culto Geral';
+    }
+
+    const occurrence: SongOccurrence = {
+      id: item.id || `${norm}_${itemDate}`,
+      date: itemDate,
+      cultoTitle,
+      cultoTime: cultoTime || undefined,
+      link: item.link || undefined,
+      key: item.key || undefined,
+      content: item.content || undefined
+    };
+
+    if (!map.has(norm)) {
+      map.set(norm, {
+        normalizedTitle: norm,
+        displayTitle: item.title.trim(),
+        count: 1,
+        lastDate: itemDate,
+        lastCultoTitle: cultoTitle,
+        lastCultoTime: cultoTime || undefined,
+        links: item.link ? [item.link] : [],
+        content: item.content || undefined,
+        key: item.key || undefined,
+        occurrences: [occurrence]
+      });
+    } else {
+      const existing = map.get(norm)!;
+      existing.count += 1;
+      existing.occurrences.push(occurrence);
+
+      if (item.link && !existing.links.includes(item.link)) {
+        existing.links.push(item.link);
+      }
+
+      // Se a data deste item for mais recente que lastDate, atualiza displayTitle, lastDate, cultoTitle e links/cifras
+      if (itemDate >= existing.lastDate) {
+        existing.lastDate = itemDate;
+        existing.lastCultoTitle = cultoTitle;
+        existing.lastCultoTime = cultoTime || undefined;
+        existing.displayTitle = item.title.trim();
+        if (item.key) existing.key = item.key;
+        if (item.content) existing.content = item.content;
+      }
+    }
+  }
+
+  // Ordena ranking:
+  // 1. Contagem descrescente (músicas mais escolhidas primeiro)
+  // 2. Data mais recente decrescente
+  // 3. Título alfabético
+  return Array.from(map.values()).sort((a, b) => {
+    if (b.count !== a.count) {
+      return b.count - a.count;
+    }
+    const dateComp = b.lastDate.localeCompare(a.lastDate);
+    if (dateComp !== 0) {
+      return dateComp;
+    }
+    return a.displayTitle.localeCompare(b.displayTitle);
+  });
+}
+
+export interface PartitionedPlaylists<T = any> {
+  nextPlaylist: T | null;
+  upcomingPlaylists: T[];
+  pastPlaylists: T[];
+}
+
+export function partitionPlaylists<T extends { isNext?: boolean; isPast?: boolean; groupKey?: string; date?: string; cultoTime?: string | null }>(
+  groups: T[]
+): PartitionedPlaylists<T> {
+  if (!Array.isArray(groups) || groups.length === 0) {
+    return { nextPlaylist: null, upcomingPlaylists: [], pastPlaylists: [] };
+  }
+
+  // Encontra a playlist que é o próximo culto
+  let nextPlaylist = groups.find(g => g.isNext) || groups.find(g => !g.isPast) || null;
+
+  const upcomingPlaylists: T[] = [];
+  const pastPlaylists: T[] = [];
+
+  for (const g of groups) {
+    if (g.isPast) {
+      pastPlaylists.push(g);
+    } else if (!nextPlaylist || g.groupKey !== nextPlaylist.groupKey) {
+      upcomingPlaylists.push(g);
+    }
+  }
+
+  return {
+    nextPlaylist,
+    upcomingPlaylists,
+    pastPlaylists
+  };
+}
+
+export function filterSongRanking(ranking: SongRankingItem[], query?: string | null): SongRankingItem[] {
+  if (!query || !query.trim()) return ranking;
+  const qNorm = normalizeSongTitle(query);
+  return ranking.filter(item => 
+    item.normalizedTitle.includes(qNorm) || 
+    item.displayTitle.toLowerCase().includes(query.trim().toLowerCase())
+  );
+}
+
+

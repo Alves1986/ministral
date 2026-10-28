@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Correção e consolidação das notificações de playlist no Repertório (`repertoirePlaylistNotification`). Eliminados disparos duplicados para Super Admins e voluntários individuais quando ministérios dedicados de Projeção e Dança já existem; adicionada trava de cooldown/idempotência no backend (`services/supabase/repertoire.ts`) e deduplicação visual na Central de Notificações (`NotificationCenter.tsx`). 91 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Destaque da playlist do próximo culto no topo da aba de Repertório, sistema de armazenamento compacto em acordeão para playlists de cultos já realizados e criação da sub-aba de Ranking de Louvores (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireRanking.test.ts`). 20 suítes e 96 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

@@ -72,32 +72,20 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 28/10/2026
 - **Realizações**:
-  1. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
-     - **Causa Raiz Identificada**: Ao publicar uma playlist, `notifyRepertoirePlaylistPublished` disparava simultaneamente: broadcast para o Louvor, broadcast para ministérios de Projeção, broadcast para ministérios de Dança, loops individuais por voluntário com funções de dança/projeção (`targetUserId: p.id`) e disparo global para todos os administradores da plataforma via `notifySuperAdmins`. Um líder/admin com múltiplos papéis (ex: Louvor + Dança + Super Admin) recebia de 3 a 5 notificações simultâneas para o mesmo culto.
-     - **Correção no Backend (`services/supabase/repertoire.ts`)**:
-       - Adicionado controle de idempotência e cooldown com `canDispatchPlaylistNotification` (trava em memória de 15s por organização, ministério, data e regra de evento), evitando disparos repetidos por múltiplos cliques no salvamento.
-       - Removido disparo desnecessário para Super Admins (`notifySuperAdmins`), pois a publicação de playlist é evento interno/operacional do ministério e não evento crítico de plataforma.
-       - Eliminada duplicação de notificações individuais: quando a organização já possui ministérios dedicados de Projeção ou Dança, dispara apenas o broadcast para o ministério correspondente. O envio individual para membros com função específica via `targetUserId` passa a atuar estritamente como fallback quando a igreja não possui ministérios parceiros cadastrados.
-     - **Deduplicação na Interface (`components/NotificationCenter.tsx` e `utils/repertoireUtils.ts`)**:
-       - Implementadas as funções `extractPlaylistNotificationKey` e `deduplicatePlaylistNotifications` para consolidar notificações legadas ou repetidas da mesma playlist/culto em uma única notificação limpa no dropdown e no badge de contagem (`unreadCount`).
-       - Ao marcar como lida ou dispensar uma notificação de playlist consolidada, todas as notificações irmãs daquele culto são marcadas como lidas ou removidas no banco de dados em conjunto.
-     - **Suíte de Testes Unitários**:
-       - Criado `tests/repertoirePlaylistNotification.test.ts` com 5 testes aprovados cobrindo extração de chaves canônicas de culto/data, debounce/cooldown e consolidação de múltiplas notificações de Louvor, Dança e Projeção.
-  2. **Isolamento Estrito de Solicitações de Entrada (`join_request`) entre Ministérios**:
-     - Criado helper utilitário `utils/joinRequestUtils.ts` com funções `extractMinistryIdFromNotification`, `isNotificationForMinistry` e `validateJoinMinistryEligibility`, acompanhado por testes em `tests/joinRequestIsolation.test.ts`.
-     - `join_request` filtrado estritamente pelos ministérios onde o usuário é administrador (`and(type.eq.join_request,ministry_id.in(...))`).
-     - Corrigido `notifySuperAdmins`: restringe notificações e Web Push estritamente aos administradores do ministério alvo.
-     - Corrigido `components/MembersScreen.tsx`: eliminada exibição de solicitações de entrada de outros ministérios na aba de membros.
-     - Corrigido `components/NotificationCenter.tsx`: bloqueio seguro de navegação cruzada indevida entre ministérios.
-  3. **Trava contra Solicitações Duplicadas ou em Ministérios já Integrados**:
-     - Em `services/supabase/ministries.ts` (`joinMinistry`): travas ativas impedindo criação de novas solicitações se o voluntário já for membro ou já possuir solicitação pendente.
-  4. **Higienização de Mensagens de Solicitação de Entrada**:
-     - Sanitização ativa em `utils/joinRequestUtils.ts` removendo metadados brutos e JSON expostos na interface e em Web Push.
-  5. **Integração do Gateway de Pagamentos Asaas**:
-     - Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` com Sandbox e Produção.
-     - Painel "Testar Pagamentos" no Super Admin (`sa-payments`).
+  1. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
+     - **Destaque do Próximo Culto (`partitionPlaylists`)**: A playlist correspondente ao próximo culto da agenda fica isolada e destacada no topo da aba de Repertório com card exclusivo, badge "⭐ Destaque Oficial / Próximo Culto" e atalho rápido para montagem caso ainda não tenha sido publicada.
+     - **Arquivo Compacto de Playlists Passadas**: Playlists de cultos já realizados são movidas automaticamente para a seção "Histórico de Playlists Anteriores" em formato de acordeão colapsado por padrão (com controles de "Expandir todos" e "Recolher todos"), mantendo a página leve e enxuta mesmo após dezenas de cultos.
+     - **Sub-Aba de Ranking de Louvores (`calculateSongsRanking` & `filterSongRanking`)**: Nova sub-aba que contabiliza todos os louvores já escolhidos na história do ministério/igreja, normalizando títulos para agrupar variações de acentuação/caixa, exibindo medalhas para o Top 3 (🥇, 🥈, 🥉), indicadores de resumo (Louvores Únicos, Total de Ministrações, Mais Tocada #1 e Última Atualização), barra proporcional de frequência, busca instantânea, histórico expansível de datas/cultos em que cada música foi tocada e botão rápido para readicionar o louvor ao rascunho atual.
+     - **Suíte de Testes Unitários**: Criado `tests/repertoireRanking.test.ts` com 5 testes cobrindo normalização de títulos, agregação e contagem do ranking, desempate determinístico, particionamento de playlists e busca.
+  2. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
+     - Adicionado controle de idempotência e cooldown com `canDispatchPlaylistNotification` em `services/supabase/repertoire.ts`, removido disparo desnecessário para Super Admins e eliminada duplicação entre broadcast de ministério e envio individual.
+     - Deduplicação visual na Central de Notificações (`NotificationCenter.tsx`) com `deduplicatePlaylistNotifications`.
+  3. **Isolamento Estrito de Solicitações de Entrada (`join_request`) e Higienização de Mensagens**:
+     - Isolamento por ministério e sanitização de metadados internos em `utils/joinRequestUtils.ts`.
+  4. **Integração do Gateway de Pagamentos Asaas**:
+     - Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` publicadas e operacionais com painel de testes no Super Admin (`sa-payments`).
 - **Validação**:
-  - `npm test`: 19 arquivos e 91 testes aprovados (100% no Vitest).
+  - `npm test`: 20 arquivos e 96 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
