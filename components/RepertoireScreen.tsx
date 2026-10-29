@@ -22,7 +22,11 @@ import {
   calculateSongsRanking, 
   partitionPlaylists, 
   filterSongRanking, 
-  SongRankingItem 
+  SongRankingItem,
+  deduplicateEventRules,
+  organizeCultosForSelection,
+  extractRuleTemplates,
+  CalendarCultoItem
 } from '../utils/repertoireUtils';
 
 interface Props {
@@ -149,6 +153,13 @@ export const RepertoireScreen: React.FC<Props> = ({
     return "";
   });
 
+  const [customCultoTime, setCustomCultoTime] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('repertoire_draft_culto_time') || "19:30";
+    }
+    return "19:30";
+  });
+
   // Controle de exibição dos cultos anteriores no seletor ("nem mostra" por padrão)
   const [showPastCultos, setShowPastCultos] = useState(false);
 
@@ -157,28 +168,24 @@ export const RepertoireScreen: React.FC<Props> = ({
 
   const orgId = currentUser?.organizationId;
 
-  // Buscar regras de cultos da organização/ministério
+  // Buscar regras de cultos da organização (priorizando o ministério atual, mas incluindo cultos gerais da igreja)
   const { data: eventRules = [] } = useQuery({
     queryKey: ['event_rules_repertoire', orgId, ministryId],
     queryFn: async () => {
       const sb = getSupabase();
       if (!sb || !orgId) return [];
-      let query = sb
+      const { data, error } = await sb
         .from('event_rules')
         .select('*')
         .eq('organization_id', orgId)
-        .eq('active', true);
+        .eq('active', true)
+        .order('time', { ascending: true });
       
-      if (ministryId && ministryId.length === 36) {
-        query = query.eq('ministry_id', ministryId);
-      }
-      
-      const { data, error } = await query.order('time', { ascending: true });
       if (error) {
         console.warn('Erro ao carregar regras de culto:', error);
         return [];
       }
-      return data || [];
+      return deduplicateEventRules(data || [], ministryId);
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,
@@ -186,26 +193,12 @@ export const RepertoireScreen: React.FC<Props> = ({
 
   // Replicar os cultos existentes do calendário com precisão absoluta
   const allCalendarCultos = useMemo(() => {
-    const cultosMap = new Map<string, {
-      key: string;
-      id: string;
-      ruleId?: string | null;
-      title: string;
-      date: string;
-      time: string;
-      iso: string;
-      weekday: number;
-      weekdayShort: string;
-      weekdayFull: string;
-      dateDisplay: string;
-      isPast: boolean;
-      isNext?: boolean;
-    }>();
+    const cultosMap = new Map<string, CalendarCultoItem>();
 
     const addEventItem = (e: any) => {
       if (!e || !e.date || !e.title) return;
       const ruleId = e.ruleId || (typeof e.id === 'string' && e.id.includes('|') ? e.id.split('|')[0] : null);
-      const time = e.time ? e.time.slice(0, 5) : '19:30';
+      const time = e.time ? String(e.time).slice(0, 5) : '19:30';
       const [y, m, d] = e.date.split('-').map(Number);
       const dt = new Date(y, m - 1, d, 12, 0, 0);
       const weekday = dt.getDay();
@@ -239,12 +232,39 @@ export const RepertoireScreen: React.FC<Props> = ({
       events.forEach(addEventItem);
     }
 
-    // 2. Geração determinística de cultos a partir das regras cadastradas (cobre transição de meses)
+    // 2. Geração determinística de cultos a partir das regras cadastradas (cobre mês anterior + próximos 2 meses completos)
     if (eventRules && eventRules.length > 0) {
-      const prevMonthStr = adjustMonth(viewMonth, -1);
-      const nextMonthStr = adjustMonth(viewMonth, 2);
+      const minMonth = viewMonth < realCurrentMonth ? viewMonth : realCurrentMonth;
+      const maxMonth = viewMonth > realCurrentMonth ? viewMonth : realCurrentMonth;
+      const prevMonthStr = adjustMonth(minMonth, -1);
+      const nextMonthStr = adjustMonth(maxMonth, 2);
       const gen = generateEvents(eventRules as any, `${prevMonthStr}-01`, `${nextMonthStr}-28`);
       gen.forEach(addEventItem);
+    }
+
+    // 3. Incluir também cultos já criados no repertório que ainda não estejam no mapa (ex: cultos avulsos já salvos)
+    if (repertoire && Array.isArray(repertoire)) {
+      repertoire.forEach(item => {
+        if (!item?.date) return;
+        let cTitle = item.eventRuleTitle || '';
+        let cTime = item.eventRuleTime || '';
+        if (!cTitle && item.observation) {
+          const obsMatch = item.observation.match(/^Culto:\s*([^(]+?)(?:\s*\(([^)]+)\))?$/i);
+          if (obsMatch) {
+            cTitle = obsMatch[1].trim();
+            if (obsMatch[2]) cTime = obsMatch[2].trim();
+          }
+        }
+        if (cTitle) {
+          addEventItem({
+            id: item.eventRuleId ? `${item.eventRuleId}|${item.date}` : undefined,
+            ruleId: item.eventRuleId || null,
+            title: cTitle,
+            date: item.date.split('T')[0],
+            time: cTime || '19:30',
+          });
+        }
+      });
     }
 
     const sorted = Array.from(cultosMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
@@ -258,35 +278,52 @@ export const RepertoireScreen: React.FC<Props> = ({
       }
       return { ...c, isNext: false };
     });
-  }, [events, eventRules, viewMonth]);
+  }, [events, eventRules, viewMonth, realCurrentMonth, repertoire]);
 
-  // Próximo culto da agenda sempre
-  const nextCulto = useMemo(() => {
-    return allCalendarCultos.find(c => c.isNext) || allCalendarCultos.find(c => !c.isPast) || null;
-  }, [allCalendarCultos]);
+  // Organização inteligente dos cultos para o seletor (inclui próximos meses, contagem de músicas e atalhos rápidos)
+  const organizedCultos = useMemo(() => {
+    return organizeCultosForSelection(allCalendarCultos, repertoire, 4);
+  }, [allCalendarCultos, repertoire]);
 
-  // Cultos do mês vigente/exibido
-  const monthCultos = useMemo(() => {
-    return allCalendarCultos.filter(c => c.date.startsWith(viewMonth));
-  }, [allCalendarCultos, viewMonth]);
+  const nextCulto = organizedCultos.nextCulto;
+  const quickPickCultos = organizedCultos.quickPickCultos;
+  const upcomingByMonth = organizedCultos.upcomingByMonth;
+  const upcomingCultos = organizedCultos.upcomingCultos;
+  const pastCultos = organizedCultos.pastCultos;
+  const ruleTemplates = useMemo(() => extractRuleTemplates(eventRules as any), [eventRules]);
 
-  const upcomingMonthCultos = useMemo(() => {
-    return monthCultos.filter(c => !c.isPast);
-  }, [monthCultos]);
-
-  const pastMonthCultos = useMemo(() => {
-    return monthCultos.filter(c => c.isPast);
-  }, [monthCultos]);
-
-  // Pré-selecionar o próximo culto da agenda automaticamente se nada estiver selecionado ou se o item salvo não existir mais
+  // Pré-selecionar o próximo culto da agenda automaticamente se nada estiver selecionado,
+  // ou se o item salvo no localStorage já passou / não existe mais (quando o rascunho está vazio)
   useEffect(() => {
-    if (!selectedCultoKey && nextCulto) {
+    if (!nextCulto) return;
+    if (!selectedCultoKey) {
       setSelectedCultoKey(nextCulto.key);
       setDate(nextCulto.date);
       localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
       localStorage.setItem('repertoire_draft_date', nextCulto.date);
+      return;
     }
-  }, [selectedCultoKey, nextCulto]);
+
+    if (draftItems.length === 0) {
+      if (selectedCultoKey === 'custom' && !customCultoTitle.trim()) {
+        setSelectedCultoKey(nextCulto.key);
+        setDate(nextCulto.date);
+        localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
+        localStorage.setItem('repertoire_draft_date', nextCulto.date);
+        return;
+      }
+
+      if (selectedCultoKey !== 'custom') {
+        const found = allCalendarCultos.find(c => c.key === selectedCultoKey);
+        if (!found || found.isPast) {
+          setSelectedCultoKey(nextCulto.key);
+          setDate(nextCulto.date);
+          localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
+          localStorage.setItem('repertoire_draft_date', nextCulto.date);
+        }
+      }
+    }
+  }, [selectedCultoKey, nextCulto, allCalendarCultos, draftItems.length, customCultoTitle]);
 
   // Informações completas do culto selecionado
   const selectedCultoInfo = useMemo(() => {
@@ -294,13 +331,15 @@ export const RepertoireScreen: React.FC<Props> = ({
       return {
         id: null,
         title: customCultoTitle.trim(),
-        time: '',
+        time: customCultoTime.trim(),
         date: date,
         isCustom: true,
         culto: null
       };
     }
-    const found = allCalendarCultos.find(c => c.key === selectedCultoKey);
+    const found = organizedCultos.upcomingCultos.find(c => c.key === selectedCultoKey) 
+      || organizedCultos.pastCultos.find(c => c.key === selectedCultoKey)
+      || allCalendarCultos.find(c => c.key === selectedCultoKey);
     if (found) {
       return {
         id: found.ruleId || null,
@@ -312,7 +351,7 @@ export const RepertoireScreen: React.FC<Props> = ({
       };
     }
     return { id: null, title: '', time: '', date: '', isCustom: false, culto: null };
-  }, [selectedCultoKey, customCultoTitle, allCalendarCultos, date]);
+  }, [selectedCultoKey, customCultoTitle, customCultoTime, organizedCultos, allCalendarCultos, date]);
 
   const handleSelectCulto = (cultoItem: any) => {
     setSelectedCultoKey(cultoItem.key);
@@ -329,6 +368,11 @@ export const RepertoireScreen: React.FC<Props> = ({
   const handleCustomCultoChange = (val: string) => {
     setCustomCultoTitle(val);
     localStorage.setItem('repertoire_draft_culto_custom', val);
+  };
+
+  const handleCustomCultoTimeChange = (val: string) => {
+    setCustomCultoTime(val);
+    localStorage.setItem('repertoire_draft_culto_time', val);
   };
 
   // Manual Form
@@ -1184,7 +1228,7 @@ export const RepertoireScreen: React.FC<Props> = ({
                   </div>
 
                   {/* Staging / Rascunho da Playlist */}
-                  <div className="w-full lg:w-80 bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col justify-between shrink-0">
+                  <div className="w-full lg:w-96 bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col justify-between shrink-0">
                       <div>
                           <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-200 dark:border-zinc-700">
                               <h4 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -1196,100 +1240,265 @@ export const RepertoireScreen: React.FC<Props> = ({
                               </span>
                           </div>
 
-                          <div className="mb-3">
-                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">
-                                  Culto da Agenda
-                              </label>
-                              <select
-                                  ref={cultoSelectRef}
-                                  value={selectedCultoKey}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    if (val === 'custom') {
-                                      setSelectedCultoKey('custom');
-                                      localStorage.setItem('repertoire_draft_culto_key', 'custom');
-                                    } else {
-                                      const c = allCalendarCultos.find(item => item.key === val);
-                                      if (c) handleSelectCulto(c);
-                                    }
-                                  }}
-                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-secondary font-medium transition-all text-zinc-900 dark:text-zinc-100 shadow-sm"
-                              >
-                                  <option value="">Selecione o Culto...</option>
+                          <div className="mb-4 space-y-3">
+                              {/* 1. ATALHOS RÁPIDOS (1 CLIQUE) PARA OS PRÓXIMOS CULTOS EXISTENTES NO SISTEMA */}
+                              {quickPickCultos.length > 0 && (
+                                  <div>
+                                      <div className="flex items-center justify-between mb-1.5">
+                                          <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
+                                              <Sparkles size={11} className="text-secondary" />
+                                              Próximos Cultos (Toque para selecionar)
+                                          </label>
+                                          <span className="text-[10px] text-zinc-400 font-medium">
+                                              {upcomingCultos.length} agendados
+                                          </span>
+                                      </div>
 
-                                  {/* Próximo Culto da Agenda Sempre no Topo */}
-                                  {nextCulto && (
-                                      <optgroup label="⭐ Próximo Culto da Agenda">
-                                          <option value={nextCulto.key}>
-                                              ⭐ [PRÓXIMO] {nextCulto.weekdayFull}, {nextCulto.dateDisplay} às {nextCulto.time} - {nextCulto.title}
-                                          </option>
-                                      </optgroup>
-                                  )}
+                                      <div className="grid grid-cols-1 gap-1.5">
+                                          {quickPickCultos.map(c => {
+                                              const isSelected = selectedCultoKey === c.key;
+                                              const lowerTitle = c.title.toLowerCase();
+                                              const isMorning = lowerTitle.includes('manh') || lowerTitle.includes('ebd') || (c.time && parseInt(c.time.split(':')[0], 10) < 12);
+                                              const isNight = lowerTitle.includes('noite') || (c.time && parseInt(c.time.split(':')[0], 10) >= 18);
 
-                                  {/* Cultos Agendados do Mês Vigente */}
-                                  {upcomingMonthCultos.filter(c => !nextCulto || c.key !== nextCulto.key).length > 0 && (
-                                      <optgroup label={`📅 Cultos Agendados de ${getMonthName(viewMonth)}`}>
-                                          {upcomingMonthCultos
-                                              .filter(c => !nextCulto || c.key !== nextCulto.key)
-                                              .map(c => (
-                                                  <option key={c.key} value={c.key}>
-                                                      {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title}
-                                                  </option>
-                                              ))}
-                                      </optgroup>
-                                  )}
+                                              return (
+                                                  <button
+                                                      key={c.key}
+                                                      type="button"
+                                                      onClick={() => handleSelectCulto(c)}
+                                                      className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 group ${
+                                                          isSelected
+                                                              ? 'bg-secondary/15 dark:bg-secondary/20 border-secondary ring-1 ring-secondary/40 shadow-xs'
+                                                              : 'bg-white dark:bg-zinc-800/90 border-zinc-200 dark:border-zinc-700/80 hover:border-secondary/50 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                                      }`}
+                                                  >
+                                                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                                                              isSelected
+                                                                  ? 'bg-secondary text-white shadow-xs'
+                                                                  : isMorning
+                                                                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                                                                    : isNight
+                                                                      ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+                                                                      : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                                                          }`}>
+                                                              {isMorning ? <Sun size={15} /> : isNight ? <Moon size={15} /> : <Calendar size={15} />}
+                                                          </div>
 
-                                  {/* Cultos Anteriores */}
-                                  {showPastCultos && pastMonthCultos.length > 0 && (
-                                      <optgroup label="⏳ Cultos Anteriores do Mês (Já Realizados)">
-                                          {pastMonthCultos.map(c => (
-                                              <option key={c.key} value={c.key} className="text-zinc-400">
-                                                  ⏳ {c.weekdayShort}, {c.dateDisplay} às {c.time} - {c.title} (Realizado)
-                                              </option>
-                                          ))}
-                                      </optgroup>
-                                  )}
+                                                          <div className="min-w-0 flex-1">
+                                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                                  <span className={`text-xs font-extrabold truncate ${isSelected ? 'text-secondary dark:text-white' : 'text-zinc-800 dark:text-zinc-100'}`}>
+                                                                      {c.title}
+                                                                  </span>
+                                                                  {c.isNext && (
+                                                                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full bg-secondary text-white shrink-0">
+                                                                          ⭐ Próximo
+                                                                      </span>
+                                                                  )}
+                                                              </div>
+                                                              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                                                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                                                      {c.weekdayShort}, {c.dateDisplay}
+                                                                  </span>
+                                                                  <span>•</span>
+                                                                  <span className="font-mono font-bold">{c.time}</span>
+                                                                  {typeof c.songsCount === 'number' && c.songsCount > 0 && (
+                                                                      <span className="ml-auto inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/50">
+                                                                          <Music size={9} /> {c.songsCount}
+                                                                      </span>
+                                                                  )}
+                                                              </div>
+                                                          </div>
+                                                      </div>
 
-                                  <optgroup label="Outro">
-                                      <option value="custom">✏️ Culto Avulso / Extra (Data personalizada)</option>
-                                  </optgroup>
-                              </select>
-
-                              {pastMonthCultos.length > 0 && (
-                                  <div className="mt-1.5 flex justify-end">
-                                      <button
-                                          type="button"
-                                          onClick={() => setShowPastCultos(prev => !prev)}
-                                          className="text-[10px] text-zinc-500 hover:text-secondary flex items-center gap-1 transition-colors"
-                                      >
-                                          {showPastCultos ? <EyeOff size={11} /> : <Eye size={11} />}
-                                          <span>{showPastCultos ? 'Ocultar cultos anteriores' : `Ver cultos anteriores (${pastMonthCultos.length})`}</span>
-                                      </button>
+                                                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                                                          isSelected
+                                                              ? 'bg-secondary border-secondary text-white scale-105'
+                                                              : 'border-zinc-300 dark:border-zinc-600 text-transparent group-hover:border-secondary/60'
+                                                      }`}>
+                                                          <Check size={12} strokeWidth={3} />
+                                                      </div>
+                                                  </button>
+                                              );
+                                          })}
+                                      </div>
                                   </div>
                               )}
 
+                              {/* 2. SELETOR COMPLETO DE TODOS OS CULTOS DO CALENDÁRIO (AGRUPADOS POR MÊS) */}
+                              <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                      <label className="text-[10px] uppercase font-bold text-zinc-500">
+                                          Todos os Cultos do Calendário
+                                      </label>
+                                      <div className="flex items-center gap-2">
+                                          {pastCultos.length > 0 && (
+                                              <button
+                                                  type="button"
+                                                  onClick={() => setShowPastCultos(prev => !prev)}
+                                                  className="text-[10px] text-zinc-500 hover:text-secondary flex items-center gap-1 transition-colors font-semibold"
+                                              >
+                                                  {showPastCultos ? <EyeOff size={11} /> : <Eye size={11} />}
+                                                  <span>{showPastCultos ? 'Ocultar realizados' : `Realizados (${pastCultos.length})`}</span>
+                                              </button>
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <select
+                                      ref={cultoSelectRef}
+                                      value={selectedCultoKey}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === 'custom') {
+                                          setSelectedCultoKey('custom');
+                                          localStorage.setItem('repertoire_draft_culto_key', 'custom');
+                                        } else {
+                                          const c = allCalendarCultos.find(item => item.key === val);
+                                          if (c) handleSelectCulto(c);
+                                        }
+                                      }}
+                                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-secondary font-semibold transition-all text-zinc-900 dark:text-zinc-100 shadow-xs"
+                                  >
+                                      <option value="">Selecione um culto na lista completa...</option>
+
+                                      {/* Próximo Culto da Agenda Sempre no Topo */}
+                                      {nextCulto && (
+                                          <optgroup label="⭐ Próximo Culto da Agenda">
+                                              <option value={nextCulto.key}>
+                                                  ⭐ [PRÓXIMO] {nextCulto.weekdayFull}, {nextCulto.dateDisplay} às {nextCulto.time} — {nextCulto.title}{nextCulto.songsCount ? ` (${nextCulto.songsCount} músicas)` : ''}
+                                              </option>
+                                          </optgroup>
+                                      )}
+
+                                      {/* Todos os Cultos Futuros Agrupados por Mês (não esconde o mês seguinte no fim do mês!) */}
+                                      {upcomingByMonth.map(group => {
+                                          const items = group.cultos.filter(c => !nextCulto || c.key !== nextCulto.key);
+                                          if (items.length === 0) return null;
+                                          return (
+                                              <optgroup key={group.monthKey} label={`📅 Cultos de ${getMonthName(group.monthKey)}`}>
+                                                  {items.map(c => (
+                                                      <option key={c.key} value={c.key}>
+                                                          {c.weekdayShort}, {c.dateDisplay} às {c.time} — {c.title}{c.songsCount ? ` (🎵 ${c.songsCount})` : ''}
+                                                      </option>
+                                                  ))}
+                                              </optgroup>
+                                          );
+                                      })}
+
+                                      {/* Cultos Anteriores / Já Realizados */}
+                                      {showPastCultos && pastCultos.length > 0 && (
+                                          <optgroup label="⏳ Cultos Já Realizados (Mais recentes primeiro)">
+                                              {pastCultos.map(c => (
+                                                  <option key={c.key} value={c.key} className="text-zinc-400">
+                                                      ⏳ {c.weekdayShort}, {c.dateDisplay} às {c.time} — {c.title}{c.songsCount ? ` (${c.songsCount} músicas)` : ' (Realizado)'}
+                                                  </option>
+                                              ))}
+                                          </optgroup>
+                                      )}
+
+                                      <optgroup label="Outro / Data Especial">
+                                          <option value="custom">✏️ Culto Avulso / Extra (Escolher outra data)</option>
+                                      </optgroup>
+                                  </select>
+
+                                  {/* Botão Rápido para Culto Extra / Outra Data */}
+                                  <div className="mt-2 flex items-center justify-between gap-2">
+                                      <button
+                                          type="button"
+                                          onClick={() => {
+                                              if (selectedCultoKey === 'custom' && nextCulto) {
+                                                  handleSelectCulto(nextCulto);
+                                              } else {
+                                                  setSelectedCultoKey('custom');
+                                                  localStorage.setItem('repertoire_draft_culto_key', 'custom');
+                                                  if (!date && nextCulto) {
+                                                      handleDateChange(nextCulto.date);
+                                                  }
+                                              }
+                                          }}
+                                          className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                                              selectedCultoKey === 'custom'
+                                                  ? 'bg-secondary text-white border-secondary shadow-xs'
+                                                  : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-secondary/50'
+                                          }`}
+                                      >
+                                          <Calendar size={12} />
+                                          <span>
+                                              {selectedCultoKey === 'custom'
+                                                  ? '✓ Modo Culto Avulso / Data Personalizada Ativo'
+                                                  : '✏️ Criar para Culto Extra ou Outra Data'}
+                                          </span>
+                                      </button>
+                                  </div>
+                              </div>
+
+                              {/* 3. PAINEL DE CULTO AVULSO / EXTRA COM MODELOS DOS CULTOS DA IGREJA */}
                               {selectedCultoKey === 'custom' && (
-                                  <div className="mt-3 space-y-2 p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
+                                  <div className="mt-2 space-y-2.5 p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
+                                      {ruleTemplates.length > 0 && (
+                                          <div>
+                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">
+                                                  Usar nome de culto já existente na igreja:
+                                              </label>
+                                              <div className="flex flex-wrap gap-1.5">
+                                                  {ruleTemplates.map((tpl, idx) => {
+                                                      const isTplActive = customCultoTitle.trim().toLowerCase() === tpl.title.toLowerCase() && customCultoTime === tpl.time;
+                                                      return (
+                                                          <button
+                                                              key={idx}
+                                                              type="button"
+                                                              onClick={() => {
+                                                                  handleCustomCultoChange(tpl.title);
+                                                                  handleCustomCultoTimeChange(tpl.time);
+                                                              }}
+                                                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 ${
+                                                                  isTplActive
+                                                                      ? 'bg-secondary text-white border-secondary shadow-xs'
+                                                                      : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-300 dark:border-zinc-600 hover:border-secondary'
+                                                              }`}
+                                                          >
+                                                              <span>{tpl.title}</span>
+                                                              <span className="opacity-75 font-mono">({tpl.time})</span>
+                                                          </button>
+                                                      );
+                                                  })}
+                                              </div>
+                                          </div>
+                                      )}
+
                                       <div>
                                           <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
                                           <input
                                               type="text"
-                                              placeholder="Ex: Culto de Vigília, Ensaio Geral..."
+                                              placeholder="Ex: Culto Dom - Noite, Santa Ceia, Vigília..."
                                               value={customCultoTitle}
                                               onChange={e => handleCustomCultoChange(e.target.value)}
                                               className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
                                               autoFocus
                                           />
                                       </div>
-                                      <div>
-                                          <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data</label>
-                                          <input
-                                              ref={dateInputRef}
-                                              type="date"
-                                              value={date}
-                                              onChange={e => handleDateChange(e.target.value)}
-                                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                          />
+
+                                      <div className="grid grid-cols-2 gap-2">
+                                          <div>
+                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data do Culto</label>
+                                              <input
+                                                  ref={dateInputRef}
+                                                  type="date"
+                                                  value={date}
+                                                  onChange={e => handleDateChange(e.target.value)}
+                                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                              />
+                                          </div>
+                                          <div>
+                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Horário</label>
+                                              <input
+                                                  type="time"
+                                                  value={customCultoTime}
+                                                  onChange={e => handleCustomCultoTimeChange(e.target.value)}
+                                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                                              />
+                                          </div>
                                       </div>
                                   </div>
                               )}

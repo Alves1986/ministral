@@ -72,20 +72,21 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 28/10/2026
 - **Realizações**:
-  1. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
+  1. **Seleção Inteligente de Cultos da Agenda na Montagem de Playlist (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`)**:
+     - **Correção da Virada de Mês (`organizeCultosForSelection`)**: Eliminado o filtro restritivo que ocultava cultos do mês seguinte quando o usuário estava no final do mês vigente (ex: dia 28/10 ocultando o culto de 01/11 à noite e os demais de novembro). Agora todos os cultos futuros são exibidos agrupados por mês (`upcomingByMonth`).
+     - **Atalhos Rápidos de 1 Clique (`quickPickCultos`)**: Adicionados cards interativos de seleção rápida para os próximos cultos imediatos da agenda (ex: Domingo Manhã e Domingo Noite), exibindo ícone de turno (☀️ Manhã / 🌙 Noite), data, horário, selo `⭐ Próximo` e contador `🎵 X` de músicas já salvas naquele culto.
+     - **Aproveitamento de Regras da Organização e Modelos Rápidos (`deduplicateEventRules` & `extractRuleTemplates`)**: Deduplicação inteligente das regras de culto da igreja (priorizando o ministério atual) e chips de preenchimento em 1 clique com os nomes/horários dos cultos existentes ao criar um Culto Avulso/Extra.
+     - **Auto-seleção Resiliente**: Quando o rascunho está vazio e o culto salvo no `localStorage` já passou ou ficou inválido, o seletor aponta automaticamente para o próximo culto da agenda.
+  2. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
      - **Destaque do Próximo Culto (`partitionPlaylists`)**: A playlist correspondente ao próximo culto da agenda fica isolada e destacada no topo da aba de Repertório com card exclusivo, badge "⭐ Destaque Oficial / Próximo Culto" e atalho rápido para montagem caso ainda não tenha sido publicada.
      - **Arquivo Compacto de Playlists Passadas**: Playlists de cultos já realizados são movidas automaticamente para a seção "Histórico de Playlists Anteriores" em formato de acordeão colapsado por padrão (com controles de "Expandir todos" e "Recolher todos"), mantendo a página leve e enxuta mesmo após dezenas de cultos.
-     - **Sub-Aba de Ranking de Louvores (`calculateSongsRanking` & `filterSongRanking`)**: Nova sub-aba que contabiliza todos os louvores já escolhidos na história do ministério/igreja, normalizando títulos para agrupar variações de acentuação/caixa, exibindo medalhas para o Top 3 (🥇, 🥈, 🥉), indicadores de resumo (Louvores Únicos, Total de Ministrações, Mais Tocada #1 e Última Atualização), barra proporcional de frequência, busca instantânea, histórico expansível de datas/cultos em que cada música foi tocada e botão rápido para readicionar o louvor ao rascunho atual.
-     - **Suíte de Testes Unitários**: Criado `tests/repertoireRanking.test.ts` com 5 testes cobrindo normalização de títulos, agregação e contagem do ranking, desempate determinístico, particionamento de playlists e busca.
-  2. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
-     - Adicionado controle de idempotência e cooldown com `canDispatchPlaylistNotification` em `services/supabase/repertoire.ts`, removido disparo desnecessário para Super Admins e eliminada duplicação entre broadcast de ministério e envio individual.
-     - Deduplicação visual na Central de Notificações (`NotificationCenter.tsx`) com `deduplicatePlaylistNotifications`.
-  3. **Isolamento Estrito de Solicitações de Entrada (`join_request`) e Higienização de Mensagens**:
-     - Isolamento por ministério e sanitização de metadados internos em `utils/joinRequestUtils.ts`.
-  4. **Integração do Gateway de Pagamentos Asaas**:
-     - Edge Functions `asaas-create-checkout`, `asaas-webhook` e `asaas-customer-portal` publicadas e operacionais com painel de testes no Super Admin (`sa-payments`).
+     - **Sub-Aba de Ranking de Louvores (`calculateSongsRanking` & `filterSongRanking`)**: Nova sub-aba que contabiliza todos os louvores já escolhidos na história do ministério/igreja, normalizando títulos para agrupar variações de acentuação/caixa, exibindo medalhas para o Top 3 (🥇, 🥈, 🥉), indicadores de resumo, barra proporcional de frequência, busca instantânea e histórico expansível.
+  3. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
+     - Controle de idempotência/cooldown em `services/supabase/repertoire.ts` e deduplicação visual em `NotificationCenter.tsx`.
+  4. **Isolamento Estrito de Solicitações de Entrada (`join_request`) e Gateway Asaas**:
+     - Isolamento por ministério em `utils/joinRequestUtils.ts` e Edge Functions Asaas operacionais.
 - **Validação**:
-  - `npm test`: 20 arquivos e 96 testes aprovados (100% no Vitest).
+  - `npm test`: 21 arquivos e 101 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

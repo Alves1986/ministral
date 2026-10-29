@@ -391,4 +391,220 @@ export function filterSongRanking(ranking: SongRankingItem[], query?: string | n
   );
 }
 
+// ============================================================================
+// SELEÇÃO INTELIGENTE DE CULTOS DA AGENDA NO REPERTÓRIO
+// ============================================================================
+
+export interface CalendarCultoItem {
+  key: string;
+  id: string;
+  ruleId?: string | null;
+  title: string;
+  date: string;
+  time: string;
+  iso: string;
+  weekday: number;
+  weekdayShort: string;
+  weekdayFull: string;
+  dateDisplay: string;
+  isPast: boolean;
+  isNext?: boolean;
+  songsCount?: number;
+}
+
+export interface CultoMonthGroup {
+  monthKey: string;
+  cultos: CalendarCultoItem[];
+}
+
+export interface OrganizedCultosSelection {
+  nextCulto: CalendarCultoItem | null;
+  quickPickCultos: CalendarCultoItem[];
+  upcomingCultos: CalendarCultoItem[];
+  upcomingByMonth: CultoMonthGroup[];
+  pastCultos: CalendarCultoItem[];
+}
+
+export interface RuleTemplateItem {
+  title: string;
+  time: string;
+  ruleId: string;
+}
+
+/**
+ * Deduplica regras de culto da organização priorizando as regras do ministério atual.
+ * Garante também que o horário esteja em formato HH:mm e que o tipo ('weekly' | 'single') esteja preenchido.
+ */
+export function deduplicateEventRules<T extends Record<string, any>>(
+  rules: T[],
+  preferredMinistryId?: string | null
+): T[] {
+  if (!Array.isArray(rules) || rules.length === 0) return [];
+
+  // Ordena priorizando as regras do ministério atual
+  const sorted = [...rules].sort((a, b) => {
+    const aPref = preferredMinistryId && a.ministry_id === preferredMinistryId ? 0 : 1;
+    const bPref = preferredMinistryId && b.ministry_id === preferredMinistryId ? 0 : 1;
+    if (aPref !== bPref) return aPref - bPref;
+    const aTime = String(a.time || '19:30').slice(0, 5);
+    const bTime = String(b.time || '19:30').slice(0, 5);
+    return aTime.localeCompare(bTime);
+  });
+
+  const seen = new Set<string>();
+  const result: T[] = [];
+
+  for (const r of sorted) {
+    if (!r || !r.title) continue;
+    if (r.active === false) continue;
+
+    const timeNorm = String(r.time || '19:30').slice(0, 5);
+    const titleNorm = normalizeSongTitle(r.title);
+    const inferredType = r.type || (r.weekday !== undefined && r.weekday !== null ? 'weekly' : 'single');
+    const sig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}|${titleNorm}`;
+
+    if (!seen.has(sig)) {
+      seen.add(sig);
+      result.push({
+        ...r,
+        time: timeNorm,
+        type: inferredType,
+        active: true,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Extrai modelos únicos de cultos já existentes na igreja para preenchimento rápido.
+ */
+export function extractRuleTemplates(rules: Record<string, any>[]): RuleTemplateItem[] {
+  if (!Array.isArray(rules) || rules.length === 0) return [];
+  const seen = new Set<string>();
+  const templates: RuleTemplateItem[] = [];
+
+  for (const r of rules) {
+    if (!r || !r.title) continue;
+    const title = String(r.title).trim();
+    const time = String(r.time || '19:30').slice(0, 5);
+    const sig = `${normalizeSongTitle(title)}|${time}`;
+    if (!seen.has(sig)) {
+      seen.add(sig);
+      templates.push({
+        title,
+        time,
+        ruleId: String(r.id || ''),
+      });
+    }
+  }
+
+  return templates;
+}
+
+/**
+ * Conta quantas músicas já existem cadastradas no repertório para um culto específico.
+ */
+function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: RepertoireItemLike[]): number {
+  if (!Array.isArray(repertoireItems) || repertoireItems.length === 0) return 0;
+
+  const cultoTitleNorm = normalizeSongTitle(culto.title);
+  const cultoTimeNorm = (culto.time || '').slice(0, 5);
+  let count = 0;
+
+  for (const item of repertoireItems) {
+    if (!item || !item.date) continue;
+    const itemDate = item.date.split('T')[0];
+    if (itemDate !== culto.date) continue;
+
+    // 1. Match direto por ruleId
+    if (item.eventRuleId && culto.ruleId && item.eventRuleId === culto.ruleId) {
+      count += 1;
+      continue;
+    }
+
+    // 2. Match por título e horário extraídos do item ou da observation
+    let itemTitle = item.eventRuleTitle || '';
+    let itemTime = item.eventRuleTime || '';
+    if (!itemTitle && item.observation) {
+      const obsMatch = item.observation.match(/^Culto:\s*([^(]+?)(?:\s*\(([^)]+)\))?$/i);
+      if (obsMatch) {
+        itemTitle = obsMatch[1].trim();
+        if (obsMatch[2]) itemTime = obsMatch[2].trim();
+      }
+    }
+    itemTime = itemTime.slice(0, 5);
+    const itemTitleNorm = normalizeSongTitle(itemTitle);
+
+    if (itemTitleNorm && itemTitleNorm === cultoTitleNorm) {
+      if (!itemTime || !cultoTimeNorm || itemTime === cultoTimeNorm) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Organiza todos os cultos do calendário para facilitar a escolha pelo ministro:
+ * - Não esconde cultos do mês seguinte quando estamos no fim do mês
+ * - Contabiliza quantas músicas cada culto já possui (songsCount)
+ * - Gera lista de acesso rápido (quickPickCultos) para seleção em 1 clique
+ * - Agrupa futuros por mês e ordena realizados do mais recente para o mais antigo
+ */
+export function organizeCultosForSelection(
+  allCultos: CalendarCultoItem[],
+  repertoireItems: RepertoireItemLike[] = [],
+  quickPickLimit = 4
+): OrganizedCultosSelection {
+  if (!Array.isArray(allCultos) || allCultos.length === 0) {
+    return {
+      nextCulto: null,
+      quickPickCultos: [],
+      upcomingCultos: [],
+      upcomingByMonth: [],
+      pastCultos: [],
+    };
+  }
+
+  const enriched: CalendarCultoItem[] = allCultos
+    .map(c => ({
+      ...c,
+      songsCount: countSongsForCulto(c, repertoireItems),
+    }))
+    .sort((a, b) => a.iso.localeCompare(b.iso));
+
+  const upcomingCultos = enriched.filter(c => !c.isPast);
+  const nextCulto = upcomingCultos.find(c => c.isNext) || upcomingCultos[0] || null;
+  const quickPickCultos = upcomingCultos.slice(0, quickPickLimit);
+
+  const monthMap = new Map<string, CalendarCultoItem[]>();
+  for (const c of upcomingCultos) {
+    const monthKey = c.date.slice(0, 7);
+    if (!monthMap.has(monthKey)) {
+      monthMap.set(monthKey, []);
+    }
+    monthMap.get(monthKey)!.push(c);
+  }
+
+  const upcomingByMonth: CultoMonthGroup[] = Array.from(monthMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([monthKey, cultos]) => ({ monthKey, cultos }));
+
+  const pastCultos = enriched
+    .filter(c => c.isPast)
+    .sort((a, b) => b.iso.localeCompare(a.iso));
+
+  return {
+    nextCulto,
+    quickPickCultos,
+    upcomingCultos,
+    upcomingByMonth,
+    pastCultos,
+  };
+}
+
+
 
