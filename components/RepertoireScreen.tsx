@@ -25,7 +25,7 @@ import {
   SongRankingItem,
   deduplicateEventRules,
   organizeCultosForSelection,
-  extractRuleTemplates,
+  normalizeCultoLabel,
   CalendarCultoItem
 } from '../utils/repertoireUtils';
 
@@ -168,37 +168,67 @@ export const RepertoireScreen: React.FC<Props> = ({
 
   const orgId = currentUser?.organizationId;
 
-  // Buscar regras de cultos da organização (priorizando o ministério atual, mas incluindo cultos gerais da igreja)
+  // Buscar regras de cultos do ministério atual (com fallback para organização apenas se o ministério não tiver regras próprias)
   const { data: eventRules = [] } = useQuery({
     queryKey: ['event_rules_repertoire', orgId, ministryId],
     queryFn: async () => {
       const sb = getSupabase();
       if (!sb || !orgId) return [];
-      const { data, error } = await sb
+
+      let query = sb
         .from('event_rules')
         .select('*')
         .eq('organization_id', orgId)
         .eq('active', true)
         .order('time', { ascending: true });
-      
+
+      if (ministryId) {
+        query = query.eq('ministry_id', ministryId);
+      }
+
+      const { data, error } = await query;
+
       if (error) {
         console.warn('Erro ao carregar regras de culto:', error);
         return [];
       }
-      return deduplicateEventRules(data || [], ministryId);
+
+      if (data && data.length > 0) {
+        return deduplicateEventRules(data, ministryId);
+      }
+
+      // Fallback apenas caso o ministério atual ainda não tenha regras próprias
+      const { data: orgData } = await sb
+        .from('event_rules')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('active', true)
+        .order('time', { ascending: true });
+
+      return deduplicateEventRules(orgData || [], ministryId);
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Replicar os cultos existentes do calendário com precisão absoluta
+  // Replicar os cultos existentes do calendário com precisão absoluta e sem duplicidades
   const allCalendarCultos = useMemo(() => {
     const cultosMap = new Map<string, CalendarCultoItem>();
+    const seenDateAndTime = new Set<string>();
+    const seenDateAndLabel = new Set<string>();
 
     const addEventItem = (e: any) => {
       if (!e || !e.date || !e.title) return;
       const ruleId = e.ruleId || (typeof e.id === 'string' && e.id.includes('|') ? e.id.split('|')[0] : null);
       const time = e.time ? String(e.time).slice(0, 5) : '19:30';
+      const timeKey = `${e.date}|${time}`;
+      const labelKey = `${e.date}|${normalizeCultoLabel(e.title)}`;
+
+      // Evita duplicar cultos no mesmo dia/horário ou com variações de grafia do mesmo culto
+      if (seenDateAndTime.has(timeKey) || seenDateAndLabel.has(labelKey)) {
+        return;
+      }
+
       const [y, m, d] = e.date.split('-').map(Number);
       const dt = new Date(y, m - 1, d, 12, 0, 0);
       const weekday = dt.getDay();
@@ -206,10 +236,11 @@ export const RepertoireScreen: React.FC<Props> = ({
       const weekdayFull = WEEKDAY_NAMES_FULL[weekday];
       const dateDisplay = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
       const isPast = isEventPast(e.date, time);
-      // Chave única para o culto específico naquele dia e horário
       const key = `${e.date}_${ruleId || e.title.trim().toLowerCase()}_${time}`;
 
       if (!cultosMap.has(key)) {
+        seenDateAndTime.add(timeKey);
+        seenDateAndLabel.add(labelKey);
         cultosMap.set(key, {
           key,
           id: e.id || key,
@@ -290,7 +321,6 @@ export const RepertoireScreen: React.FC<Props> = ({
   const upcomingByMonth = organizedCultos.upcomingByMonth;
   const upcomingCultos = organizedCultos.upcomingCultos;
   const pastCultos = organizedCultos.pastCultos;
-  const ruleTemplates = useMemo(() => extractRuleTemplates(eventRules as any), [eventRules]);
 
   // Pré-selecionar o próximo culto da agenda automaticamente se nada estiver selecionado,
   // ou se o item salvo no localStorage já passou / não existe mais (quando o rascunho está vazio)
@@ -1433,40 +1463,9 @@ export const RepertoireScreen: React.FC<Props> = ({
                                   </div>
                               </div>
 
-                              {/* 3. PAINEL DE CULTO AVULSO / EXTRA COM MODELOS DOS CULTOS DA IGREJA */}
+                              {/* 3. PAINEL DE CULTO AVULSO / EXTRA */}
                               {selectedCultoKey === 'custom' && (
                                   <div className="mt-2 space-y-2.5 p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
-                                      {ruleTemplates.length > 0 && (
-                                          <div>
-                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">
-                                                  Usar nome de culto já existente na igreja:
-                                              </label>
-                                              <div className="flex flex-wrap gap-1.5">
-                                                  {ruleTemplates.map((tpl, idx) => {
-                                                      const isTplActive = customCultoTitle.trim().toLowerCase() === tpl.title.toLowerCase() && customCultoTime === tpl.time;
-                                                      return (
-                                                          <button
-                                                              key={idx}
-                                                              type="button"
-                                                              onClick={() => {
-                                                                  handleCustomCultoChange(tpl.title);
-                                                                  handleCustomCultoTimeChange(tpl.time);
-                                                              }}
-                                                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 ${
-                                                                  isTplActive
-                                                                      ? 'bg-secondary text-white border-secondary shadow-xs'
-                                                                      : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-300 dark:border-zinc-600 hover:border-secondary'
-                                                              }`}
-                                                          >
-                                                              <span>{tpl.title}</span>
-                                                              <span className="opacity-75 font-mono">({tpl.time})</span>
-                                                          </button>
-                                                      );
-                                                  })}
-                                              </div>
-                                          </div>
-                                      )}
-
                                       <div>
                                           <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
                                           <input

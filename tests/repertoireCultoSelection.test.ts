@@ -169,11 +169,11 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
     expect(organized.pastCultos[1].key).toBe('2026-10-25_rule-manha_09:30');
   });
 
-  it('deve deduplicar regras de culto da organização priorizando o ministério atual', () => {
+  it('deve isolar as regras do ministério atual e nunca duplicar cultos do mesmo dia/horário com grafias parecidas (Culto Dom - Manhã vs Culto Dom Manhã vs Culto de Domingo - Manhã)', () => {
     const rawRules = [
       {
-        id: 'rule-other-ministry-manha',
-        ministry_id: 'min-other',
+        id: 'rule-louvor-manha',
+        ministry_id: 'min-louvor',
         title: 'Culto Dom - Manhã',
         type: 'weekly',
         weekday: 0,
@@ -181,29 +181,110 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
         active: true,
       },
       {
-        id: 'rule-my-ministry-manha',
+        id: 'rule-louvor-noite',
         ministry_id: 'min-louvor',
-        title: 'Culto Dom - Manhã',
-        type: 'weekly',
-        weekday: 0,
-        time: '09:30',
-        active: true,
-      },
-      {
-        id: 'rule-other-ministry-noite',
-        ministry_id: 'min-other',
         title: 'Culto Dom - Noite',
         type: 'weekly',
         weekday: 0,
-        time: '19:00',
+        time: '19:00:00',
+        active: true,
+      },
+      {
+        id: 'rule-midia-manha',
+        ministry_id: 'min-midia',
+        title: 'Culto Dom Manhã',
+        type: 'weekly',
+        weekday: 0,
+        time: '09:30:00',
+        active: true,
+      },
+      {
+        id: 'rule-recepcao-manha',
+        ministry_id: 'min-recepcao',
+        title: 'Culto de Domingo - Manhã',
+        type: 'weekly',
+        weekday: 0,
+        time: '09:30',
         active: true,
       },
     ];
 
     const deduped = deduplicateEventRules(rawRules, 'min-louvor');
     expect(deduped).toHaveLength(2);
-    expect(deduped.find(r => r.title === 'Culto Dom - Manhã')?.id).toBe('rule-my-ministry-manha');
-    expect(deduped.find(r => r.title === 'Culto Dom - Noite')?.id).toBe('rule-other-ministry-noite');
+    expect(deduped.map(r => r.id)).toEqual(['rule-louvor-manha', 'rule-louvor-noite']);
+  });
+
+  it('deve remover cultos duplicados no mesmo dia e horário em organizeCultosForSelection (ex: Culto Dom - Manhã, Culto Dom Manhã, Culto de Domingo - Manhã)', () => {
+    const duplicatedCultos: CalendarCultoItem[] = [
+      {
+        key: '2026-11-01_rule-1_09:30',
+        id: 'rule-1|2026-11-01',
+        ruleId: 'rule-1',
+        title: 'Culto Dom - Manhã',
+        date: '2026-11-01',
+        time: '09:30',
+        iso: '2026-11-01T09:30',
+        weekday: 0,
+        weekdayShort: 'Dom',
+        weekdayFull: 'Domingo',
+        dateDisplay: '01/11',
+        isPast: false,
+        isNext: true,
+      },
+      {
+        key: '2026-11-01_rule-2_09:30',
+        id: 'rule-2|2026-11-01',
+        ruleId: 'rule-2',
+        title: 'Culto Dom Manhã',
+        date: '2026-11-01',
+        time: '09:30',
+        iso: '2026-11-01T09:30',
+        weekday: 0,
+        weekdayShort: 'Dom',
+        weekdayFull: 'Domingo',
+        dateDisplay: '01/11',
+        isPast: false,
+        isNext: false,
+      },
+      {
+        key: '2026-11-01_sem-regra_09:30',
+        id: '2026-11-01_sem-regra_09:30',
+        ruleId: null,
+        title: 'Culto de Domingo - Manhã',
+        date: '2026-11-01',
+        time: '09:30',
+        iso: '2026-11-01T09:30',
+        weekday: 0,
+        weekdayShort: 'Dom',
+        weekdayFull: 'Domingo',
+        dateDisplay: '01/11',
+        isPast: false,
+        isNext: false,
+      },
+      {
+        key: '2026-11-01_rule-noite_19:00',
+        id: 'rule-noite|2026-11-01',
+        ruleId: 'rule-noite',
+        title: 'Culto Dom - Noite',
+        date: '2026-11-01',
+        time: '19:00',
+        iso: '2026-11-01T19:00',
+        weekday: 0,
+        weekdayShort: 'Dom',
+        weekdayFull: 'Domingo',
+        dateDisplay: '01/11',
+        isPast: false,
+        isNext: false,
+      },
+    ];
+
+    const organized = organizeCultosForSelection(duplicatedCultos, []);
+    expect(organized.upcomingCultos).toHaveLength(2);
+    expect(organized.quickPickCultos).toHaveLength(2);
+    expect(organized.quickPickCultos.map(c => c.title)).toEqual([
+      'Culto Dom - Manhã',
+      'Culto Dom - Noite',
+    ]);
   });
 
   it('deve extrair modelos únicos de cultos existentes (extractRuleTemplates) para preenchimento rápido', () => {
@@ -220,3 +301,4 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
     expect(templates[2]).toEqual({ title: 'Culto de Ensino', time: '19:30', ruleId: 'r3' });
   });
 });
+

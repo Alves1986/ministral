@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Melhoria na seleção dos cultos da agenda para criação de playlists (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`), com atalhos rápidos de 1 clique para os próximos cultos, agrupamento multi-mês sem esconder o mês seguinte na virada, contador de músicas existentes por culto e modelos rápidos de cultos da igreja, além do destaque do próximo culto, arquivo compacto em acordeão e sub-aba de Ranking de Louvores. 21 suítes e 101 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Melhoria na seleção dos cultos da agenda para criação de playlists (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`), com atalhos rápidos de 1 clique para os próximos cultos sem duplicidades (isolamento por ministério e deduplicação por horário/título semântico), agrupamento multi-mês na virada, contador de músicas por culto, destaque do próximo culto, arquivo compacto em acordeão e sub-aba de Ranking de Louvores. 21 suítes e 102 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

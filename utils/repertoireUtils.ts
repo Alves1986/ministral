@@ -432,8 +432,35 @@ export interface RuleTemplateItem {
 }
 
 /**
- * Deduplica regras de culto da organização priorizando as regras do ministério atual.
- * Garante também que o horário esteja em formato HH:mm e que o tipo ('weekly' | 'single') esteja preenchido.
+ * Normaliza o nome de um culto para comparação semântica, ignorando pontuação (hífens, barras),
+ * preposições ("de", "da", "do") e unificando abreviações comuns ("domingo" -> "dom", "quarta-feira" -> "quarta").
+ * Ex: "Culto Dom - Manhã", "Culto Dom Manhã" e "Culto de Domingo - Manhã" -> "culto dom manha"
+ */
+export function normalizeCultoLabel(title?: string | null): string {
+  if (!title) return '';
+  return title
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\bdomingo\b/g, 'dom')
+    .replace(/\bsegunda(?:-feira)?\b/g, 'seg')
+    .replace(/\bterca(?:-feira)?\b/g, 'ter')
+    .replace(/\bquarta(?:-feira)?\b/g, 'qua')
+    .replace(/\bquinta(?:-feira)?\b/g, 'qui')
+    .replace(/\bsexta(?:-feira)?\b/g, 'sex')
+    .replace(/\bsabado\b/g, 'sab')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(de|da|do|das|dos|no|na|em)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Deduplica regras de culto da organização priorizando e isolando as regras do ministério atual.
+ * Se o ministério atual possuir regras próprias cadastradas, utiliza apenas as regras dele
+ * (evitando trazer variações de nomes ou eventos de outros ministérios da igreja).
+ * Garante também que o horário esteja em formato HH:mm e não haja duplicidade no mesmo dia/horário.
  */
 export function deduplicateEventRules<T extends Record<string, any>>(
   rules: T[],
@@ -441,30 +468,36 @@ export function deduplicateEventRules<T extends Record<string, any>>(
 ): T[] {
   if (!Array.isArray(rules) || rules.length === 0) return [];
 
-  // Ordena priorizando as regras do ministério atual
-  const sorted = [...rules].sort((a, b) => {
-    const aPref = preferredMinistryId && a.ministry_id === preferredMinistryId ? 0 : 1;
-    const bPref = preferredMinistryId && b.ministry_id === preferredMinistryId ? 0 : 1;
-    if (aPref !== bPref) return aPref - bPref;
+  const activeRules = rules.filter(r => r && r.title && r.active !== false);
+  if (activeRules.length === 0) return [];
+
+  // Se o ministério atual tem regras próprias, isolamos apenas as regras dele
+  const ministrySpecificRules = preferredMinistryId
+    ? activeRules.filter(r => r.ministry_id === preferredMinistryId)
+    : [];
+
+  const sourceRules = ministrySpecificRules.length > 0 ? ministrySpecificRules : activeRules;
+
+  const sorted = [...sourceRules].sort((a, b) => {
     const aTime = String(a.time || '19:30').slice(0, 5);
     const bTime = String(b.time || '19:30').slice(0, 5);
     return aTime.localeCompare(bTime);
   });
 
-  const seen = new Set<string>();
+  const seenSlot = new Set<string>();
+  const seenLabel = new Set<string>();
   const result: T[] = [];
 
   for (const r of sorted) {
-    if (!r || !r.title) continue;
-    if (r.active === false) continue;
-
     const timeNorm = String(r.time || '19:30').slice(0, 5);
-    const titleNorm = normalizeSongTitle(r.title);
+    const labelNorm = normalizeCultoLabel(r.title);
     const inferredType = r.type || (r.weekday !== undefined && r.weekday !== null ? 'weekly' : 'single');
-    const sig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}|${titleNorm}`;
+    const slotSig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}`;
+    const labelSig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}|${labelNorm}`;
 
-    if (!seen.has(sig)) {
-      seen.add(sig);
+    if (!seenSlot.has(slotSig) && !seenLabel.has(labelSig)) {
+      seenSlot.add(slotSig);
+      seenLabel.add(labelSig);
       result.push({
         ...r,
         time: timeNorm,
@@ -489,7 +522,7 @@ export function extractRuleTemplates(rules: Record<string, any>[]): RuleTemplate
     if (!r || !r.title) continue;
     const title = String(r.title).trim();
     const time = String(r.time || '19:30').slice(0, 5);
-    const sig = `${normalizeSongTitle(title)}|${time}`;
+    const sig = `${normalizeCultoLabel(title)}|${time}`;
     if (!seen.has(sig)) {
       seen.add(sig);
       templates.push({
@@ -509,7 +542,7 @@ export function extractRuleTemplates(rules: Record<string, any>[]): RuleTemplate
 function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: RepertoireItemLike[]): number {
   if (!Array.isArray(repertoireItems) || repertoireItems.length === 0) return 0;
 
-  const cultoTitleNorm = normalizeSongTitle(culto.title);
+  const cultoLabelNorm = normalizeCultoLabel(culto.title);
   const cultoTimeNorm = (culto.time || '').slice(0, 5);
   let count = 0;
 
@@ -524,7 +557,7 @@ function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: Repertoir
       continue;
     }
 
-    // 2. Match por título e horário extraídos do item ou da observation
+    // 2. Match por título normalizado e horário extraídos do item ou da observation
     let itemTitle = item.eventRuleTitle || '';
     let itemTime = item.eventRuleTime || '';
     if (!itemTitle && item.observation) {
@@ -535,9 +568,9 @@ function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: Repertoir
       }
     }
     itemTime = itemTime.slice(0, 5);
-    const itemTitleNorm = normalizeSongTitle(itemTitle);
+    const itemLabelNorm = normalizeCultoLabel(itemTitle);
 
-    if (itemTitleNorm && itemTitleNorm === cultoTitleNorm) {
+    if (itemLabelNorm && itemLabelNorm === cultoLabelNorm) {
       if (!itemTime || !cultoTimeNorm || itemTime === cultoTimeNorm) {
         count += 1;
       }
@@ -549,6 +582,7 @@ function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: Repertoir
 
 /**
  * Organiza todos os cultos do calendário para facilitar a escolha pelo ministro:
+ * - Remove duplicidades de cultos no mesmo dia/horário ou com grafias equivalentes
  * - Não esconde cultos do mês seguinte quando estamos no fim do mês
  * - Contabiliza quantas músicas cada culto já possui (songsCount)
  * - Gera lista de acesso rápido (quickPickCultos) para seleção em 1 clique
@@ -569,12 +603,46 @@ export function organizeCultosForSelection(
     };
   }
 
-  const enriched: CalendarCultoItem[] = allCultos
+  const withCounts: CalendarCultoItem[] = allCultos
     .map(c => ({
       ...c,
+      time: String(c.time || '19:30').slice(0, 5),
       songsCount: countSongsForCulto(c, repertoireItems),
     }))
-    .sort((a, b) => a.iso.localeCompare(b.iso));
+    .sort((a, b) => {
+      const isoCmp = a.iso.localeCompare(b.iso);
+      if (isoCmp !== 0) return isoCmp;
+      // Prioriza quem tem músicas cadastradas e quem possui ruleId oficial
+      const aScore = (a.songsCount ? 10 : 0) + (a.ruleId ? 5 : 0);
+      const bScore = (b.songsCount ? 10 : 0) + (b.ruleId ? 5 : 0);
+      return bScore - aScore;
+    });
+
+  // Deduplica por (data + horário) e por (data + título semântico normalizado)
+  const seenDateAndTime = new Set<string>();
+  const seenDateAndLabel = new Set<string>();
+  const deduplicated: CalendarCultoItem[] = [];
+
+  for (const c of withCounts) {
+    const timeKey = `${c.date}|${c.time}`;
+    const labelKey = `${c.date}|${normalizeCultoLabel(c.title)}`;
+    if (seenDateAndTime.has(timeKey) || seenDateAndLabel.has(labelKey)) {
+      continue;
+    }
+    seenDateAndTime.add(timeKey);
+    seenDateAndLabel.add(labelKey);
+    deduplicated.push(c);
+  }
+
+  // Re-garante a flag isNext no primeiro culto futuro após deduplicação
+  let foundNext = false;
+  const enriched = deduplicated.map(c => {
+    if (!foundNext && !c.isPast) {
+      foundNext = true;
+      return { ...c, isNext: true };
+    }
+    return { ...c, isNext: false };
+  });
 
   const upcomingCultos = enriched.filter(c => !c.isPast);
   const nextCulto = upcomingCultos.find(c => c.isNext) || upcomingCultos[0] || null;
