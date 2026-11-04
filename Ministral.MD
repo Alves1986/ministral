@@ -70,13 +70,11 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 28/10/2026
+- **Data**: 04/11/2026
 - **Realizações**:
-  1. **Seleção Inteligente de Cultos da Agenda na Montagem de Playlist (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`)**:
-     - **Correção da Virada de Mês (`organizeCultosForSelection`)**: Eliminado o filtro restritivo que ocultava cultos do mês seguinte quando o usuário estava no final do mês vigente (ex: dia 28/10 ocultando o culto de 01/11 à noite e os demais de novembro). Agora todos os cultos futuros são exibidos agrupados por mês (`upcomingByMonth`).
-     - **Atalhos Rápidos de 1 Clique (`quickPickCultos`)**: Adicionados cards interativos de seleção rápida para os próximos cultos imediatos da agenda (ex: Domingo Manhã e Domingo Noite), exibindo ícone de turno (☀️ Manhã / 🌙 Noite), data, horário, selo `⭐ Próximo` e contador `🎵 X` de músicas já salvas naquele culto.
-     - **Isolamento Estrito por Ministério e Deduplicação Semântica de Cultos (`deduplicateEventRules`, `normalizeCultoLabel` & `organizeCultosForSelection`)**: Garantido que o seletor utilize estritamente as regras do ministério atual (evitando misturar cultos de outros ministérios da igreja com grafias parecidas como `Culto Dom - Manhã`, `Culto Dom Manhã` e `Culto de Domingo - Manhã`), deduplicando também por dia/horário e removendo a listagem de sugestões de nomes no modo de Culto Extra.
-     - **Auto-seleção Resiliente**: Quando o rascunho está vazio e o culto salvo no `localStorage` já passou ou ficou inválido, o seletor aponta automaticamente para o próximo culto da agenda.
+  1. **Sincronização Completa com Eventos do Calendário e Edição de Playlists (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`)**:
+     - **Exibição de Todos os Eventos do Calendário**: Sincronizadas as exclusões de agenda (`__EVENT_EXCLUDED__` em `schedule_assignments`) e removida a ocultação por horário, permitindo que eventos distintos do ministério no mesmo horário (ex: `Culto Dom - Manhã`, `Culto Ceia - Manhã`, `Louvor Rede Kids` e `Culto Dom - Noite`) apareçam todos na lista de seleção sem necessidade de "Culto Extra".
+     - **Edição Completa de Playlists e Louvores**: Adicionado botão `Editar Playlist` em cada card (permitindo adicionar novos louvores ou mover a playlist inteira para outro evento do calendário), exibição dos louvores já salvos diretamente no painel `Playlist em Montagem` ao selecionar um culto com músicas, e botão `Editar` (lápis) em cada louvor para atualizar título, link, tom e cifra via `updateRepertoireItem`.
   2. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
      - **Destaque do Próximo Culto (`partitionPlaylists`)**: A playlist correspondente ao próximo culto da agenda fica isolada e destacada no topo da aba de Repertório com card exclusivo, badge "⭐ Destaque Oficial / Próximo Culto" e atalho rápido para montagem caso ainda não tenha sido publicada.
      - **Arquivo Compacto de Playlists Passadas**: Playlists de cultos já realizados são movidas automaticamente para a seção "Histórico de Playlists Anteriores" em formato de acordeão colapsado por padrão (com controles de "Expandir todos" e "Recolher todos"), mantendo a página leve e enxuta mesmo após dezenas de cultos.

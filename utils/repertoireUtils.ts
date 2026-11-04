@@ -484,7 +484,6 @@ export function deduplicateEventRules<T extends Record<string, any>>(
     return aTime.localeCompare(bTime);
   });
 
-  const seenSlot = new Set<string>();
   const seenLabel = new Set<string>();
   const result: T[] = [];
 
@@ -492,11 +491,9 @@ export function deduplicateEventRules<T extends Record<string, any>>(
     const timeNorm = String(r.time || '19:30').slice(0, 5);
     const labelNorm = normalizeCultoLabel(r.title);
     const inferredType = r.type || (r.weekday !== undefined && r.weekday !== null ? 'weekly' : 'single');
-    const slotSig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}`;
     const labelSig = `${inferredType}|${r.weekday ?? ''}|${r.date || ''}|${timeNorm}|${labelNorm}`;
 
-    if (!seenSlot.has(slotSig) && !seenLabel.has(labelSig)) {
-      seenSlot.add(slotSig);
+    if (!seenLabel.has(labelSig)) {
       seenLabel.add(labelSig);
       result.push({
         ...r,
@@ -591,7 +588,7 @@ function countSongsForCulto(culto: CalendarCultoItem, repertoireItems: Repertoir
 export function organizeCultosForSelection(
   allCultos: CalendarCultoItem[],
   repertoireItems: RepertoireItemLike[] = [],
-  quickPickLimit = 4
+  quickPickLimit = 50
 ): OrganizedCultosSelection {
   if (!Array.isArray(allCultos) || allCultos.length === 0) {
     return {
@@ -618,18 +615,16 @@ export function organizeCultosForSelection(
       return bScore - aScore;
     });
 
-  // Deduplica por (data + horário) e por (data + título semântico normalizado)
-  const seenDateAndTime = new Set<string>();
+  // Deduplica apenas por (data + horário + título semântico normalizado),
+  // preservando eventos diferentes que ocorrem no mesmo dia/horário
   const seenDateAndLabel = new Set<string>();
   const deduplicated: CalendarCultoItem[] = [];
 
   for (const c of withCounts) {
-    const timeKey = `${c.date}|${c.time}`;
-    const labelKey = `${c.date}|${normalizeCultoLabel(c.title)}`;
-    if (seenDateAndTime.has(timeKey) || seenDateAndLabel.has(labelKey)) {
+    const labelKey = `${c.date}|${c.time}|${normalizeCultoLabel(c.title)}`;
+    if (seenDateAndLabel.has(labelKey)) {
       continue;
     }
-    seenDateAndTime.add(timeKey);
     seenDateAndLabel.add(labelKey);
     deduplicated.push(c);
   }

@@ -4,7 +4,7 @@ import {
   Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, 
   FileText, AlignLeft, ListPlus, Clock, Sun, Moon, ChevronLeft, 
   ChevronRight, Eye, EyeOff, Sparkles, Check, CheckCircle2,
-  Trophy, Archive, History, ChevronDown, ChevronUp, BarChart3, TrendingUp, Music2
+  Trophy, Archive, History, ChevronDown, ChevronUp, BarChart3, TrendingUp, Music2, Edit2
 } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
@@ -63,7 +63,20 @@ export const RepertoireScreen: React.FC<Props> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const cultoSelectRef = useRef<HTMLSelectElement>(null);
+  const builderPanelRef = useRef<HTMLDivElement>(null);
   const [selectedChordItem, setSelectedChordItem] = useState<RepertoireItem | null>(null);
+
+  // Estado de Edição de Música / Playlist
+  const [editingSong, setEditingSong] = useState<RepertoireItem | null>(null);
+  const [editSongTitle, setEditSongTitle] = useState('');
+  const [editSongLink, setEditSongLink] = useState('');
+  const [editSongKey, setEditSongKey] = useState('');
+  const [editSongContent, setEditSongContent] = useState('');
+  const [isSavingSongEdit, setIsSavingSongEdit] = useState(false);
+
+  const [editingPlaylistGroupKey, setEditingPlaylistGroupKey] = useState<string | null>(null);
+  const [targetMoveCultoKey, setTargetMoveCultoKey] = useState<string>('');
+  const [isMovingPlaylist, setIsMovingPlaylist] = useState(false);
 
   // Controle de Arquivo de Playlists Passadas e Ranking
   const [expandedPastKeys, setExpandedPastKeys] = useState<Set<string>>(new Set());
@@ -211,21 +224,43 @@ export const RepertoireScreen: React.FC<Props> = ({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Replicar os cultos existentes do calendário com precisão absoluta e sem duplicidades
+  // Buscar exclusões de eventos do calendário (__EVENT_EXCLUDED__) para que o seletor mostre exatamente os eventos ativos do calendário
+  const { data: eventExclusions = [] } = useQuery({
+    queryKey: ['event_exclusions_repertoire', orgId, ministryId],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb || !orgId || !ministryId) return [];
+      const { data, error } = await sb
+        .from('schedule_assignments')
+        .select('event_rule_id, event_date')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('role', '__EVENT_EXCLUDED__');
+      if (error || !data) return [];
+      return data.map((a: any) => `${a.event_rule_id}|${String(a.event_date || '').slice(0, 10)}`);
+    },
+    enabled: !!orgId && !!ministryId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  // Replicar TODOS os cultos existentes no calendário com precisão absoluta e sem esconder eventos do mesmo horário
   const allCalendarCultos = useMemo(() => {
     const cultosMap = new Map<string, CalendarCultoItem>();
-    const seenDateAndTime = new Set<string>();
     const seenDateAndLabel = new Set<string>();
+    const exclusionSet = new Set<string>(eventExclusions);
 
-    const addEventItem = (e: any) => {
+    const addEventItem = (e: any, ignoreExclusion = false) => {
       if (!e || !e.date || !e.title) return;
       const ruleId = e.ruleId || (typeof e.id === 'string' && e.id.includes('|') ? e.id.split('|')[0] : null);
-      const time = e.time ? String(e.time).slice(0, 5) : '19:30';
-      const timeKey = `${e.date}|${time}`;
-      const labelKey = `${e.date}|${normalizeCultoLabel(e.title)}`;
+      if (!ignoreExclusion && ruleId && exclusionSet.has(`${ruleId}|${e.date}`)) {
+        return;
+      }
 
-      // Evita duplicar cultos no mesmo dia/horário ou com variações de grafia do mesmo culto
-      if (seenDateAndTime.has(timeKey) || seenDateAndLabel.has(labelKey)) {
+      const time = e.time ? String(e.time).slice(0, 5) : '19:30';
+      const labelKey = `${e.date}|${time}|${normalizeCultoLabel(e.title)}`;
+
+      // Evita apenas duplicar exatamente o mesmo culto (mesma data, horário e título normalizado)
+      if (seenDateAndLabel.has(labelKey)) {
         return;
       }
 
@@ -239,7 +274,6 @@ export const RepertoireScreen: React.FC<Props> = ({
       const key = `${e.date}_${ruleId || e.title.trim().toLowerCase()}_${time}`;
 
       if (!cultosMap.has(key)) {
-        seenDateAndTime.add(timeKey);
         seenDateAndLabel.add(labelKey);
         cultosMap.set(key, {
           key,
@@ -258,9 +292,9 @@ export const RepertoireScreen: React.FC<Props> = ({
       }
     };
 
-    // 1. Prioridade para os eventos reais sincronizados do calendário da aplicação (com exclusões aplicadas)
+    // 1. Prioridade para os eventos reais sincronizados do calendário da aplicação (com exclusões já aplicadas)
     if (events && Array.isArray(events)) {
-      events.forEach(addEventItem);
+      events.forEach(e => addEventItem(e, false));
     }
 
     // 2. Geração determinística de cultos a partir das regras cadastradas (cobre mês anterior + próximos 2 meses completos)
@@ -270,10 +304,10 @@ export const RepertoireScreen: React.FC<Props> = ({
       const prevMonthStr = adjustMonth(minMonth, -1);
       const nextMonthStr = adjustMonth(maxMonth, 2);
       const gen = generateEvents(eventRules as any, `${prevMonthStr}-01`, `${nextMonthStr}-28`);
-      gen.forEach(addEventItem);
+      gen.forEach(e => addEventItem(e, false));
     }
 
-    // 3. Incluir também cultos já criados no repertório que ainda não estejam no mapa (ex: cultos avulsos já salvos)
+    // 3. Incluir também cultos já criados no repertório que ainda não estejam no mapa
     if (repertoire && Array.isArray(repertoire)) {
       repertoire.forEach(item => {
         if (!item?.date) return;
@@ -293,7 +327,7 @@ export const RepertoireScreen: React.FC<Props> = ({
             title: cTitle,
             date: item.date.split('T')[0],
             time: cTime || '19:30',
-          });
+          }, true);
         }
       });
     }
@@ -309,11 +343,11 @@ export const RepertoireScreen: React.FC<Props> = ({
       }
       return { ...c, isNext: false };
     });
-  }, [events, eventRules, viewMonth, realCurrentMonth, repertoire]);
+  }, [events, eventRules, eventExclusions, viewMonth, realCurrentMonth, repertoire]);
 
-  // Organização inteligente dos cultos para o seletor (inclui próximos meses, contagem de músicas e atalhos rápidos)
+  // Organização inteligente dos cultos para o seletor (mostra TODOS os eventos listados no calendário)
   const organizedCultos = useMemo(() => {
-    return organizeCultosForSelection(allCalendarCultos, repertoire, 4);
+    return organizeCultosForSelection(allCalendarCultos, repertoire, 100);
   }, [allCalendarCultos, repertoire]);
 
   const nextCulto = organizedCultos.nextCulto;
@@ -326,7 +360,7 @@ export const RepertoireScreen: React.FC<Props> = ({
   // ou se o item salvo no localStorage já passou / não existe mais (quando o rascunho está vazio)
   useEffect(() => {
     if (!nextCulto) return;
-    if (!selectedCultoKey) {
+    if (!selectedCultoKey || selectedCultoKey === 'custom') {
       setSelectedCultoKey(nextCulto.key);
       setDate(nextCulto.date);
       localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
@@ -335,38 +369,18 @@ export const RepertoireScreen: React.FC<Props> = ({
     }
 
     if (draftItems.length === 0) {
-      if (selectedCultoKey === 'custom' && !customCultoTitle.trim()) {
+      const found = allCalendarCultos.find(c => c.key === selectedCultoKey);
+      if (!found) {
         setSelectedCultoKey(nextCulto.key);
         setDate(nextCulto.date);
         localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
         localStorage.setItem('repertoire_draft_date', nextCulto.date);
-        return;
-      }
-
-      if (selectedCultoKey !== 'custom') {
-        const found = allCalendarCultos.find(c => c.key === selectedCultoKey);
-        if (!found || found.isPast) {
-          setSelectedCultoKey(nextCulto.key);
-          setDate(nextCulto.date);
-          localStorage.setItem('repertoire_draft_culto_key', nextCulto.key);
-          localStorage.setItem('repertoire_draft_date', nextCulto.date);
-        }
       }
     }
-  }, [selectedCultoKey, nextCulto, allCalendarCultos, draftItems.length, customCultoTitle]);
+  }, [selectedCultoKey, nextCulto, allCalendarCultos, draftItems.length]);
 
   // Informações completas do culto selecionado
   const selectedCultoInfo = useMemo(() => {
-    if (selectedCultoKey === 'custom') {
-      return {
-        id: null,
-        title: customCultoTitle.trim(),
-        time: customCultoTime.trim(),
-        date: date,
-        isCustom: true,
-        culto: null
-      };
-    }
     const found = organizedCultos.upcomingCultos.find(c => c.key === selectedCultoKey) 
       || organizedCultos.pastCultos.find(c => c.key === selectedCultoKey)
       || allCalendarCultos.find(c => c.key === selectedCultoKey);
@@ -381,7 +395,38 @@ export const RepertoireScreen: React.FC<Props> = ({
       };
     }
     return { id: null, title: '', time: '', date: '', isCustom: false, culto: null };
-  }, [selectedCultoKey, customCultoTitle, customCultoTime, organizedCultos, allCalendarCultos, date]);
+  }, [selectedCultoKey, organizedCultos, allCalendarCultos]);
+
+  // Músicas já salvas no repertório para o culto atualmente selecionado
+  const selectedCultoSavedSongs = useMemo(() => {
+    if (!selectedCultoInfo.date || !selectedCultoInfo.title) return [];
+    const targetDate = selectedCultoInfo.date;
+    const targetRuleId = selectedCultoInfo.id;
+    const targetLabel = normalizeCultoLabel(selectedCultoInfo.title);
+    const targetTime = (selectedCultoInfo.time || '').slice(0, 5);
+
+    return repertoire.filter(item => {
+      const itemDate = (item.date || '').split('T')[0];
+      if (itemDate !== targetDate) return false;
+      if (targetRuleId && item.eventRuleId && item.eventRuleId === targetRuleId) return true;
+
+      let itemTitle = item.eventRuleTitle || '';
+      let itemTime = item.eventRuleTime || '';
+      if (!itemTitle && item.observation) {
+        const obsMatch = item.observation.match(/^Culto:\s*([^(]+?)(?:\s*\(([^)]+)\))?$/i);
+        if (obsMatch) {
+          itemTitle = obsMatch[1].trim();
+          if (obsMatch[2]) itemTime = obsMatch[2].trim();
+        }
+      }
+      itemTime = itemTime.slice(0, 5);
+      const itemLabel = normalizeCultoLabel(itemTitle);
+      if (itemLabel && itemLabel === targetLabel) {
+        return !itemTime || !targetTime || itemTime === targetTime;
+      }
+      return false;
+    });
+  }, [repertoire, selectedCultoInfo]);
 
   const handleSelectCulto = (cultoItem: any) => {
     setSelectedCultoKey(cultoItem.key);
@@ -745,6 +790,104 @@ export const RepertoireScreen: React.FC<Props> = ({
     }
   };
 
+  const handleStartEditSong = (item: RepertoireItem) => {
+    setEditingSong(item);
+    setEditSongTitle(item.title || '');
+    setEditSongLink(item.link || '');
+    setEditSongKey(item.key || '');
+    setEditSongContent(item.content || '');
+  };
+
+  const handleSaveEditSong = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingSong || !orgId) return;
+    const cleanTitle = editSongTitle.trim();
+    if (!cleanTitle) {
+      addToast("Informe o título do louvor.", "warning");
+      return;
+    }
+
+    setIsSavingSongEdit(true);
+    try {
+      const updates = {
+        title: cleanTitle,
+        link: editSongLink.trim(),
+        key: editSongKey.trim() || null,
+        content: editSongContent || null,
+      };
+
+      queryClient.setQueryData(['repertoire', ministryId, orgId], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((item: any) => item.id === editingSong.id ? { ...item, ...updates } : item);
+      });
+
+      await updateRepertoireItem(editingSong.id, orgId, updates);
+      await setRepertoire([]);
+      addToast("Louvor atualizado com sucesso!", "success");
+      setEditingSong(null);
+    } catch (err) {
+      console.error("Erro ao editar louvor:", err);
+      addToast("Erro ao salvar alterações do louvor.", "error");
+    } finally {
+      setIsSavingSongEdit(false);
+    }
+  };
+
+  const handleSelectPlaylistToEdit = (group: {
+    groupKey: string;
+    date: string;
+    eventRuleId?: string | null;
+    cultoTitle: string;
+    cultoTime?: string | null;
+  }) => {
+    const matchedCulto = allCalendarCultos.find(c =>
+      c.date === group.date && (
+        (group.eventRuleId && c.ruleId === group.eventRuleId) ||
+        normalizeCultoLabel(c.title) === normalizeCultoLabel(group.cultoTitle)
+      )
+    );
+
+    if (matchedCulto) {
+      handleSelectCulto(matchedCulto);
+      setTargetMoveCultoKey(matchedCulto.key);
+    }
+
+    setEditingPlaylistGroupKey(prev => prev === group.groupKey ? null : group.groupKey);
+  };
+
+  const handleMovePlaylistToCulto = async (group: {
+    groupKey: string;
+    items: RepertoireItem[];
+  }) => {
+    if (!orgId || !targetMoveCultoKey) return;
+    const targetCulto = allCalendarCultos.find(c => c.key === targetMoveCultoKey);
+    if (!targetCulto) {
+      addToast("Selecione um culto válido do calendário.", "warning");
+      return;
+    }
+
+    setIsMovingPlaylist(true);
+    try {
+      const newObservation = `Culto: ${targetCulto.title}${targetCulto.time ? ` (${targetCulto.time})` : ''}`;
+      for (const item of group.items) {
+        await updateRepertoireItem(item.id, orgId, {
+          date: targetCulto.date,
+          event_rule_id: targetCulto.ruleId || null,
+          observation: newObservation,
+        });
+      }
+      handleSelectCulto(targetCulto);
+      await setRepertoire([]);
+      setEditingPlaylistGroupKey(null);
+      addToast(`Playlist movida para ${targetCulto.title} (${targetCulto.dateDisplay})!`, "success");
+    } catch (err) {
+      console.error("Erro ao mover playlist:", err);
+      addToast("Erro ao alterar o culto da playlist.", "error");
+    } finally {
+      setIsMovingPlaylist(false);
+    }
+  };
+
   // Agrupamento de repertório com indicação de Próximo Culto e status de Culto Passado
   const groupedRepertoire = useMemo(() => {
     const groupsMap = new Map<string, {
@@ -934,7 +1077,25 @@ export const RepertoireScreen: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            {mode === 'manage' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectPlaylistToEdit(group);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                  editingPlaylistGroupKey === group.groupKey
+                    ? 'bg-secondary text-white border-secondary shadow-xs'
+                    : 'bg-white dark:bg-zinc-800 text-secondary border-secondary/40 hover:bg-secondary/10'
+                }`}
+                title="Editar esta playlist"
+              >
+                <Edit2 size={12} />
+                <span>{editingPlaylistGroupKey === group.groupKey ? 'Fechar Edição' : 'Editar Playlist'}</span>
+              </button>
+            )}
             <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200/60 dark:border-zinc-700">
               {group.items.length} {group.items.length === 1 ? 'louvor' : 'louvores'}
             </span>
@@ -949,6 +1110,72 @@ export const RepertoireScreen: React.FC<Props> = ({
             )}
           </div>
         </div>
+
+        {/* Barra de Edição da Playlist (Adicionar músicas ou alterar culto da playlist) */}
+        {mode === 'manage' && editingPlaylistGroupKey === group.groupKey && (
+          <div className="mt-3 p-3 rounded-xl bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 space-y-3 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-1.5">
+                <Edit2 size={13} className="text-secondary" />
+                Modo de Edição da Playlist ({group.cultoTitle} — {d}/{m}/{y})
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSelectPlaylistToEdit(group);
+                  setEditingPlaylistGroupKey(group.groupKey);
+                  builderPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="px-3 py-1.5 bg-secondary hover:bg-secondaryHover text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
+              >
+                <Plus size={13} />
+                <span>Adicionar Mais Louvores a Esta Playlist</span>
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-secondary/20 flex flex-col sm:flex-row sm:items-end gap-2">
+              <div className="flex-1">
+                <label className="text-[10px] uppercase font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  Alterar Culto / Evento desta Playlist no Calendário:
+                </label>
+                <select
+                  value={targetMoveCultoKey}
+                  onChange={e => setTargetMoveCultoKey(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">Selecione um evento do calendário...</option>
+                  {upcomingByMonth.map(mGroup => (
+                    <optgroup key={mGroup.monthKey} label={`📅 ${getMonthName(mGroup.monthKey)}`}>
+                      {mGroup.cultos.map(c => (
+                        <option key={c.key} value={c.key}>
+                          {c.weekdayShort}, {c.dateDisplay} às {c.time} — {c.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  {pastCultos.length > 0 && (
+                    <optgroup label="⏳ Cultos Realizados">
+                      {pastCultos.map(c => (
+                        <option key={c.key} value={c.key}>
+                          {c.weekdayShort}, {c.dateDisplay} às {c.time} — {c.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={isMovingPlaylist || !targetMoveCultoKey}
+                onClick={() => handleMovePlaylistToCulto(group)}
+                className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                {isMovingPlaylist ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                <span>Mover Playlist de Culto</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {isExpanded && (
           <div className={`mt-3 rounded-xl border overflow-hidden shadow-sm ${
@@ -1041,16 +1268,31 @@ export const RepertoireScreen: React.FC<Props> = ({
                     </div>
                   </div>
                 )}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {item.link && (
                     <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Abrir no YouTube">
                       <ExternalLink size={18} />
                     </a>
                   )}
                   {mode === 'manage' && (
-                    <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir música">
-                      <Trash2 size={18} />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditSong(item)}
+                        className="p-2 text-zinc-400 hover:text-secondary hover:bg-secondary/10 rounded-lg transition-colors"
+                        title="Editar louvor (título, link, tom ou cifra)"
+                      >
+                        <Edit2 size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Excluir música"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1257,8 +1499,8 @@ export const RepertoireScreen: React.FC<Props> = ({
                       )}
                   </div>
 
-                  {/* Staging / Rascunho da Playlist */}
-                  <div className="w-full lg:w-96 bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col justify-between shrink-0">
+                  {/* Staging / Rascunho e Edição da Playlist */}
+                  <div ref={builderPanelRef} className="w-full lg:w-96 bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col justify-between shrink-0">
                       <div>
                           <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-200 dark:border-zinc-700">
                               <h4 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -1266,25 +1508,25 @@ export const RepertoireScreen: React.FC<Props> = ({
                                   <span>Playlist em Montagem</span>
                               </h4>
                               <span className="text-[10px] font-bold bg-secondary/15 text-secondary px-2 py-0.5 rounded-full">
-                                  {draftItems.length} {draftItems.length === 1 ? 'música' : 'músicas'}
+                                  {selectedCultoSavedSongs.length + draftItems.length} {(selectedCultoSavedSongs.length + draftItems.length) === 1 ? 'música' : 'músicas'}
                               </span>
                           </div>
 
                           <div className="mb-4 space-y-3">
-                              {/* 1. ATALHOS RÁPIDOS (1 CLIQUE) PARA OS PRÓXIMOS CULTOS EXISTENTES NO SISTEMA */}
+                              {/* 1. TODOS OS EVENTOS AGENDADOS NO CALENDÁRIO (TOQUE PARA SELECIONAR) */}
                               {quickPickCultos.length > 0 && (
                                   <div>
                                       <div className="flex items-center justify-between mb-1.5">
                                           <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
                                               <Sparkles size={11} className="text-secondary" />
-                                              Próximos Cultos (Toque para selecionar)
+                                              Eventos do Calendário (Toque para selecionar)
                                           </label>
                                           <span className="text-[10px] text-zinc-400 font-medium">
                                               {upcomingCultos.length} agendados
                                           </span>
                                       </div>
 
-                                      <div className="grid grid-cols-1 gap-1.5">
+                                      <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
                                           {quickPickCultos.map(c => {
                                               const isSelected = selectedCultoKey === c.key;
                                               const lowerTitle = c.title.toLowerCase();
@@ -1380,13 +1622,8 @@ export const RepertoireScreen: React.FC<Props> = ({
                                       value={selectedCultoKey}
                                       onChange={e => {
                                         const val = e.target.value;
-                                        if (val === 'custom') {
-                                          setSelectedCultoKey('custom');
-                                          localStorage.setItem('repertoire_draft_culto_key', 'custom');
-                                        } else {
-                                          const c = allCalendarCultos.find(item => item.key === val);
-                                          if (c) handleSelectCulto(c);
-                                        }
+                                        const c = allCalendarCultos.find(item => item.key === val);
+                                        if (c) handleSelectCulto(c);
                                       }}
                                       className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-secondary font-semibold transition-all text-zinc-900 dark:text-zinc-100 shadow-xs"
                                   >
@@ -1401,7 +1638,7 @@ export const RepertoireScreen: React.FC<Props> = ({
                                           </optgroup>
                                       )}
 
-                                      {/* Todos os Cultos Futuros Agrupados por Mês (não esconde o mês seguinte no fim do mês!) */}
+                                      {/* Todos os Cultos Futuros Agrupados por Mês */}
                                       {upcomingByMonth.map(group => {
                                           const items = group.cultos.filter(c => !nextCulto || c.key !== nextCulto.key);
                                           if (items.length === 0) return null;
@@ -1426,86 +1663,13 @@ export const RepertoireScreen: React.FC<Props> = ({
                                               ))}
                                           </optgroup>
                                       )}
-
-                                      <optgroup label="Outro / Data Especial">
-                                          <option value="custom">✏️ Culto Avulso / Extra (Escolher outra data)</option>
-                                      </optgroup>
                                   </select>
-
-                                  {/* Botão Rápido para Culto Extra / Outra Data */}
-                                  <div className="mt-2 flex items-center justify-between gap-2">
-                                      <button
-                                          type="button"
-                                          onClick={() => {
-                                              if (selectedCultoKey === 'custom' && nextCulto) {
-                                                  handleSelectCulto(nextCulto);
-                                              } else {
-                                                  setSelectedCultoKey('custom');
-                                                  localStorage.setItem('repertoire_draft_culto_key', 'custom');
-                                                  if (!date && nextCulto) {
-                                                      handleDateChange(nextCulto.date);
-                                                  }
-                                              }
-                                          }}
-                                          className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                                              selectedCultoKey === 'custom'
-                                                  ? 'bg-secondary text-white border-secondary shadow-xs'
-                                                  : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-secondary/50'
-                                          }`}
-                                      >
-                                          <Calendar size={12} />
-                                          <span>
-                                              {selectedCultoKey === 'custom'
-                                                  ? '✓ Modo Culto Avulso / Data Personalizada Ativo'
-                                                  : '✏️ Criar para Culto Extra ou Outra Data'}
-                                          </span>
-                                      </button>
-                                  </div>
                               </div>
-
-                              {/* 3. PAINEL DE CULTO AVULSO / EXTRA */}
-                              {selectedCultoKey === 'custom' && (
-                                  <div className="mt-2 space-y-2.5 p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-xl border border-zinc-200 dark:border-zinc-700 animate-fade-in">
-                                      <div>
-                                          <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Título do Culto</label>
-                                          <input
-                                              type="text"
-                                              placeholder="Ex: Culto Dom - Noite, Santa Ceia, Vigília..."
-                                              value={customCultoTitle}
-                                              onChange={e => handleCustomCultoChange(e.target.value)}
-                                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                              autoFocus
-                                          />
-                                      </div>
-
-                                      <div className="grid grid-cols-2 gap-2">
-                                          <div>
-                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Data do Culto</label>
-                                              <input
-                                                  ref={dateInputRef}
-                                                  type="date"
-                                                  value={date}
-                                                  onChange={e => handleDateChange(e.target.value)}
-                                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                              />
-                                          </div>
-                                          <div>
-                                              <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Horário</label>
-                                              <input
-                                                  type="time"
-                                                  value={customCultoTime}
-                                                  onChange={e => handleCustomCultoTimeChange(e.target.value)}
-                                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
-                                              />
-                                          </div>
-                                      </div>
-                                  </div>
-                              )}
                           </div>
 
                           {/* Prévia do culto selecionado */}
                           {date && selectedCultoInfo.title && (
-                              <div className="mb-4 p-3 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs space-y-1">
+                              <div className="mb-3 p-3 bg-secondary/10 dark:bg-secondary/15 border border-secondary/30 rounded-xl text-xs space-y-1">
                                   <div className="flex items-center justify-between text-secondary">
                                       <span className="font-extrabold truncate text-sm flex items-center gap-1.5">
                                           {selectedCultoInfo.title.toLowerCase().includes('manh') ? <Sun size={15}/> : selectedCultoInfo.title.toLowerCase().includes('noite') ? <Moon size={15}/> : <Music size={15}/>}
@@ -1533,23 +1697,83 @@ export const RepertoireScreen: React.FC<Props> = ({
                               </div>
                           )}
 
-                          {/* Lista de músicas em rascunho */}
-                          {draftItems.length === 0 ? (
-                              <div className="py-7 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
-                                  <p className="text-xs">Nenhuma música selecionada.</p>
+                          {/* Músicas JÁ SALVAS na playlist deste culto (permite editar ou remover direto aqui) */}
+                          {selectedCultoSavedSongs.length > 0 && (
+                              <div className="mb-3">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                      <label className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                          <CheckCircle2 size={11} />
+                                          Louvores já nesta playlist ({selectedCultoSavedSongs.length})
+                                      </label>
+                                  </div>
+                                  <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                      {selectedCultoSavedSongs.map(saved => (
+                                          <div
+                                              key={saved.id}
+                                              className="flex items-center justify-between gap-2 bg-white dark:bg-zinc-800 p-2 rounded-lg border border-emerald-200/70 dark:border-emerald-800/50 shadow-xs"
+                                          >
+                                              <div className="min-w-0 flex-1">
+                                                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">
+                                                      {saved.title}
+                                                  </p>
+                                                  {saved.key && (
+                                                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                                                          Tom: {saved.key}
+                                                      </span>
+                                                  )}
+                                              </div>
+                                              <div className="flex items-center gap-1 shrink-0">
+                                                  <button
+                                                      type="button"
+                                                      onClick={() => handleStartEditSong(saved)}
+                                                      className="p-1.5 text-zinc-400 hover:text-secondary hover:bg-secondary/10 rounded-md transition-colors"
+                                                      title="Editar louvor"
+                                                  >
+                                                      <Edit2 size={13} />
+                                                  </button>
+                                                  <button
+                                                      type="button"
+                                                      onClick={() => handleDelete(saved.id)}
+                                                      className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                                      title="Remover da playlist"
+                                                  >
+                                                      <Trash2 size={13} />
+                                                  </button>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
                               </div>
+                          )}
+
+                          {/* Lista de novas músicas em rascunho para adicionar */}
+                          {draftItems.length === 0 ? (
+                              selectedCultoSavedSongs.length === 0 ? (
+                                  <div className="py-7 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
+                                      <p className="text-xs">Nenhuma música selecionada.</p>
+                                  </div>
+                              ) : (
+                                  <div className="py-3 px-3 text-center text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
+                                      <p className="text-[11px]">Pesquise ao lado e clique em <b>+</b> para adicionar mais louvores a esta playlist.</p>
+                                  </div>
+                              )
                           ) : (
-                              <div className="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scrollbar pr-1">
-                                  {draftItems.map((item, idx) => (
-                                      <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
-                                          <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">
-                                              {item.title}
-                                          </span>
-                                          <button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1 transition-colors">
-                                              <X size={14}/>
-                                          </button>
-                                      </div>
-                                  ))}
+                              <div className="mb-4">
+                                  <label className="text-[10px] uppercase font-bold text-secondary block mb-1.5">
+                                      Novos louvores para adicionar ({draftItems.length})
+                                  </label>
+                                  <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                      {draftItems.map((item, idx) => (
+                                          <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
+                                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">
+                                                  {item.title}
+                                              </span>
+                                              <button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1 transition-colors">
+                                                  <X size={14}/>
+                                              </button>
+                                          </div>
+                                      ))}
+                                  </div>
                               </div>
                           )}
 
@@ -1934,6 +2158,101 @@ export const RepertoireScreen: React.FC<Props> = ({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de Edição de Louvor da Playlist */}
+      {editingSong && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
+              <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+                <Edit2 size={18} className="text-secondary" />
+                <span>Editar Louvor da Playlist</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingSong(null)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSong} className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
+                  Título do Louvor *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editSongTitle}
+                  onChange={e => setEditSongTitle(e.target.value)}
+                  placeholder="Ex: Gabriela Rocha - Eu Sou Teu"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
+                    Link (YouTube / Spotify)
+                  </label>
+                  <input
+                    type="text"
+                    value={editSongLink}
+                    onChange={e => setEditSongLink(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=..."
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
+                    Tom (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editSongKey}
+                    onChange={e => setEditSongKey(e.target.value)}
+                    placeholder="Ex: G, C#m, Bb"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
+                  Letra / Cifra (Opcional)
+                </label>
+                <textarea
+                  rows={5}
+                  value={editSongContent}
+                  onChange={e => setEditSongContent(e.target.value)}
+                  placeholder="Cole aqui a cifra ou letra do louvor..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl p-2.5 text-xs font-mono outline-none focus:ring-2 focus:ring-secondary text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingSong(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingSongEdit}
+                  className="px-4 py-2 bg-secondary hover:bg-secondaryHover text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-secondary/20 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingSongEdit ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>Salvar Alterações</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -169,8 +169,17 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
     expect(organized.pastCultos[1].key).toBe('2026-10-25_rule-manha_09:30');
   });
 
-  it('deve isolar as regras do ministério atual e nunca duplicar cultos do mesmo dia/horário com grafias parecidas (Culto Dom - Manhã vs Culto Dom Manhã vs Culto de Domingo - Manhã)', () => {
+  it('deve preservar todos os eventos distintos do mesmo ministério mesmo no mesmo horário (ex: Culto Ceia - Manhã, Culto Dom - Manhã, Louvor Rede Kids e Culto Dom - Noite), removendo apenas grafias duplicadas do mesmo culto', () => {
     const rawRules = [
+      {
+        id: 'rule-ceia-manha',
+        ministry_id: 'min-louvor',
+        title: 'Culto Ceia - Manhã',
+        type: 'weekly',
+        weekday: 0,
+        time: '09:30:00',
+        active: true,
+      },
       {
         id: 'rule-louvor-manha',
         ministry_id: 'min-louvor',
@@ -178,6 +187,15 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
         type: 'weekly',
         weekday: 0,
         time: '09:30:00',
+        active: true,
+      },
+      {
+        id: 'rule-kids-noite',
+        ministry_id: 'min-louvor',
+        title: 'Louvor Rede Kids',
+        type: 'weekly',
+        weekday: 0,
+        time: '19:00:00',
         active: true,
       },
       {
@@ -198,91 +216,88 @@ describe('Seleção Inteligente de Cultos no Repertório (repertoireCultoSelecti
         time: '09:30:00',
         active: true,
       },
-      {
-        id: 'rule-recepcao-manha',
-        ministry_id: 'min-recepcao',
-        title: 'Culto de Domingo - Manhã',
-        type: 'weekly',
-        weekday: 0,
-        time: '09:30',
-        active: true,
-      },
     ];
 
     const deduped = deduplicateEventRules(rawRules, 'min-louvor');
-    expect(deduped).toHaveLength(2);
-    expect(deduped.map(r => r.id)).toEqual(['rule-louvor-manha', 'rule-louvor-noite']);
+    expect(deduped).toHaveLength(4);
+    expect(deduped.map(r => r.id)).toEqual([
+      'rule-ceia-manha',
+      'rule-louvor-manha',
+      'rule-kids-noite',
+      'rule-louvor-noite',
+    ]);
   });
 
-  it('deve remover cultos duplicados no mesmo dia e horário em organizeCultosForSelection (ex: Culto Dom - Manhã, Culto Dom Manhã, Culto de Domingo - Manhã)', () => {
-    const duplicatedCultos: CalendarCultoItem[] = [
+  it('deve manter eventos distintos no mesmo horário no calendário (ex: Louvor Rede Kids e Culto Dom - Noite às 19:00) e remover apenas duplicatas do mesmo culto (Culto Dom - Manhã vs Culto Dom Manhã)', () => {
+    const calendarCultos: CalendarCultoItem[] = [
       {
-        key: '2026-11-01_rule-1_09:30',
-        id: 'rule-1|2026-11-01',
+        key: '2026-11-08_rule-1_09:30',
+        id: 'rule-1|2026-11-08',
         ruleId: 'rule-1',
         title: 'Culto Dom - Manhã',
-        date: '2026-11-01',
+        date: '2026-11-08',
         time: '09:30',
-        iso: '2026-11-01T09:30',
+        iso: '2026-11-08T09:30',
         weekday: 0,
         weekdayShort: 'Dom',
         weekdayFull: 'Domingo',
-        dateDisplay: '01/11',
+        dateDisplay: '08/11',
         isPast: false,
         isNext: true,
       },
       {
-        key: '2026-11-01_rule-2_09:30',
-        id: 'rule-2|2026-11-01',
+        key: '2026-11-08_rule-2_09:30',
+        id: 'rule-2|2026-11-08',
         ruleId: 'rule-2',
         title: 'Culto Dom Manhã',
-        date: '2026-11-01',
+        date: '2026-11-08',
         time: '09:30',
-        iso: '2026-11-01T09:30',
+        iso: '2026-11-08T09:30',
         weekday: 0,
         weekdayShort: 'Dom',
         weekdayFull: 'Domingo',
-        dateDisplay: '01/11',
+        dateDisplay: '08/11',
         isPast: false,
         isNext: false,
       },
       {
-        key: '2026-11-01_sem-regra_09:30',
-        id: '2026-11-01_sem-regra_09:30',
-        ruleId: null,
-        title: 'Culto de Domingo - Manhã',
-        date: '2026-11-01',
-        time: '09:30',
-        iso: '2026-11-01T09:30',
+        key: '2026-11-08_rule-kids_19:00',
+        id: 'rule-kids|2026-11-08',
+        ruleId: 'rule-kids',
+        title: 'Louvor Rede Kids',
+        date: '2026-11-08',
+        time: '19:00',
+        iso: '2026-11-08T19:00',
         weekday: 0,
         weekdayShort: 'Dom',
         weekdayFull: 'Domingo',
-        dateDisplay: '01/11',
+        dateDisplay: '08/11',
         isPast: false,
         isNext: false,
       },
       {
-        key: '2026-11-01_rule-noite_19:00',
-        id: 'rule-noite|2026-11-01',
+        key: '2026-11-08_rule-noite_19:00',
+        id: 'rule-noite|2026-11-08',
         ruleId: 'rule-noite',
         title: 'Culto Dom - Noite',
-        date: '2026-11-01',
+        date: '2026-11-08',
         time: '19:00',
-        iso: '2026-11-01T19:00',
+        iso: '2026-11-08T19:00',
         weekday: 0,
         weekdayShort: 'Dom',
         weekdayFull: 'Domingo',
-        dateDisplay: '01/11',
+        dateDisplay: '08/11',
         isPast: false,
         isNext: false,
       },
     ];
 
-    const organized = organizeCultosForSelection(duplicatedCultos, []);
-    expect(organized.upcomingCultos).toHaveLength(2);
-    expect(organized.quickPickCultos).toHaveLength(2);
+    const organized = organizeCultosForSelection(calendarCultos, []);
+    expect(organized.upcomingCultos).toHaveLength(3);
+    expect(organized.quickPickCultos).toHaveLength(3);
     expect(organized.quickPickCultos.map(c => c.title)).toEqual([
       'Culto Dom - Manhã',
+      'Louvor Rede Kids',
       'Culto Dom - Noite',
     ]);
   });
