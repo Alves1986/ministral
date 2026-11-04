@@ -12,14 +12,22 @@ interface Props {
   ministryName: string;
   members: any[];
   roles: string[];
+  initialData?: {
+    title?: string;
+    message?: string;
+    type?: 'info' | 'success' | 'warning' | 'alert';
+    expirationDate?: string;
+    externalLink?: string;
+  };
 }
 
-export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, members, roles }) => {
-  const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
-  const [externalLink, setExternalLink] = useState("");
-  const [type, setType] = useState<'info' | 'success' | 'warning' | 'alert'>('info');
+export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, members, roles, initialData }) => {
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [message, setMessage] = useState(initialData?.message || "");
+  const [externalLink, setExternalLink] = useState(initialData?.externalLink || "");
+  const [type, setType] = useState<'info' | 'success' | 'warning' | 'alert'>(initialData?.type || 'info');
   const [expirationDate, setExpirationDate] = useState(() => {
+     if (initialData?.expirationDate) return initialData.expirationDate;
      const d = new Date();
      d.setDate(d.getDate() + 7);
      return d.toISOString().split('T')[0];
@@ -59,11 +67,13 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
         });
 
     // Libera a UI instantaneamente
-    setTitle("");
-    setMessage("");
-    setExternalLink("");
-    setType('info');
-    addToast("Aviso enviado para toda a equipe!", "success");
+    if (!initialData) {
+      setTitle("");
+      setMessage("");
+      setExternalLink("");
+      setType('info');
+    }
+    if (!initialData) addToast("Aviso enviado para toda a equipe!", "success");
     
     // Pequeno delay visual apenas para sensação de clique, mas não trava
     setTimeout(() => setIsSending(false), 300);
@@ -178,7 +188,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Formulário */}
         <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase mb-4">Novo Aviso</h3>
+            <h3 className="text-sm font-bold text-zinc-500 uppercase mb-4">{initialData ? 'Editar Aviso' : 'Novo Aviso'}</h3>
             <form onSubmit={handleSend} className="space-y-4">
                 <div>
                     <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Título</label>
@@ -225,7 +235,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
                             type="date"
                             value={expirationDate} 
                             onChange={e => setExpirationDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
+                            min={initialData ? undefined : new Date().toISOString().split('T')[0]}
                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500 text-zinc-900 dark:text-zinc-100"
                         />
                     </div>
@@ -278,7 +288,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
                     disabled={isSending}
                     className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-ministral-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70"
                 >
-                    {isSending ? 'Enviando...' : <><Send size={18}/> Enviar Aviso</>}
+                    {isSending ? (initialData ? 'Salvando...' : 'Enviando...') : <><Send size={18}/> {initialData ? 'Salvar Alterações' : 'Enviar Aviso'}</>}
                 </button>
             </form>
         </div>

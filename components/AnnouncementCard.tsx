@@ -2,7 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { Announcement, User } from '../types';
-import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube, Pin } from 'lucide-react';
+import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube, Pin, Edit } from 'lucide-react';
+import { canUserEditAnnouncement } from '../utils/announcementUtils';
 
 interface Props {
   announcement: Announcement;
@@ -10,17 +11,20 @@ interface Props {
   onMarkRead: (id: string) => void;
   onToggleLike?: (id: string) => void; 
   onTogglePin?: (id: string, isPinned: boolean) => void;
+  onEdit?: (announcement: Announcement) => void;
 }
 
-export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike, onTogglePin }) => {
+export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike, onTogglePin, onEdit }) => {
   // Check if current user has read this announcement
   const hasRead = announcement.readBy.some(r => r.userId === currentUser.id);
   const isAdmin = currentUser.access_role === 'admin';
+  const creatorId = announcement.createdBy || announcement.authorId;
+  const canEdit = canUserEditAnnouncement(announcement, currentUser);
 
   const [showReaders, setShowReaders] = useState(false);
   const [showLikers, setShowLikers] = useState(false);
   const [isReading, setIsReading] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(hasRead && !isAdmin);
+  const [isCollapsed, setIsCollapsed] = useState(hasRead && !isAdmin && !canEdit);
   
   // Like Logic
   const likes = announcement.likedBy || [];
@@ -142,7 +146,7 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
   return (
     <div className={`mb-3.5 rounded-xl p-3.5 sm:p-4 border shadow-sm animate-slide-up 
       ${theme.bg} ${theme.border}
-      ${hasRead && !isAdmin ? 'opacity-60 grayscale-[30%]' : ''}
+      ${hasRead && !isAdmin && !canEdit ? 'opacity-60 grayscale-[30%]' : ''}
     `}>
         <div className="flex gap-3 items-start">
             <div className="shrink-0 mt-0.5">
@@ -168,20 +172,29 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                         {announcement.isPinned && <Pin size={14} className="text-ministral-500 fill-ministral-500 rotate-45" />}
                         <h3 className={`font-bold text-sm sm:text-base ${theme.accent}`}>{announcement.title}</h3>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                        {isAdmin && onTogglePin && (
-                            <button 
-                                onClick={() => onTogglePin(announcement.id, !!announcement.isPinned)}
-                                className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${announcement.isPinned ? 'bg-ministral-100 text-ministral-600 dark:bg-ministral-900/30' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'}`}
-                                title={announcement.isPinned ? "Desafixar" : "Fixar no topo"}
-                            >
-                                <Pin size={10} className={announcement.isPinned ? 'fill-current' : ''} /> {announcement.isPinned ? 'Fixado' : 'Fixar'}
-                            </button>
-                        )}
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full">
-                            <Clock size={10} /> {new Date(announcement.timestamp).toLocaleDateString('pt-BR')}
-                        </span>
-                    </div>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                    {canEdit && onEdit && (
+                        <button 
+                            onClick={() => onEdit(announcement)}
+                            className="text-[10px] flex items-center gap-1 px-2 py-1 rounded-full transition-colors bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                            title="Editar aviso"
+                        >
+                            <Edit size={10} /> Editar
+                        </button>
+                    )}
+                    {isAdmin && onTogglePin && (
+                        <button 
+                            onClick={() => onTogglePin(announcement.id, !!announcement.isPinned)}
+                            className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${announcement.isPinned ? 'bg-ministral-100 text-ministral-600 dark:bg-ministral-900/30' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'}`}
+                            title={announcement.isPinned ? "Desafixar" : "Fixar no topo"}
+                        >
+                            <Pin size={10} className={announcement.isPinned ? 'fill-current' : ''} /> {announcement.isPinned ? 'Fixado' : 'Fixar'}
+                        </button>
+                    )}
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full">
+                        <Clock size={10} /> {new Date(announcement.timestamp).toLocaleDateString('pt-BR')}
+                    </span>
+                </div>
                 </div>
                 
                 {!isCollapsed && (

@@ -3,6 +3,7 @@ import { Announcement, User } from '../types';
 import { AnnouncementCard } from './AnnouncementCard';
 import { Megaphone, RefreshCw, Plus, X, Send } from 'lucide-react';
 import { AlertsManager } from './AlertsManager';
+import { canUserEditAnnouncement } from '../utils/announcementUtils';
 
 interface Props {
   announcements: Announcement[];
@@ -17,6 +18,7 @@ interface Props {
   members?: any[];
   roles?: string[];
   onSendAnnouncement?: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string, externalLink?: string) => Promise<void>;
+  onUpdateAnnouncement?: (id: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string, externalLink?: string) => Promise<void>;
   initialOpenCreate?: boolean;
   onCloseCreate?: () => void;
 }
@@ -34,15 +36,18 @@ export const AnnouncementsScreen: React.FC<Props> = ({
   members = [],
   roles = [],
   onSendAnnouncement,
+  onUpdateAnnouncement,
   initialOpenCreate = false,
   onCloseCreate
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(initialOpenCreate);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
 
   useEffect(() => {
     if (initialOpenCreate) {
       setIsCreateModalOpen(true);
+      setEditingAnnouncement(null);
     }
   }, [initialOpenCreate]);
 
@@ -54,7 +59,26 @@ export const AnnouncementsScreen: React.FC<Props> = ({
 
   const handleCloseModal = () => {
     setIsCreateModalOpen(false);
+    setEditingAnnouncement(null);
     if (onCloseCreate) onCloseCreate();
+  };
+
+  const handleEdit = (announcement: Announcement) => {
+    if (!canUserEditAnnouncement(announcement, currentUser)) {
+      return;
+    }
+    setEditingAnnouncement(announcement);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleSend = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string, externalLink?: string) => {
+    if (editingAnnouncement && onUpdateAnnouncement) {
+      await onUpdateAnnouncement(editingAnnouncement.id, title, message, type, expirationDate, externalLink);
+    } else if (onSendAnnouncement) {
+      await onSendAnnouncement(title, message, type, expirationDate, externalLink);
+    }
+    handleCloseModal();
+    await onRefresh();
   };
 
   return (
@@ -91,12 +115,12 @@ export const AnnouncementsScreen: React.FC<Props> = ({
       </div>
 
       {/* Modal / Diálogo de Novo Comunicado para Líderes */}
-      {isCreateModalOpen && canCreate && onSendAnnouncement && (
+      {isCreateModalOpen && (canCreate || editingAnnouncement) && (onSendAnnouncement || onUpdateAnnouncement) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto custom-scrollbar p-6 relative shadow-2xl border border-zinc-200 dark:border-zinc-800">
             <div className="flex justify-between items-center mb-5 pb-3 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-lg font-black text-zinc-900 dark:text-white flex items-center gap-2 uppercase tracking-tight">
-                <Send size={18} className="text-ministral-500" /> Publicar Novo Comunicado
+                <Send size={18} className="text-ministral-500" /> {editingAnnouncement ? 'Editar Comunicado' : 'Publicar Novo Comunicado'}
               </h3>
               <button 
                 onClick={handleCloseModal} 
@@ -107,15 +131,19 @@ export const AnnouncementsScreen: React.FC<Props> = ({
             </div>
 
             <AlertsManager
+              key={editingAnnouncement ? `edit-${editingAnnouncement.id}` : 'create-new'}
               orgName={orgName}
               ministryName={ministryName}
               members={members}
               roles={roles}
-              onSend={async (title, message, type, expDate, extLink) => {
-                await onSendAnnouncement(title, message, type, expDate, extLink);
-                handleCloseModal();
-                await onRefresh();
-              }}
+              initialData={editingAnnouncement ? {
+                title: editingAnnouncement.title,
+                message: editingAnnouncement.message,
+                type: editingAnnouncement.type,
+                expirationDate: editingAnnouncement.expirationDate ? new Date(editingAnnouncement.expirationDate).toISOString().split('T')[0] : undefined,
+                externalLink: editingAnnouncement.externalLink || ''
+              } : undefined}
+              onSend={handleSend}
             />
           </div>
         </div>
@@ -143,6 +171,7 @@ export const AnnouncementsScreen: React.FC<Props> = ({
                 onMarkRead={onMarkRead}
                 onToggleLike={onToggleLike}
                 onTogglePin={onTogglePin}
+                onEdit={handleEdit}
               />
             ))
         )}

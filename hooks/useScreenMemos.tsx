@@ -1,7 +1,9 @@
-import React, { useMemo, lazy } from 'react';
+import React, { useMemo, lazy, useCallback } from 'react';
 import * as Supabase from '../services/supabase';
 import { QueryClient } from '@tanstack/react-query';
 import { User, RepertoireItem, SwapRequest, CustomEvent, ScheduleMap, Announcement, AvailabilityMap, AvailabilityNotesMap, TeamMemberProfile } from '../types';
+import { updateAnnouncementSQL } from '../services/supabase/notifications';
+import { canUserEditAnnouncement } from '../utils/announcementUtils';
 
 const AvailabilityScreen = lazy(() => import('../components/AvailabilityScreen').then(m => ({ default: m.AvailabilityScreen })));
 const SwapRequestsScreen = lazy(() => import('../components/SwapRequestsScreen').then(m => ({ default: m.SwapRequestsScreen })));
@@ -65,7 +67,6 @@ export function useScreenMemos(props: ScreenMemosProps) {
         onMonthChange={setCurrentMonth} 
         currentUser={activeUser!} 
         onSaveAvailability={async (mid, userId, d, n, t) => { 
-            // Optimistic update no cache do TanStack Query para sincronia visual imediata
             queryClient.setQueryData(['availabilityV2', mid, orgId!], (old: any) => {
                 if (!old) return old;
                 return {
@@ -110,7 +111,6 @@ export function useScreenMemos(props: ScreenMemosProps) {
         }} 
         onAcceptRequest={async (reqId) => { 
             try {
-                // Optimistic update
                 queryClient.setQueryData(
                     ['swaps', ministryId, orgId],
                     (old: SwapRequest[] | undefined) => (old || []).filter(r => r.id !== reqId)
@@ -142,6 +142,30 @@ export function useScreenMemos(props: ScreenMemosProps) {
   const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
   const canManage = Boolean(isAdmin || isMinister);
 
+  const handleUpdateAnnouncement = useCallback(async (id: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string, externalLink?: string) => {
+    if (!orgId) return;
+    const targetAnnouncement = announcements.find(a => a.id === id);
+    if (!targetAnnouncement || !canUserEditAnnouncement(targetAnnouncement, activeUser)) {
+      addToast("Apenas quem criou este aviso pode editá-lo.", "error");
+      return;
+    }
+    try {
+      await updateAnnouncementSQL(id, orgId, {
+        title,
+        message,
+        type,
+        expirationDate,
+        externalLink
+      });
+      addToast("Aviso atualizado com sucesso!", "success");
+      await queryClient.invalidateQueries({ queryKey: ['announcements'] });
+    } catch (e: any) {
+      console.error("Erro ao atualizar aviso:", e);
+      addToast("Erro ao atualizar aviso: " + (e.message || "Erro desconhecido"), "error");
+      throw e;
+    }
+  }, [orgId, announcements, activeUser, queryClient, addToast]);
+
   const announcementsScreen = useMemo(() => (
     <AnnouncementsScreen 
         announcements={announcements} 
@@ -153,6 +177,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
         members={publicMembers}
         roles={roles}
         onSendAnnouncement={onSendAnnouncement}
+        onUpdateAnnouncement={handleUpdateAnnouncement}
         initialOpenCreate={openCreateAnnouncement}
         onCloseCreate={onCloseCreateAnnouncement}
         onMarkRead={async (id) => {
@@ -217,7 +242,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
             }
         }}
     />
-  ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData, canManage, orgName, ministryTitle, publicMembers, roles, onSendAnnouncement, openCreateAnnouncement, onCloseCreateAnnouncement, addToast]);
+  ), [announcements, activeUser, ministryId, orgId, queryClient, refreshData, canManage, orgName, ministryTitle, publicMembers, roles, onSendAnnouncement, handleUpdateAnnouncement, openCreateAnnouncement, onCloseCreateAnnouncement, addToast]);
 
   const repertoireScreen = useMemo(() => {
     const isRepertoireTab = currentTab === 'repertoire' || currentTab === 'repertoire-manager';

@@ -72,19 +72,20 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 04/11/2026
 - **Realizações**:
-  1. **Sincronização Completa com Eventos do Calendário e Edição de Playlists (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`)**:
+  1. **Edição de Avisos Exclusiva pelo Autor/Criador (`utils/announcementUtils.ts`, `services/supabase/notifications.ts`, `components/AnnouncementCard.tsx`, `components/AnnouncementsScreen.tsx`, `components/AlertsManager.tsx`, `hooks/useScreenMemos.tsx`, `tests/announcementEditPermission.test.ts`)**:
+     - **Persistência Resiliente da Identidade do Autor**: Codificação transparente do UUID do autor em `author_name` (`encodeAnnouncementAuthor` / `parseAnnouncementAuthor`) evitando erro `PGRST204` no Supabase quando a coluna `created_by` não existe no schema e garantindo que `external_link` e `is_pinned` também sejam preservados.
+     - **Permissão Estrita para o Criador (`canUserEditAnnouncement`)**: Apenas quem criou o aviso pode visualizar o botão `Editar` e salvar alterações (título, mensagem, tipo de alerta, expiração e link externo), bloqueando outros administradores/líderes que não criaram aquele aviso e suportando avisos legados por correspondência exata do nome do autor.
+  2. **Sincronização Completa com Eventos do Calendário e Edição de Playlists (`RepertoireScreen.tsx`, `utils/repertoireUtils.ts`, `tests/repertoireCultoSelection.test.ts`)**:
      - **Exibição de Todos os Eventos do Calendário**: Sincronizadas as exclusões de agenda (`__EVENT_EXCLUDED__` em `schedule_assignments`) e removida a ocultação por horário, permitindo que eventos distintos do ministério no mesmo horário (ex: `Culto Dom - Manhã`, `Culto Ceia - Manhã`, `Louvor Rede Kids` e `Culto Dom - Noite`) apareçam todos na lista de seleção sem necessidade de "Culto Extra".
      - **Edição Completa de Playlists e Louvores**: Adicionado botão `Editar Playlist` em cada card (permitindo adicionar novos louvores ou mover a playlist inteira para outro evento do calendário), exibição dos louvores já salvos diretamente no painel `Playlist em Montagem` ao selecionar um culto com músicas, e botão `Editar` (lápis) em cada louvor para atualizar título, link, tom e cifra via `updateRepertoireItem`.
-  2. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
+  3. **Destaque da Playlist do Próximo Culto, Arquivo de Playlists Passadas e Ranking de Louvores (`RepertoireScreen.tsx` & `repertoireUtils.ts`)**:
      - **Destaque do Próximo Culto (`partitionPlaylists`)**: A playlist correspondente ao próximo culto da agenda fica isolada e destacada no topo da aba de Repertório com card exclusivo, badge "⭐ Destaque Oficial / Próximo Culto" e atalho rápido para montagem caso ainda não tenha sido publicada.
      - **Arquivo Compacto de Playlists Passadas**: Playlists de cultos já realizados são movidas automaticamente para a seção "Histórico de Playlists Anteriores" em formato de acordeão colapsado por padrão (com controles de "Expandir todos" e "Recolher todos"), mantendo a página leve e enxuta mesmo após dezenas de cultos.
      - **Sub-Aba de Ranking de Louvores (`calculateSongsRanking` & `filterSongRanking`)**: Nova sub-aba que contabiliza todos os louvores já escolhidos na história do ministério/igreja, normalizando títulos para agrupar variações de acentuação/caixa, exibindo medalhas para o Top 3 (🥇, 🥈, 🥉), indicadores de resumo, barra proporcional de frequência, busca instantânea e histórico expansível.
-  3. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
+  4. **Consolidação e Eliminação de Notificações Duplicadas de Playlist no Repertório**:
      - Controle de idempotência/cooldown em `services/supabase/repertoire.ts` e deduplicação visual em `NotificationCenter.tsx`.
-  4. **Isolamento Estrito de Solicitações de Entrada (`join_request`) e Gateway Asaas**:
-     - Isolamento por ministério em `utils/joinRequestUtils.ts` e Edge Functions Asaas operacionais.
 - **Validação**:
-  - `npm test`: 21 arquivos e 101 testes aprovados (100% no Vitest).
+  - `npm test`: 22 arquivos e 106 testes aprovados (100% no Vitest).
   - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
   - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
 - **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

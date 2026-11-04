@@ -1282,9 +1282,10 @@ const InnerApp = () => {
             message: m,
             type,
             expirationDate: exp,
-            externalLink: extLink,
+            externalLink: extLink
           },
-          activeUser!.name,
+          (activeUser || currentUser)!.name,
+          (activeUser || currentUser)!.id
         );
 
         Supabase.sendNotificationSQL(ministryId, orgId, {

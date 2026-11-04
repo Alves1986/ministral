@@ -1,6 +1,7 @@
 import { getSupabase } from './client';
 import { filterNotificationsForUser } from '../../utils/notificationFilter';
 import { sanitizeNotificationMessage } from '../../utils/joinRequestUtils';
+import { encodeAnnouncementAuthor, parseAnnouncementAuthor } from '../../utils/announcementUtils';
 
 // Cache em memória e localStorage para evitar erros 400 se as migrações SQL ainda não foram executadas no Supabase
 let targetUserIdSupported: boolean = (() => {
@@ -772,9 +773,11 @@ export const notifyAllOrganizationAdmins = async (title: string, message: string
     return sendGlobalBroadcast(title, message, type, 'admins');
 };
 
-export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {
+export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string, createdBy?: string) => {
     const sb = getSupabase();
     if (!sb) return;
+
+    const encodedAuthor = encodeAnnouncementAuthor(authorName, createdBy);
 
     const payload: any = {
         organization_id: orgId,
@@ -783,7 +786,7 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
         message: announcement.message,
         type: announcement.type,
         expiration_date: announcement.expirationDate,
-        author_name: authorName,
+        author_name: encodedAuthor,
         external_link: announcement.externalLink,
         is_pinned: announcement.isPinned || false
     };
@@ -814,7 +817,7 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
                 message: bakedMessage,
                 type: announcement.type,
                 expiration_date: announcement.expirationDate,
-                author_name: authorName
+                author_name: encodedAuthor
             });
             if (retryError) throw retryError;
         } else {
@@ -834,11 +837,12 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .or(`expiration_date.is.null,expiration_date.gte.${now}`)
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
     if (error) {
         // Se falhar por cache de schema (PGRST204) ou coluna faltando, tenta o básico
-        const isSchemaError = error.code === 'PGRST204' || error.message?.includes('external_link') || error.message?.includes('is_pinned');
+        const isSchemaError = error.code === 'PGRST204' || error.message?.includes('external_link') || error.message?.includes('is_pinned') || error.message?.includes('created_by');
         if (isSchemaError) {
             console.warn("[Notifications] Schema cache error on fetch, retrying with basic columns.");
             const { data: retryData, error: retryError } = await sb.from('announcements')
@@ -849,18 +853,23 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
                 .order('created_at', { ascending: false });
             
             if (retryError) throw retryError;
-            return (retryData || []).map((a: any) => ({
-                id: a.id,
-                title: a.title,
-                message: a.message,
-                type: a.type,
-                timestamp: a.created_at,
-                expirationDate: a.expiration_date,
-                author: a.author_name || 'Admin',
-                isPinned: false,
-                readBy: [],
-                likedBy: []
-            }));
+            return (retryData || []).map((a: any) => {
+                const parsedAuthor = parseAnnouncementAuthor(a.author_name, a.created_by || a.author_id || a.createdBy);
+                return {
+                    id: a.id,
+                    title: a.title,
+                    message: a.message,
+                    type: a.type,
+                    timestamp: a.created_at,
+                    expirationDate: a.expiration_date,
+                    author: parsedAuthor.author,
+                    authorId: parsedAuthor.createdBy,
+                    createdBy: parsedAuthor.createdBy,
+                    isPinned: false,
+                    readBy: [],
+                    likedBy: []
+                };
+            });
         }
         throw error;
     }
@@ -878,6 +887,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
     return announcements.map((a: any) => {
         const myInteractions = interactions ? interactions.filter((i: any) => i.announcement_id === a.id) : [];
+        const parsedAuthor = parseAnnouncementAuthor(a.author_name, a.created_by || a.author_id || a.createdBy);
         
         return {
             id: a.id,
@@ -886,9 +896,12 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
             type: a.type,
             timestamp: a.created_at,
             expirationDate: a.expiration_date,
-            author: a.author_name || 'Admin',
+            author: parsedAuthor.author,
+            authorId: parsedAuthor.createdBy,
+            createdBy: parsedAuthor.createdBy,
             externalLink: a.external_link,
             isPinned: a.is_pinned || false,
+            organizationId: a.organization_id,
             readBy: myInteractions
                 .filter((i: any) => i.interaction_type === 'read')
                 .map((i: any) => ({
@@ -905,6 +918,51 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
                 }))
         };
     });
+};
+
+export const updateAnnouncementSQL = async (id: string, orgId: string, announcement: any) => {
+    const sb = getSupabase();
+    if (!sb) throw new Error("No Supabase client");
+
+    const payload: any = {
+        title: announcement.title,
+        message: announcement.message,
+        type: announcement.type,
+        expiration_date: announcement.expirationDate,
+        external_link: announcement.externalLink
+    };
+
+    let { error } = await sb.from('announcements')
+        .update(payload)
+        .eq('id', id)
+        .eq('organization_id', orgId);
+
+    if (error) {
+        const isMissingColumn = error.code === 'PGRST204' || 
+                               error.message?.includes('external_link') ||
+                               error.message?.includes('não existe');
+        
+        if (isMissingColumn) {
+            console.warn("[Notifications] Column 'external_link' issue on update. Baking link into message.");
+            let bakedMessage = announcement.message;
+            if (announcement.externalLink) {
+                bakedMessage += `\n\n${announcement.externalLink}`;
+            }
+            const retryPayload: any = {
+                title: announcement.title,
+                message: bakedMessage,
+                type: announcement.type,
+                expiration_date: announcement.expirationDate
+            };
+            const res = await sb.from('announcements')
+                .update(retryPayload)
+                .eq('id', id)
+                .eq('organization_id', orgId);
+            error = res.error;
+        }
+    }
+
+    if (error) throw error;
 };
 
 export const toggleAnnouncementPinSQL = async (id: string, orgId: string, isPinned: boolean) => {
