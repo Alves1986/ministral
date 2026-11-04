@@ -65,3 +65,4 @@ describe('Permissão Estrita de Edição de Avisos pelo Criador (announcementEdi
     ).toBe(false);
   });
 });
+

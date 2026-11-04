@@ -168,6 +168,8 @@ export interface Announcement {
   timestamp: string;
   expirationDate?: string;
   author: string;
+  authorId?: string;
+  createdBy?: string;
   externalLink?: string;
   isPinned?: boolean;
   readBy: { userId: string; name: string; timestamp: string }[];
