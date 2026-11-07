@@ -1,8 +1,11 @@
 
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2, ShieldCheck } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap, AttendanceMap } from '../types';
 import { useToast } from './Toast';
+import { getSupabase } from '../services/supabase/client';
+import { isSwapRequestVisibleToUser, resolveUserSwapFunctions } from '../utils/swapUtils';
 
 interface Props {
   schedule: ScheduleMap;
@@ -21,6 +24,30 @@ export const SwapRequestsScreen: React.FC<Props> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
   const { confirmAction } = useToast();
+
+  // Busca fresca das funções do membro no ministério atual (evita estado desatualizado na sessão)
+  const { data: freshFunctions } = useQuery({
+    queryKey: ['swap_user_functions', currentUser?.id, currentUser?.ministryId],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb || !currentUser?.id || !currentUser?.ministryId) return null;
+      const { data, error } = await sb
+        .from('ministry_members')
+        .select('functions')
+        .eq('profile_id', currentUser.id)
+        .eq('ministry_id', currentUser.ministryId)
+        .maybeSingle();
+      if (error) return null;
+      return Array.isArray(data?.functions) ? data.functions : [];
+    },
+    enabled: !!currentUser?.id && !!currentUser?.ministryId,
+    staleTime: 60 * 1000,
+  });
+
+  const effectiveUserFunctions = resolveUserSwapFunctions(
+    freshFunctions,
+    currentUser.ministry_functions
+  );
 
   const getPendingRequest = (iso: string, role: string) => {
       return requests.find(r => 
@@ -48,26 +75,9 @@ export const SwapRequestsScreen: React.FC<Props> = ({
       return { event: evt, roles: myRolesInEvent };
   }).filter(item => item.roles.length > 0);
 
-  const visibleRequests = requests.filter(req => {
-    if (req.status !== 'pending') return false;
-    
-    // Remover eventos passados do mural
-    const evtIso = req.eventIso.split('|')[0];
-    if (new Date(evtIso) <= new Date()) return false;
-
-    // Sempre mostrar os proprios pedidos do usuario
-    if (req.requesterName === currentUser.name) return true;
-    // Admin ve tudo
-    const isAdmin = currentUser.access_role === 'admin';
-    if (isAdmin) return true;
-    // Membro com funcoes definidas: filtrar por funcao compativel
-    const userFunctions = currentUser.ministry_functions || [];
-    if (userFunctions.length > 0) {
-      return userFunctions.includes(req.role);
-    }
-    // Membro sem funcoes cadastradas: ver todos os pedidos
-    return true;
-  });
+  const visibleRequests = requests.filter(req =>
+    isSwapRequestVisibleToUser(req, currentUser, effectiveUserFunctions)
+  );
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">

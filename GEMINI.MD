@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Ajuste na Central de Avisos (`utils/announcementUtils.ts`, `services/supabase/notifications.ts`, `components/AnnouncementCard.tsx`, `components/AnnouncementsScreen.tsx`, `components/AlertsManager.tsx`, `hooks/useScreenMemos.tsx`, `tests/announcementEditPermission.test.ts`) para permitir a edição de avisos exclusivamente pelo seu criador (persistindo o UID do autor de forma resiliente e validando permissão estrita no card, no formulário e no handler de atualização), além dos ajustes de sincronização de eventos do calendário e edição de playlists no Repertório. 22 suítes e 106 testes aprovados no Vitest, lint e build 100% OK.
+- Último trabalho: Filtro estrito de trocas de escala por função (`utils/swapUtils.ts`, `components/SwapRequestsScreen.tsx`, `services/supabase/misc.ts`, `tests/swapRoleFilter.test.ts`), garantindo que pedidos de troca apareçam no mural e notifiquem exclusivamente quem possui a mesma função (mesmo para admins), com busca fresca em `ministry_members` respeitando `[]` e guarda em `performSwapSQL`. 23 suítes e 113 testes aprovados no Vitest, lint e build 100% OK.
 - Próximo passo: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.

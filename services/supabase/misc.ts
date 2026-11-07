@@ -1,6 +1,7 @@
 import { getSupabase, serviceOrgId } from './client';
 import { TeamMemberProfile, SwapRequest } from '../../types';
 import { notifySuperAdmins, sendNotificationSQL } from './notifications';
+import { getSwapNotificationRecipientIds, hasMatchingSwapRole } from '../../utils/swapUtils';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string): Promise<SwapRequest[]> => {
     const sb = getSupabase();
@@ -76,21 +77,30 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
         }).catch(() => {});
     }
 
-    // Notificar os membros do ministério que há um pedido de troca disponível
-    sendNotificationSQL(ministryId, orgId, {
-        title: '🔄 Novo Pedido de Troca de Escala',
-        message: `${request.requesterName} solicitou troca na função "${request.role}" para "${request.eventTitle}". Clique para ver ou assumir a vaga.`,
-        type: 'warning',
-        actionLink: 'swaps'
-    }).catch(() => {});
+    // Notificar apenas os membros que possuem a MESMA funcao do pedido de troca
+    try {
+        const { data: memberships } = await sb.from('ministry_members')
+            .select('profile_id, functions')
+            .eq('ministry_id', ministryId);
 
-    // Notifica admins no app
-    await notifySuperAdmins(
-        'Novo Pedido de Troca',
-        `O usuário ${request.requesterName} solicitou uma troca para o evento "${request.eventTitle}".`,
-        'swaps',
-        ministryId
-    );
+        const recipientIds = getSwapNotificationRecipientIds(
+            memberships || [],
+            request.role,
+            request.requesterId
+        );
+
+        recipientIds.forEach((profileId) => {
+            sendNotificationSQL(ministryId, orgId, {
+                title: '🔄 Novo Pedido de Troca de Escala',
+                message: `${request.requesterName} solicitou troca na função "${request.role}" para "${request.eventTitle}". Clique para ver ou assumir a vaga.`,
+                type: 'warning',
+                actionLink: 'swaps',
+                targetUserId: profileId
+            }).catch(() => {});
+        });
+    } catch (e) {
+        console.error('[createSwapRequestSQL] Erro ao notificar membros da mesma funcao:', e);
+    }
 };
 
 export interface SwapAssignmentCandidate {
@@ -167,6 +177,19 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     }
     if (!req) {
         throw new Error('Pedido de troca não encontrado.');
+    }
+
+    // Garante que quem assume a troca possui a MESMA funcao do pedido
+    const { data: takerMembership } = await sb.from('ministry_members')
+        .select('functions')
+        .eq('profile_id', takenById)
+        .eq('ministry_id', ministryId)
+        .maybeSingle();
+    const takerFunctions = Array.isArray(takerMembership?.functions)
+        ? takerMembership.functions
+        : [];
+    if (!hasMatchingSwapRole(takerFunctions, req.role)) {
+        throw new Error('Você não possui a função necessária para assumir esta troca.');
     }
     
     // event_datetime is a timestamp, e.g., "2026-04-03T12:00:00"
