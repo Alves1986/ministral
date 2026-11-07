@@ -117,10 +117,10 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
 
   const getBgColor = (t: string) => {
       switch(t) {
-          case 'success': return 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30';
-          case 'warning': return 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900/30';
-          case 'alert': return 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30';
-          default: return 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/30';
+          case 'success': return 'bg-green-100 dark:bg-green-950/40 border-green-300 dark:border-green-800/50';
+          case 'warning': return 'bg-amber-100 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800/50';
+          case 'alert': return 'bg-red-100 dark:bg-red-950/40 border-red-300 dark:border-red-800/50';
+          default: return 'bg-blue-100 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800/50';
       }
   };
 

@@ -111,29 +111,29 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
   const getTheme = (type: string) => {
     switch(type) {
         case 'success': return { 
-            bg: 'bg-secondary/10 dark:bg-secondary/5', 
-            border: 'border-secondary/20 dark:border-secondary/30',
+            bg: 'bg-secondary/10 dark:bg-secondary/15', 
+            border: 'border-secondary/30 dark:border-secondary/40',
             icon: <CheckCircle className="text-secondary" size={18} />,
             accent: 'text-secondary dark:text-secondary',
             btn: 'bg-secondary hover:bg-secondaryHover'
         };
         case 'warning': return { 
-            bg: 'bg-accent/10 dark:bg-accent/5', 
-            border: 'border-accent/20 dark:border-accent/30',
+            bg: 'bg-accent/10 dark:bg-accent/15', 
+            border: 'border-accent/30 dark:border-accent/40',
             icon: <AlertTriangle className="text-accent" size={18} />,
             accent: 'text-accent dark:text-accent',
             btn: 'bg-accent hover:bg-accent/80'
         };
         case 'alert': return { 
-            bg: 'bg-red-50 dark:bg-red-900/10', 
-            border: 'border-red-200 dark:border-red-800/30',
+            bg: 'bg-red-100 dark:bg-red-950/40', 
+            border: 'border-red-300 dark:border-red-800/50',
             icon: <AlertOctagon className="text-red-500" size={18} />,
             accent: 'text-red-700 dark:text-red-400',
             btn: 'bg-red-600 hover:bg-red-700'
         };
         default: return { 
-            bg: 'bg-white dark:bg-zinc-900', 
-            border: 'border-zinc-200 dark:border-zinc-800',
+            bg: 'bg-zinc-50 dark:bg-zinc-900', 
+            border: 'border-zinc-200 dark:border-zinc-700',
             icon: <Info className="text-secondary" size={18} />,
             accent: 'text-zinc-800 dark:text-zinc-100',
             btn: 'bg-secondary hover:bg-secondaryHover'
