@@ -255,8 +255,12 @@ export function useMinistryData(
         query.queryKey[0] === "nextEvent" ||
         query.queryKey[0] === "announcements" ||
         query.queryKey[0] === "notifications" ||
-        query.queryKey[0] === "ranking",
+        query.queryKey[0] === "ranking" ||
+        query.queryKey[0] === "swap_user_functions" ||
+        query.queryKey[0] === "member_ministry_functions",
     });
+    queryClient.invalidateQueries({ queryKey: ["swap_user_functions"] });
+    queryClient.invalidateQueries({ queryKey: ["member_ministry_functions"] });
   }, [queryClient]);
 
   const userId = currentUser?.id ?? "";
@@ -381,6 +385,8 @@ export function useMinistryData(
         },
         () => {
           queryClient.invalidateQueries({ queryKey: keys.members(mid, orgId) });
+          queryClient.invalidateQueries({ queryKey: ["swap_user_functions"] });
+          queryClient.invalidateQueries({ queryKey: ["member_ministry_functions"] });
         },
       )
       .on(

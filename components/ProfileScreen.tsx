@@ -4,6 +4,7 @@ import { UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Shield, Sparkles, C
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabase/client';
 import { fetchMemberScheduleHistory } from '../services/supabase/misc';
+import { getSavedLocalUserFunctions } from '../utils/swapUtils';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 
 interface Props {
@@ -13,9 +14,11 @@ interface Props {
   events?: any[];
   schedule?: Record<string, string>;
   ministryName?: string;
+  ministryId?: string;
 }
 
-export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availableRoles: propAvailableRoles = [], events = [], schedule = {}, ministryName = "Ministério" }) => {
+export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availableRoles: propAvailableRoles = [], events = [], schedule = {}, ministryName = "Ministério", ministryId }) => {
+  const effectiveMinistryId = ministryId || user.ministryId || '';
   const [name, setName] = useState(user.name);
   const [whatsapp, setWhatsapp] = useState(user.whatsapp || '');
   const [avatar, setAvatar] = useState(user.avatar_url || '');
@@ -27,6 +30,12 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
 
+  useEffect(() => {
+    if (propAvailableRoles && propAvailableRoles.length > 0) {
+      setAvailableRoles(propAvailableRoles);
+    }
+  }, [propAvailableRoles]);
+
   const myEvents = React.useMemo(() => {
     return events.filter(e => {
         // e.id represents rule_id_date, and schedule keys are rule_id_date|roleSuffix
@@ -37,15 +46,15 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   useEffect(() => {
     const fetchRoles = async () => {
       const supabase = getSupabase();
-      if (!supabase || !user.id || !user.ministryId) return;
+      if (!supabase || !user.id || !effectiveMinistryId) return;
 
       try {
         // 1. Buscar funções disponíveis: ministry_settings.roles
         const { data: settingsData } = await supabase
           .from("ministry_settings")
           .select("roles")
-          .eq("ministry_id", user.ministryId)
-          .single();
+          .eq("ministry_id", effectiveMinistryId)
+          .maybeSingle();
         
         if (settingsData?.roles) {
           const cleanRoles = settingsData.roles.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
@@ -53,15 +62,27 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
         }
 
         // 2. Buscar funções do usuário: ministry_members.functions
-        const { data: memberData } = await supabase
+        const { data: memberRows } = await supabase
           .from("ministry_members")
           .select("functions")
           .eq("profile_id", user.id)
-          .eq("ministry_id", user.ministryId)
-          .single();
+          .eq("ministry_id", effectiveMinistryId);
 
-        if (memberData?.functions) {
-          const cleanFunctions = memberData.functions.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
+        const localSaved = getSavedLocalUserFunctions(effectiveMinistryId, user.id);
+
+        if (Array.isArray(memberRows) && memberRows.length > 0) {
+          const allFuncs = Array.from(
+            new Set([
+              ...memberRows.flatMap((row: { functions?: string[] | null }) =>
+                Array.isArray(row.functions) ? row.functions : []
+              ),
+              ...(Array.isArray(localSaved) ? localSaved : []),
+            ])
+          );
+          const cleanFunctions = allFuncs.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
+          setSelectedRoles(cleanFunctions);
+        } else if (Array.isArray(localSaved)) {
+          const cleanFunctions = localSaved.filter((r: string) => !r.startsWith('__vocal_count:') && !r.startsWith('__dance_count:'));
           setSelectedRoles(cleanFunctions);
         }
       } catch (error) {
@@ -70,13 +91,16 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     };
 
     fetchRoles();
-  }, [user.id, user.ministryId]);
+  }, [user.id, effectiveMinistryId]);
 
   useEffect(() => {
     setName(user.name);
     setWhatsapp(user.whatsapp || '');
     setAvatar(user.avatar_url || '');
     setBirthDate(user.birthDate || '');
+    if (Array.isArray(user.ministry_functions)) {
+      setSelectedRoles(user.ministry_functions);
+    }
   }, [user]);
 
   const validateField = (field: 'name' | 'whatsapp', value: string) => {

@@ -2,10 +2,10 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2, ShieldCheck } from 'lucide-react';
-import { SwapRequest, User as UserType, ScheduleMap, AttendanceMap } from '../types';
+import { SwapRequest, User as UserType, ScheduleMap, AttendanceMap, TeamMemberProfile } from '../types';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabase/client';
-import { isSwapRequestVisibleToUser, resolveUserSwapFunctions } from '../utils/swapUtils';
+import { isSwapRequestVisibleToUser, resolveUserSwapFunctions, getSavedLocalUserFunctions } from '../utils/swapUtils';
 
 interface Props {
   schedule: ScheduleMap;
@@ -17,36 +17,55 @@ interface Props {
   onAcceptRequest: (reqId: string) => void;
   onCancelRequest?: (reqId: string) => void;
   attendance?: AttendanceMap;
+  ministryId?: string;
+  members?: TeamMemberProfile[];
 }
 
 export const SwapRequestsScreen: React.FC<Props> = ({ 
-    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest, attendance = {} 
+    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest, attendance = {}, ministryId, members = [] 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
   const { confirmAction } = useToast();
 
+  const effectiveMinistryId = ministryId || currentUser?.ministryId || '';
+
   // Busca fresca das funções do membro no ministério atual (evita estado desatualizado na sessão)
   const { data: freshFunctions } = useQuery({
-    queryKey: ['swap_user_functions', currentUser?.id, currentUser?.ministryId],
+    queryKey: ['swap_user_functions', currentUser?.id, effectiveMinistryId],
     queryFn: async () => {
       const sb = getSupabase();
-      if (!sb || !currentUser?.id || !currentUser?.ministryId) return null;
+      if (!sb || !currentUser?.id || !effectiveMinistryId) return null;
       const { data, error } = await sb
         .from('ministry_members')
         .select('functions')
         .eq('profile_id', currentUser.id)
-        .eq('ministry_id', currentUser.ministryId)
-        .maybeSingle();
-      if (error) return null;
-      return Array.isArray(data?.functions) ? data.functions : [];
+        .eq('ministry_id', effectiveMinistryId);
+      if (error || !Array.isArray(data) || data.length === 0) return null;
+      const merged = Array.from(
+        new Set(
+          data.flatMap((row: any) => (Array.isArray(row?.functions) ? row.functions : []))
+        )
+      );
+      return merged.filter(
+        (r: string) => !String(r).startsWith('__vocal_count:') && !String(r).startsWith('__dance_count:')
+      );
     },
-    enabled: !!currentUser?.id && !!currentUser?.ministryId,
-    staleTime: 60 * 1000,
+    enabled: !!currentUser?.id && !!effectiveMinistryId,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
+
+  const currentMemberFromList = members.find(
+    (m) => (currentUser?.id && m.id === currentUser.id) || (currentUser?.name && m.name === currentUser.name)
+  );
+
+  const localSavedFunctions = getSavedLocalUserFunctions(effectiveMinistryId, currentUser?.id);
 
   const effectiveUserFunctions = resolveUserSwapFunctions(
     freshFunctions,
-    currentUser.ministry_functions
+    currentUser.ministry_functions,
+    currentMemberFromList?.ministry_functions,
+    localSavedFunctions
   );
 
   const getPendingRequest = (iso: string, role: string) => {

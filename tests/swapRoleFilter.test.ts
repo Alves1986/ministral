@@ -84,5 +84,35 @@ describe('Filtro Estrito de Trocas por Função (swapRoleFilter)', () => {
     expect(hasMatchingSwapRole([], 'Teclado')).toBe(false);
     expect(hasMatchingSwapRole(['Violão', ' teclado '], 'Teclado')).toBe(true);
   });
+
+  it('corresponde vagas numeradas da escala ("Vocal 1", "Vocal 2", "Dança 1") com a função base do membro ("Vocal", "Dança")', () => {
+    expect(hasMatchingSwapRole(['Vocal'], 'Vocal 1')).toBe(true);
+    expect(hasMatchingSwapRole(['Vocal'], 'Vocal 2')).toBe(true);
+    expect(hasMatchingSwapRole(['Dança'], 'Dança 1')).toBe(true);
+    expect(hasMatchingSwapRole(['Dançarina'], 'Dança 2')).toBe(true);
+    expect(hasMatchingSwapRole(['Back Vocal'], 'Back Vocal 1')).toBe(true);
+
+    // Mas preserva funções distintas por faixa etária (ex: Kids)
+    expect(hasMatchingSwapRole(['Professor 03–06'], 'Professor 07–11')).toBe(false);
+    expect(hasMatchingSwapRole(['Professor 03–06'], 'Professor 03–06')).toBe(true);
+  });
+
+  it('ignora diferenças de acentuação ao comparar funções ("Violão" vs "Violao")', () => {
+    expect(hasMatchingSwapRole(['Violao'], 'Violão')).toBe(true);
+    expect(hasMatchingSwapRole(['Violão'], 'Violao')).toBe(true);
+    expect(hasMatchingSwapRole(['Danca'], 'Dança 1')).toBe(true);
+  });
+
+  it('prioriza funções recém-salvas localmente ou da lista de membros quando o banco retorna null', () => {
+    // Quando freshFunctions é null (ex: sem linha prévia em ministry_members), usa memberFunctions e sessionFunctions
+    expect(resolveUserSwapFunctions(null, [], ['Teclado'], null)).toEqual(['Teclado']);
+    // Quando o usuário acabou de atualizar suas funções localmente, mescla imediatamente com freshFunctions
+    expect(resolveUserSwapFunctions(['Violão'], ['Violão'], ['Violão'], ['Violão', 'Vocal'])).toEqual([
+      'Violão',
+      'Vocal',
+    ]);
+    // Quando o usuário removeu todas as funções localmente ([]), respeita []
+    expect(resolveUserSwapFunctions(['Violão'], ['Violão'], ['Violão'], [])).toEqual([]);
+  });
 });
 

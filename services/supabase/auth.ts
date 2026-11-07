@@ -1,6 +1,7 @@
 import { getSupabase } from "./client";
 import { notifySuperAdmins } from "./notifications";
 import { log } from "../../utils/logger";
+import { setSavedLocalUserFunctions } from "../../utils/swapUtils";
 
 export const loginWithEmail = async (email: string, pass: string) => {
   const sb = getSupabase();
@@ -279,17 +280,43 @@ export const updateUserProfile = async (
     finalAvatarUrl = avatar_url; // ja e uma URL publica, manter
   }
 
+  if (Array.isArray(ministry_functions) && ministryId) {
+    setSavedLocalUserFunctions(ministryId, user.id, ministry_functions);
+
+    const { data: existingRows } = await sb
+      .from("ministry_members")
+      .select("id")
+      .eq("profile_id", user.id)
+      .eq("ministry_id", ministryId);
+
+    if (Array.isArray(existingRows) && existingRows.length > 0) {
+      await sb
+        .from("ministry_members")
+        .update({ functions: ministry_functions })
+        .eq("profile_id", user.id)
+        .eq("ministry_id", ministryId);
+    } else {
+      const { error: insertErr } = await sb.from("ministry_members").insert({
+        profile_id: user.id,
+        ministry_id: ministryId,
+        organization_id: orgId,
+        role: "member",
+        functions: ministry_functions,
+      });
+      if (insertErr) {
+        await sb.from("ministry_members").insert({
+          profile_id: user.id,
+          ministry_id: ministryId,
+          role: "member",
+          functions: ministry_functions,
+        });
+      }
+    }
+  }
+
   const updates: any = { name, whatsapp, birth_date: birthDate };
   if (finalAvatarUrl) updates.avatar_url = finalAvatarUrl;
   await sb.from("profiles").update(updates).eq("id", user.id);
-
-  if (ministry_functions && ministryId) {
-    await sb
-      .from("ministry_members")
-      .update({ functions: ministry_functions })
-      .eq("profile_id", user.id)
-      .eq("ministry_id", ministryId);
-  }
 };
 
 export const checkMemberLimit = async (

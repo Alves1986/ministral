@@ -93,6 +93,8 @@ export function useScreenMemos(props: ScreenMemosProps) {
   const swapsScreen = useMemo(() => (
     <SwapRequestsScreen 
         key={ministryId}
+        ministryId={ministryId}
+        members={publicMembers}
         schedule={schedule} 
         currentMonth={currentMonth} 
         currentUser={activeUser!} 
@@ -137,7 +139,7 @@ export function useScreenMemos(props: ScreenMemosProps) {
             }
         }} 
     />
-  ), [schedule, currentMonth, activeUser, swapRequests, events, ministryId, orgId, addToast, refreshData]);
+  ), [schedule, currentMonth, activeUser, swapRequests, events, ministryId, orgId, publicMembers, addToast, refreshData]);
 
   const isMinister = activeUser?.ministry_functions?.some(r => r.toLowerCase().includes('ministro')) || false;
   const canManage = Boolean(isAdmin || isMinister);

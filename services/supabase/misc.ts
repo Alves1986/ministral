@@ -1,7 +1,12 @@
 import { getSupabase, serviceOrgId } from './client';
 import { TeamMemberProfile, SwapRequest } from '../../types';
 import { notifySuperAdmins, sendNotificationSQL } from './notifications';
-import { getSwapNotificationRecipientIds, hasMatchingSwapRole } from '../../utils/swapUtils';
+import {
+    getSwapNotificationRecipientIds,
+    hasMatchingSwapRole,
+    getSavedLocalUserFunctions,
+    setSavedLocalUserFunctions,
+} from '../../utils/swapUtils';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string): Promise<SwapRequest[]> => {
     const sb = getSupabase();
@@ -20,7 +25,7 @@ export const fetchSwapRequests = async (ministryId: string, orgId: string): Prom
         requesterName: req.requester_name,
         requesterId: req.requester_id,
         role: req.role,
-        eventIso: req.event_datetime,
+        eventIso: req.event_datetime || (req.event_date ? `${req.event_date}T23:59:59` : ''),
         eventTitle: req.event_title,
         status: req.status,
         createdAt: req.created_at,
@@ -180,14 +185,15 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     }
 
     // Garante que quem assume a troca possui a MESMA funcao do pedido
-    const { data: takerMembership } = await sb.from('ministry_members')
+    const { data: takerMemberships } = await sb.from('ministry_members')
         .select('functions')
         .eq('profile_id', takenById)
-        .eq('ministry_id', ministryId)
-        .maybeSingle();
-    const takerFunctions = Array.isArray(takerMembership?.functions)
-        ? takerMembership.functions
+        .eq('ministry_id', ministryId);
+    const dbTakerFunctions = Array.isArray(takerMemberships)
+        ? takerMemberships.flatMap((row: any) => (Array.isArray(row?.functions) ? row.functions : []))
         : [];
+    const localTakerFunctions = getSavedLocalUserFunctions(ministryId, takenById) || [];
+    const takerFunctions = Array.from(new Set([...dbTakerFunctions, ...localTakerFunctions]));
     if (!hasMatchingSwapRole(takerFunctions, req.role)) {
         throw new Error('Você não possui a função necessária para assumir esta troca.');
     }
@@ -318,6 +324,42 @@ export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
 export const updateMemberData = async (memberId: string, orgId: string, data: Partial<TeamMemberProfile> & { ministryId?: string; roles?: string[] }) => {
     const sb = getSupabase();
     if (!sb) return;
+
+    // 1. Atualizar ministry_members.functions PRIMEIRO (evita race condition com Realtime de profiles)
+    const functionsToSave = data.ministry_functions ?? data.roles;
+    if (Array.isArray(functionsToSave) && data.ministryId) {
+        setSavedLocalUserFunctions(data.ministryId, memberId, functionsToSave);
+
+        const { data: existingRows } = await sb
+            .from('ministry_members')
+            .select('id')
+            .eq('profile_id', memberId)
+            .eq('ministry_id', data.ministryId);
+
+        if (Array.isArray(existingRows) && existingRows.length > 0) {
+            await sb
+                .from('ministry_members')
+                .update({ functions: functionsToSave })
+                .eq('profile_id', memberId)
+                .eq('ministry_id', data.ministryId);
+        } else {
+            const { error: insertErr } = await sb.from('ministry_members').insert({
+                profile_id: memberId,
+                ministry_id: data.ministryId,
+                organization_id: orgId,
+                role: 'member',
+                functions: functionsToSave,
+            });
+            if (insertErr) {
+                await sb.from('ministry_members').insert({
+                    profile_id: memberId,
+                    ministry_id: data.ministryId,
+                    role: 'member',
+                    functions: functionsToSave,
+                });
+            }
+        }
+    }
     
     const profileUpdates: Partial<TeamMemberProfile> = {};
     if (data.name) profileUpdates.name = data.name;
@@ -325,15 +367,6 @@ export const updateMemberData = async (memberId: string, orgId: string, data: Pa
     
     if (Object.keys(profileUpdates).length > 0) {
         await sb.from('profiles').update(profileUpdates).eq('id', memberId).eq('organization_id', orgId);
-    }
-    
-    // Aceitar tanto ministry_functions (EditMemberModal) quanto roles (legado)
-    const functionsToSave = data.ministry_functions || data.roles;
-    if (functionsToSave && data.ministryId) {
-        await sb.from('ministry_members')
-            .update({ functions: functionsToSave })
-            .eq('profile_id', memberId)
-            .eq('ministry_id', data.ministryId);
     }
 };
 
@@ -406,18 +439,24 @@ export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId
 
 export const fetchUserMinistryAccess = async (userId: string, ministryId: string, orgId?: string): Promise<{ functions: string[], role: string }> => {
   const sb = getSupabase();
-  if (!sb || !orgId) return { functions: [], role: 'member' };
+  if (!sb || !orgId) return { functions: getSavedLocalUserFunctions(ministryId, userId) || [], role: 'member' };
 
   const { data } = await sb
     .from('ministry_members')
     .select('functions, role')
     .eq('profile_id', userId)
-    .eq('ministry_id', ministryId)
-    .maybeSingle();
+    .eq('ministry_id', ministryId);
+
+  const rows = Array.isArray(data) ? data : [];
+  const dbFunctions = Array.from(
+    new Set(rows.flatMap((r: any) => (Array.isArray(r?.functions) ? r.functions : [])))
+  );
+  const localFunctions = getSavedLocalUserFunctions(ministryId, userId);
+  const isAdminRole = rows.some((r: any) => r?.role === 'admin');
 
   return {
-      functions: (data && Array.isArray(data.functions)) ? data.functions : [],
-      role: data?.role || 'member'
+      functions: dbFunctions.length > 0 ? dbFunctions : (localFunctions || []),
+      role: isAdminRole ? 'admin' : (rows[0]?.role || 'member')
   };
 };
 

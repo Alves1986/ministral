@@ -1849,7 +1849,24 @@ const InnerApp = () => {
                   }
                 : old,
           );
-          await Supabase.updateMemberData(id, orgId!, data);
+          if (id === activeUser?.id && Array.isArray(data.ministry_functions)) {
+            setCurrentUser({
+              ...activeUser,
+              ministry_functions: data.ministry_functions,
+            });
+            queryClient.setQueryData(
+              ["swap_user_functions", id, ministryId],
+              data.ministry_functions,
+            );
+            queryClient.setQueryData(
+              ["member_ministry_functions", id, ministryId],
+              data.ministry_functions,
+            );
+          }
+          await Supabase.updateMemberData(id, orgId!, {
+            ...data,
+            ministryId: data.ministryId || ministryId,
+          });
           refreshData();
         }}
         isPro={activeUser?.isPro ?? false}
@@ -2262,6 +2279,7 @@ const InnerApp = () => {
               {currentTab === "profile" && (
                 <ProfileScreen
                   user={activeUser!}
+                  ministryId={ministryId}
                   events={events}
                   schedule={schedule}
                   ministryName={ministryTitle}
@@ -2272,6 +2290,45 @@ const InnerApp = () => {
                     funcs,
                     bdate,
                   ) => {
+                    if (activeUser && Array.isArray(funcs)) {
+                      setCurrentUser({
+                        ...activeUser,
+                        name: name || activeUser.name,
+                        whatsapp: whatsapp || activeUser.whatsapp,
+                        avatar_url: avatar || activeUser.avatar_url,
+                        birthDate: bdate || activeUser.birthDate,
+                        ministry_functions: funcs,
+                      });
+                      queryClient.setQueryData(
+                        ["swap_user_functions", activeUser.id, ministryId],
+                        funcs,
+                      );
+                      queryClient.setQueryData(
+                        ["member_ministry_functions", activeUser.id, ministryId],
+                        funcs,
+                      );
+                      queryClient.setQueryData(
+                        ["members", ministryId, orgId!],
+                        (old: any) =>
+                          old
+                            ? {
+                                ...old,
+                                publicList: old.publicList.map((m: any) =>
+                                  m.id === activeUser.id
+                                    ? {
+                                        ...m,
+                                        name: name || m.name,
+                                        whatsapp: whatsapp || m.whatsapp,
+                                        avatar_url: avatar || m.avatar_url,
+                                        birthDate: bdate || m.birthDate,
+                                        ministry_functions: funcs,
+                                      }
+                                    : m,
+                                ),
+                              }
+                            : old,
+                      );
+                    }
                     await Supabase.updateUserProfile(
                       name,
                       whatsapp,
