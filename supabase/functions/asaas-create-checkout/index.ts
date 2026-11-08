@@ -77,8 +77,8 @@ serve(async (req: Request) => {
 
     // 4. Mapeamento de preços do plano
     const planPrices: Record<string, { value: number; name: string }> = {
-      pro: { value: 49.90, name: 'Pro' },
-      enterprise: { value: 99.90, name: 'Enterprise' }
+      pro: { value: 99.00, name: 'Pro' },
+      enterprise: { value: 149.00, name: 'Enterprise' }
     };
 
     const targetPlan = planPrices[planType];
@@ -239,4 +239,3 @@ serve(async (req: Request) => {
     });
   }
 });
-

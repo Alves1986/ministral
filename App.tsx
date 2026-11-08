@@ -910,38 +910,41 @@ const InnerApp = () => {
   }, [ministryConfig, ministryTitle]);
 
   const isPro = activeUser?.isPro ?? false;
+  const planEnabledTabs = useMemo(() => {
+    const paidOnlyTabs = [
+      "repertoire",
+      "schedule-rules",
+      "monthly-report",
+      "report",
+      "advanced-ai",
+    ];
+    return isPro
+      ? safeEnabledTabs
+      : safeEnabledTabs.filter((tab) => !paidOnlyTabs.includes(tab));
+  }, [safeEnabledTabs, isPro]);
 
   const MAIN_NAV = useMemo(
-    () => RAW_MAIN_NAV.filter((item) => safeEnabledTabs.includes(item.id)),
-    [RAW_MAIN_NAV, safeEnabledTabs],
+    () => RAW_MAIN_NAV.filter((item) => planEnabledTabs.includes(item.id)),
+    [RAW_MAIN_NAV, planEnabledTabs],
   );
 
   const MANAGEMENT_NAV = useMemo(
     () =>
       RAW_MANAGEMENT_NAV.filter(
         (item) =>
-          safeEnabledTabs.includes(item.id) ||
+          planEnabledTabs.includes(item.id) ||
           ["advanced-ai", "support-admin"].includes(item.id),
       ).filter((item) => {
-        if (
-          !isPro &&
-          [
-            "schedule-rules",
-            "monthly-report",
-            "report",
-            "advanced-ai",
-          ].includes(item.id)
-        )
-          return false;
+        if (!isPro && ["schedule-rules", "monthly-report", "report", "advanced-ai"].includes(item.id)) return false;
         return true;
       }),
-    [RAW_MANAGEMENT_NAV, safeEnabledTabs, isPro],
+    [RAW_MANAGEMENT_NAV, planEnabledTabs, isPro],
   );
 
   const QUICK_ACTIONS = useMemo(
     () =>
       RAW_QUICK_ACTIONS.filter((item) => {
-        const isEnabled = safeEnabledTabs.includes(item.id);
+        const isEnabled = planEnabledTabs.includes(item.id);
         if (!isEnabled) return false;
 
         if (
@@ -953,18 +956,17 @@ const InnerApp = () => {
 
         return integrations.quickAccessItems.includes(item.id);
       }),
-    [RAW_QUICK_ACTIONS, safeEnabledTabs, integrations.quickAccessItems],
+    [RAW_QUICK_ACTIONS, planEnabledTabs, integrations.quickAccessItems],
   );
 
   const isTabValid =
-    safeEnabledTabs.includes(currentTab) ||
+    planEnabledTabs.includes(currentTab) ||
     [
       "profile",
       "super-admin",
       "dashboard",
       "plan",
       "history",
-      "advanced-ai",
       "support-admin",
     ].includes(currentTab);
 

@@ -130,7 +130,7 @@ serve(async (req: Request) => {
     // 4. Aplica atualizações de estado da organização conforme o tipo de evento
     if (eventType === 'PAYMENT_CONFIRMED' || eventType === 'PAYMENT_RECEIVED') {
       const value = Number(payment?.value || 0);
-      const isEnterprise = value >= 80 || (payment?.description || '').toLowerCase().includes('enterprise');
+      const isEnterprise = value >= 149 || (payment?.description || '').toLowerCase().includes('enterprise');
       const planType = isEnterprise ? 'enterprise' : 'pro';
 
       await sb.from('organizations').update({

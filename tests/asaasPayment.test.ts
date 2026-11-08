@@ -11,11 +11,11 @@ import {
 describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamentos', () => {
   describe('Preços e Metadados dos Planos', () => {
     it('deve possuir valores corretos para Pro e Enterprise', () => {
-      expect(ASAAS_PLANS.pro.value).toBe(49.90);
+      expect(ASAAS_PLANS.pro.value).toBe(99.00);
       expect(ASAAS_PLANS.pro.cycle).toBe('MONTHLY');
       expect(ASAAS_PLANS.pro.name).toBe('Pro');
 
-      expect(ASAAS_PLANS.enterprise.value).toBe(99.90);
+      expect(ASAAS_PLANS.enterprise.value).toBe(149.00);
       expect(ASAAS_PLANS.enterprise.cycle).toBe('MONTHLY');
       expect(ASAAS_PLANS.enterprise.name).toBe('Enterprise');
     });
@@ -33,7 +33,7 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
         event: 'PAYMENT_CONFIRMED',
         payment: {
           id: 'pay_123',
-          value: 49.90,
+          value: 99.00,
           customer: 'cus_123',
           subscription: 'sub_456',
           externalReference: 'org-uuid-1',
@@ -49,12 +49,12 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
       expect(result.targetOrgId).toBe('org-uuid-1');
     });
 
-    it('deve reconhecer o plano Enterprise para pagamentos de R$ 99,90 ou superiores', () => {
+    it('deve reconhecer o plano Enterprise para pagamentos de R$ 149,00 ou superiores', () => {
       const payload = {
         event: 'PAYMENT_RECEIVED',
         payment: {
           id: 'pay_789',
-          value: 99.90,
+          value: 149.00,
           customer: 'cus_ent',
           subscription: 'sub_ent',
           externalReference: 'org-uuid-enterprise',
@@ -73,7 +73,7 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
         event: 'PAYMENT_OVERDUE',
         payment: {
           id: 'pay_overdue',
-          value: 49.90,
+          value: 99.00,
           customer: 'cus_123',
           subscription: 'sub_456',
           externalReference: 'org-uuid-1',
@@ -110,7 +110,7 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
         event: 'PAYMENT_REFUNDED',
         payment: {
           id: 'pay_refund',
-          value: 49.90,
+          value: 99.00,
           externalReference: 'org-uuid-1'
         }
       };
