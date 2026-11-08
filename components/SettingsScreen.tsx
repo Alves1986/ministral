@@ -148,6 +148,7 @@ export const SettingsScreen: React.FC<Props> = ({
   );
   const [logoLoading, setLogoLoading] = useState(false);
   const isEnterprise = organization?.plan_type === "enterprise";
+  const isPaidPlan = organization?.plan_type === "pro" || isEnterprise;
 
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
@@ -506,16 +507,18 @@ export const SettingsScreen: React.FC<Props> = ({
               >
                 Administrador
               </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === "notif"}
-                aria-controls="panel-notif"
-                onClick={() => setActiveTab("notif")}
-                className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === "notif" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-              >
-                <Bell size={13} />
-                Notificações
-              </button>
+              {isPaidPlan && (
+                <button
+                  role="tab"
+                  aria-selected={activeTab === "notif"}
+                  aria-controls="panel-notif"
+                  onClick={() => setActiveTab("notif")}
+                  className={`py-1.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === "notif" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                >
+                  <Bell size={13} />
+                  Notificações
+                </button>
+              )}
               {isOrgAdmin && (
                 <button
                   role="tab"
@@ -660,7 +663,7 @@ export const SettingsScreen: React.FC<Props> = ({
       )}
 
       {/* ═══════ ABA: NOTIFICAÇÕES ═══════ */}
-      {activeTab === "notif" && isAdmin && (
+      {activeTab === "notif" && isAdmin && isPaidPlan && (
         <div id="panel-notif" role="tabpanel" className="space-y-5 animate-fade-in">
           {/* Header */}
           <div className="flex items-start gap-4 p-4 bg-gradient-to-br from-secondary/10 via-secondary/5 to-transparent border border-secondary/20 rounded-2xl">
@@ -1173,7 +1176,7 @@ export const SettingsScreen: React.FC<Props> = ({
             )}
           </div>
 
-          <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          {isPaidPlan && <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
             <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
               <ShieldCheck size={16} /> Sistema
             </h3>
@@ -1228,7 +1231,7 @@ export const SettingsScreen: React.FC<Props> = ({
                 )}
               </div>
             </div>
-          </div>
+          </div>}
         </>
       )}
 

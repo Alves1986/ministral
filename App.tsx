@@ -2473,7 +2473,7 @@ const InnerApp = () => {
               onDismiss={() => setShowInstallBanner(false)}
               appName={ministryTitle}
             />
-            <NotificationPermissionBanner />
+            <NotificationPermissionBanner enabled={isPro} />
             <InstallModal
               isOpen={showInstallModal}
               onClose={() => setShowInstallModal(false)}

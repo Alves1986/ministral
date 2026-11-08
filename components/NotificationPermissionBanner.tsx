@@ -6,11 +6,12 @@ const PREF_KEY = 'ministral_push_notification_pref';
 
 type Pref = 'granted' | 'denied' | 'dismissed' | null;
 
-export const NotificationPermissionBanner: React.FC = () => {
+export const NotificationPermissionBanner: React.FC<{ enabled?: boolean }> = ({ enabled = true }) => {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     // Não exibe se o browser não suporta push
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
       return;
@@ -40,7 +41,7 @@ export const NotificationPermissionBanner: React.FC = () => {
     // Exibe após 3 segundos para não atrapalhar o carregamento
     const timer = setTimeout(() => setVisible(true), 3000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [enabled]);
 
   const handleEnable = async () => {
     setLoading(true);
@@ -70,7 +71,7 @@ export const NotificationPermissionBanner: React.FC = () => {
     setVisible(false);
   };
 
-  if (!visible) return null;
+  if (!enabled || !visible) return null;
 
   return (
     <div
