@@ -3,7 +3,7 @@ import { Organization } from '../types';
 /**
  * Utilitários e configurações da integração com o gateway de pagamentos Asaas.
  * Gerencia precificação, normalização de eventos de webhook, cálculo de base URL
- * e regras de coexistência com o Stripe.
+ * e regras de ativação do Asaas.
  */
 
 export const ASAAS_PLANS = {
@@ -119,19 +119,12 @@ export function mapAsaasEventToBillingStatus(payload: any): AsaasBillingStatusMa
 }
 
 /**
- * Resolve se o gateway ativo deve ser Stripe ou Asaas, permitindo
- * coexistência limpa e testes em paralelo.
+ * O Ministral usa Asaas como único gateway para novas contratações.
+ * Os argumentos são mantidos por compatibilidade com chamadas antigas.
  */
 export function resolvePaymentGateway(
-  org?: Partial<Organization> | null,
-  userPreference?: 'stripe' | 'asaas'
-): 'stripe' | 'asaas' {
-  if (userPreference) {
-    return userPreference;
-  }
-  if (org?.payment_gateway === 'asaas' || org?.asaas_subscription_id) {
-    return 'asaas';
-  }
-  return 'stripe';
+  _org?: Partial<Organization> | null,
+  _userPreference?: 'stripe' | 'asaas'
+): 'asaas' {
+  return 'asaas';
 }
-

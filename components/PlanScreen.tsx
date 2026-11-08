@@ -3,7 +3,6 @@ import { Crown, CheckCircle2, XCircle, Loader2, ExternalLink } from 'lucide-reac
 import { Organization } from '../types';
 import { getSupabase } from '../services/supabaseService';
 import { useToast } from './Toast';
-import { resolvePaymentGateway } from '../utils/asaasUtils';
 
 interface PlanScreenProps {
   organization: Organization | null;
@@ -68,9 +67,6 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'waiting' | 'confirmed'>('idle');
   const [loadingCheckout, setLoadingCheckout] = useState(false);
   const [loadingPortal, setLoadingPortal] = useState(false);
-  const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'asaas'>(() => {
-    return resolvePaymentGateway(organization || undefined);
-  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -112,8 +108,8 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
       if (!sb) throw new Error("Supabase client not initialized");
       
       const { data: { session } } = await sb.auth.getSession();
+      const functionName = 'asaas-create-checkout';
       
-      const functionName = selectedGateway === 'asaas' ? 'asaas-create-checkout' : 'stripe-create-checkout';
       const res = await sb.functions.invoke(functionName, {
         body: {
           orgId: organization.id,
@@ -150,9 +146,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
       const sb = getSupabase();
       if (!sb) throw new Error("Supabase client not initialized");
       
-      const functionName = organization.payment_gateway === 'asaas' || (!organization.stripe_customer_id && organization.asaas_customer_id)
-        ? 'asaas-customer-portal'
-        : 'stripe-customer-portal';
+      const functionName = 'asaas-customer-portal';
       const res = await sb.functions.invoke(functionName, {
         body: {
           orgId: organization.id
@@ -251,42 +245,16 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/60 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Forma de Pagamento</h3>
-            {organization?.payment_gateway && (
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                Ativo: {organization.payment_gateway.toUpperCase()}
-              </span>
-            )}
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Pagamento via Asaas</h3>
+            <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+              Gateway oficial
+            </span>
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Escolha o gateway para contratação ou teste (Stripe para Cartão ou Asaas para PIX, Boleto e Cartão)
+            Contrate com PIX, boleto ou cartão. A confirmação e a liberação do plano são feitas pelo webhook seguro do Asaas.
           </p>
         </div>
-        <div className="flex items-center gap-1.5 bg-zinc-200/80 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-300/60 dark:border-zinc-700 self-stretch sm:self-auto justify-center">
-          <button
-            type="button"
-            onClick={() => setSelectedGateway('stripe')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              selectedGateway === 'stripe'
-                ? 'bg-ministral-500 text-white shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <span>💳 Stripe</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedGateway('asaas')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              selectedGateway === 'asaas'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <span>⚡ Asaas (PIX / Boleto / Cartão)</span>
-            <span className="text-[9px] bg-emerald-500/20 text-emerald-200 dark:text-emerald-300 px-1 py-0.5 rounded font-black uppercase">Novo</span>
-          </button>
-        </div>
+        <span className="text-2xl" aria-label="Asaas">⚡</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

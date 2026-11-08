@@ -146,26 +146,16 @@ describe('Integração Asaas - Regras de Cobrança e Normalização de Pagamento
     });
   });
 
-  describe('Resolução do Gateway Ativo (Coexistência Stripe / Asaas)', () => {
-    it('deve manter Stripe como padrão quando nenhuma preferência ou assinatura Asaas estiver ativa', () => {
-      const org = { id: 'org-1', stripe_customer_id: 'cus_stripe_1' };
-      expect(resolvePaymentGateway(org)).toBe('stripe');
-    });
-
-    it('deve respeitar a seleção de teste explícita do usuário quando configurada', () => {
-      const org = { id: 'org-1' };
-      expect(resolvePaymentGateway(org, 'asaas')).toBe('asaas');
-      expect(resolvePaymentGateway(org, 'stripe')).toBe('stripe');
-    });
-
-    it('deve resolver Asaas quando a organização possuir assinatura ativa no Asaas', () => {
+  describe('Resolução do Gateway Ativo (Asaas exclusivo)', () => {
+    it('deve resolver Asaas mesmo para organizações legadas que ainda tenham dados Stripe', () => {
       const org = {
         id: 'org-1',
+        stripe_customer_id: 'cus_stripe_legacy',
         payment_gateway: 'asaas' as const,
         asaas_subscription_id: 'sub_asaas_1'
       };
       expect(resolvePaymentGateway(org)).toBe('asaas');
+      expect(resolvePaymentGateway(org, 'stripe')).toBe('asaas');
     });
   });
 });
-

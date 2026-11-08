@@ -647,8 +647,8 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
 
   const { addToast, confirmAction } = useToast();
 
-  // Estados e Handlers para a aba "sa-payments" (Laboratório de Teste de Gateways)
-  const [testGateway, setTestGateway] = useState<'asaas' | 'stripe'>('asaas');
+  // Estado e handlers para a aba "sa-payments" (Laboratório Asaas)
+  const [testGateway] = useState<'asaas'>('asaas');
   const [testOrgId, setTestOrgId] = useState<string>('');
   const [testPlanType, setTestPlanType] = useState<'pro' | 'enterprise'>('pro');
   const [testUserEmail, setTestUserEmail] = useState<string>('admin.teste@ministral.com');
@@ -706,7 +706,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
       const sb = getSupabase();
       if (!sb) throw new Error("Supabase não inicializado");
 
-      const functionName = testGateway === 'asaas' ? 'asaas-create-checkout' : 'stripe-create-checkout';
+      const functionName = 'asaas-create-checkout';
       const bodyPayload = {
         orgId: targetOrg.id,
         planType: testPlanType,
@@ -1978,7 +1978,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                     </span>
                   </div>
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                    Simulação de criação de assinaturas, links de pagamento e disparo de webhooks do Asaas e Stripe sem afetar o faturamento real.
+                    Simulação de criação de assinaturas e disparo de webhooks do Asaas sem afetar o faturamento real.
                   </p>
                 </div>
               </div>
@@ -2012,7 +2012,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
                   <h3 className="text-zinc-500 font-bold uppercase tracking-wider text-xs">
-                    Gateway Stripe (Coexistindo)
+                      Migração Stripe
                   </h3>
                 </div>
                 <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md font-bold">
@@ -2023,7 +2023,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                 {organizations.filter(o => o.stripe_customer_id).length}
               </div>
               <p className="text-xs text-zinc-500 mt-2">
-                Organizações com assinatura ativa no Stripe
+                Organizações com dados Stripe legados
               </p>
             </div>
 
@@ -2056,41 +2056,14 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                       1. Testar Criação de Checkout
                     </h3>
                     <p className="text-xs text-zinc-500">
-                      Gera cliente e cobrança real no Sandbox do Asaas ou sessão do Stripe
+                      Gera cliente e cobrança real no Sandbox do Asaas
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Seletor do Gateway */}
-              <div>
-                <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2 block">
-                  Gateway Selecionado para Teste
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTestGateway('asaas')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                      testGateway === 'asaas'
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                        : 'border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    <span>⚡ Asaas (PIX / Boleto / Cartão)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTestGateway('stripe')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                      testGateway === 'stripe'
-                        ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
-                        : 'border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    <span>💳 Stripe (Cartão)</span>
-                  </button>
-                </div>
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                ⚡ Gateway único: Asaas (PIX, boleto e cartão)
               </div>
 
               {/* Seleção de Organização de Teste */}

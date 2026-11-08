@@ -32,15 +32,13 @@ serve(async (req: Request) => {
     const webhookSecret = Deno.env.get('ASAAS_WEBHOOK_SECRET');
     const receivedToken = req.headers.get('asaas-access-token');
 
-    // 1. Validação de segurança do token do Asaas (se configurado no ambiente)
-    if (webhookSecret) {
-      if (!receivedToken || !safeCompare(receivedToken, webhookSecret)) {
-        console.error('[asaas-webhook] Token de validação inválido ou ausente');
-        return new Response(JSON.stringify({ error: 'Unauthorized: Invalid asaas-access-token' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
+    // 1. O webhook é público para o Asaas, mas sempre exige o token secreto.
+    if (!webhookSecret || !receivedToken || !safeCompare(receivedToken, webhookSecret)) {
+      console.error('[asaas-webhook] Token de validação inválido, ausente ou secret não configurado');
+      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid asaas-access-token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     const payload = await req.json();
@@ -183,4 +181,3 @@ serve(async (req: Request) => {
     });
   }
 });
-
