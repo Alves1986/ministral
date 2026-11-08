@@ -109,6 +109,34 @@ const ScheduleEditorV2 = lazy(() =>
     default: m.ScheduleEditorV2,
   })),
 );
+
+const PlanUpgradePrompt: React.FC<{
+  planType?: string;
+  onOpenPlans: () => void;
+}> = ({ planType, onOpenPlans }) => (
+  <div className="min-h-[420px] flex items-center justify-center p-4 sm:p-8">
+    <div className="w-full max-w-xl rounded-3xl border border-ministral-500/20 bg-white p-8 text-center shadow-xl shadow-ministral-500/10 dark:bg-zinc-900">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-ministral-500/10 text-ministral-500">
+        <Crown size={32} />
+      </div>
+      <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-ministral-500">Recurso de plano pago</p>
+      <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">Desbloqueie mais possibilidades para sua equipe</h2>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+        {planType === "pro"
+          ? "Este recurso está disponível no plano Enterprise. Compare os planos e escolha o próximo nível para o seu ministério."
+          : "Este recurso está disponível a partir do plano Pro. Faça um upgrade para liberar relatórios, repertório, regras e IA avançada."}
+      </p>
+      <button
+        type="button"
+        onClick={onOpenPlans}
+        className="mt-7 inline-flex items-center justify-center gap-2 rounded-xl bg-ministral-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-ministral-500/20 transition hover:bg-ministral-600"
+      >
+        Ver planos e fazer upgrade <ArrowRight size={17} />
+      </button>
+    </div>
+  </div>
+);
+
 const SuperAdminDashboard = lazy(() =>
   import("./components/SuperAdminDashboard").then((m) => ({
     default: m.SuperAdminDashboard,
@@ -488,6 +516,7 @@ const InnerApp = () => {
 
   const [scheduleSubTab, setScheduleSubTab] = useState<'editor' | 'events' | 'rules'>('editor');
   const [openCreateAnnouncement, setOpenCreateAnnouncement] = useState(false);
+  const [showUpgradeReminder, setShowUpgradeReminder] = useState(false);
 
   const [currentTab, setCurrentTab] = useState(() => {
     if (typeof window !== "undefined") {
@@ -597,6 +626,30 @@ const InnerApp = () => {
     activeUser?.isOrgAdmin ||
     activeUser?.isSuperAdmin;
   const orgId = activeUser?.organizationId;
+  const isPro = activeUser?.isPro ?? false;
+  const isEnterprise = activeUser?.isEnterprise ?? false;
+  const isUpgradeEligible = !isEnterprise && (organization?.plan_type === "trial" || isPro);
+  const paidOnlyTabs = ["repertoire", "schedule-rules", "monthly-report", "report", "advanced-ai"];
+
+  useEffect(() => {
+    if (!isUpgradeEligible) {
+      setShowUpgradeReminder(false);
+      return;
+    }
+
+    const reminderKey = `ministral_upgrade_reminder_${organization?.id || "organization"}`;
+    const showReminder = () => {
+      setShowUpgradeReminder(true);
+      localStorage.setItem(reminderKey, new Date().toISOString());
+    };
+    const firstReminder = window.setTimeout(showReminder, 30_000);
+    const recurringReminder = window.setInterval(showReminder, 10 * 60_000);
+
+    return () => {
+      window.clearTimeout(firstReminder);
+      window.clearInterval(recurringReminder);
+    };
+  }, [isUpgradeEligible, organization?.id]);
 
   const ministryConfig = useMemo(() => {
     return (
@@ -852,8 +905,11 @@ const InnerApp = () => {
         label: "Ajuda / Suporte",
         icon: <Headset size={20} />,
       },
+      ...(!isEnterprise && isAdmin
+        ? [{ id: "plan", label: "Planos e Upgrade", icon: <Crown size={20} /> }]
+        : []),
     ],
-    [pendingJoinRequestsCount],
+    [pendingJoinRequestsCount, isAdmin, isEnterprise],
   );
 
   const RAW_QUICK_ACTIONS = useMemo(
@@ -909,42 +965,39 @@ const InnerApp = () => {
     return withHistory;
   }, [ministryConfig, ministryTitle]);
 
-  const isPro = activeUser?.isPro ?? false;
   const planEnabledTabs = useMemo(() => {
-    const paidOnlyTabs = [
-      "repertoire",
-      "schedule-rules",
-      "monthly-report",
-      "report",
-      "advanced-ai",
-    ];
     return isPro
       ? safeEnabledTabs
       : safeEnabledTabs.filter((tab) => !paidOnlyTabs.includes(tab));
   }, [safeEnabledTabs, isPro]);
 
+  const visiblePlanTabs = useMemo(
+    () => (isEnterprise ? planEnabledTabs : [...new Set([...planEnabledTabs, ...paidOnlyTabs])]),
+    [isEnterprise, planEnabledTabs],
+  );
+
   const MAIN_NAV = useMemo(
-    () => RAW_MAIN_NAV.filter((item) => planEnabledTabs.includes(item.id)),
-    [RAW_MAIN_NAV, planEnabledTabs],
+    () => RAW_MAIN_NAV.filter((item) => visiblePlanTabs.includes(item.id)),
+    [RAW_MAIN_NAV, visiblePlanTabs],
   );
 
   const MANAGEMENT_NAV = useMemo(
     () =>
       RAW_MANAGEMENT_NAV.filter(
         (item) =>
-          planEnabledTabs.includes(item.id) ||
-          ["advanced-ai", "support-admin"].includes(item.id),
+          visiblePlanTabs.includes(item.id) ||
+          (!isEnterprise && paidOnlyTabs.includes(item.id)) ||
+          ["support-admin", "plan"].includes(item.id),
       ).filter((item) => {
-        if (!isPro && ["schedule-rules", "monthly-report", "report", "advanced-ai"].includes(item.id)) return false;
         return true;
       }),
-    [RAW_MANAGEMENT_NAV, planEnabledTabs, isPro],
+    [RAW_MANAGEMENT_NAV, visiblePlanTabs, isEnterprise],
   );
 
   const QUICK_ACTIONS = useMemo(
     () =>
       RAW_QUICK_ACTIONS.filter((item) => {
-        const isEnabled = planEnabledTabs.includes(item.id);
+        const isEnabled = visiblePlanTabs.includes(item.id);
         if (!isEnabled) return false;
 
         if (
@@ -956,11 +1009,11 @@ const InnerApp = () => {
 
         return integrations.quickAccessItems.includes(item.id);
       }),
-    [RAW_QUICK_ACTIONS, planEnabledTabs, integrations.quickAccessItems],
+    [RAW_QUICK_ACTIONS, visiblePlanTabs, integrations.quickAccessItems],
   );
 
   const isTabValid =
-    planEnabledTabs.includes(currentTab) ||
+    visiblePlanTabs.includes(currentTab) ||
     [
       "profile",
       "super-admin",
@@ -969,6 +1022,8 @@ const InnerApp = () => {
       "history",
       "support-admin",
     ].includes(currentTab);
+
+  const isUpgradeLockedTab = isUpgradeEligible && paidOnlyTabs.includes(currentTab);
 
   const dashboardScreen = useMemo(
     () => {
@@ -2238,6 +2293,29 @@ const InnerApp = () => {
         >
           <Suspense fallback={<LoadingFallback />}>
             <div className="h-full">
+              {showUpgradeReminder && isUpgradeEligible && (
+                <div className="mx-auto mb-5 flex max-w-7xl items-center justify-between gap-4 rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 shadow-sm dark:border-amber-500/20 dark:bg-amber-900/20">
+                  <div className="flex items-start gap-3">
+                    <Crown className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" size={20} />
+                    <div>
+                      <p className="text-sm font-black text-amber-900 dark:text-amber-200">Leve seu ministério para o próximo nível</p>
+                      <p className="text-xs text-amber-800/80 dark:text-amber-300/80">Desbloqueie recursos avançados e tenha mais controle das suas escalas.</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" onClick={() => { setShowUpgradeReminder(false); handleTabChange("plan"); }} className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600">Ver planos</button>
+                    <button type="button" onClick={() => setShowUpgradeReminder(false)} aria-label="Fechar lembrete" className="rounded-lg px-2 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40">×</button>
+                  </div>
+                </div>
+              )}
+
+              {isUpgradeLockedTab ? (
+                <PlanUpgradePrompt
+                  planType={organization?.plan_type}
+                  onOpenPlans={() => handleTabChange("plan")}
+                />
+              ) : (
+                <>
               {currentTab === "dashboard" && dashboardScreen}
 
               {currentTab === "calendar" &&
@@ -2462,6 +2540,8 @@ const InnerApp = () => {
                   />
                 )}
               {currentTab === "send-announcements" && announcementsScreen}
+                </>
+              )}
             </div>
 
             <InstallBanner
