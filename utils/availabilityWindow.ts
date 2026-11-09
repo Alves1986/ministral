@@ -39,3 +39,20 @@ export function isAvailabilityWindowOpen(
 
   return (!startDate || now >= startDate) && (!endDate || now <= endDate);
 }
+
+export type AvailabilityWindowState = 'not_started' | 'open' | 'closed';
+
+export function getAvailabilityWindowState(
+  start?: string | null,
+  end?: string | null,
+  now = new Date(),
+): AvailabilityWindowState {
+  if (start?.includes('1970') || end?.includes('1970')) return 'closed';
+
+  const startDate = parseAvailabilityWindowDate(start);
+  const endDate = parseAvailabilityWindowDate(end);
+
+  if (startDate && now < startDate) return 'not_started';
+  if (endDate && now > endDate) return 'closed';
+  return 'open';
+}

@@ -46,6 +46,21 @@ function localDate(offsetHours = 0): string {
   return `${y}-${m}-${d}`;
 }
 
+function parseWindowDate(value: unknown): Date | null {
+  if (!value || String(value).includes("1970")) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (!match) return null;
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    0,
+    0,
+  );
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -275,14 +290,20 @@ serve(async (req: Request) => {
     // ── 3. JANELA DE DISPONIBILIDADE (abertura / fechamento) ──
     for (const [_minId, minConfig] of minSettingsMap.entries()) {
       const m = minConfig.ministry;
-      const start = m.availability_start ? String(m.availability_start).slice(0, 10) : null;
-      const end = m.availability_end ? String(m.availability_end).slice(0, 10) : null;
+      const startRaw = m.availability_start ? String(m.availability_start) : null;
+      const endRaw = m.availability_end ? String(m.availability_end) : null;
+      const start = startRaw ? startRaw.slice(0, 10) : null;
+      const end = endRaw ? endRaw.slice(0, 10) : null;
+      const startDate = parseWindowDate(startRaw);
+      const endDate = parseWindowDate(endRaw);
+      const windowNotStarted = !!startDate && nowBr < startDate;
+      const windowClosed = !!endDate && nowBr > endDate;
       const isLegacyLocked = start?.startsWith("1970");
 
       // Abertura: janela começa hoje
       const openCfg = minConfig?.settings?.window_open;
       const openHour = openCfg?.hour ?? 9;
-      if (openCfg?.enabled !== false && currentHour === openHour && start && !isLegacyLocked && start === today) {
+      if (openCfg?.enabled !== false && currentHour === openHour && start && !isLegacyLocked && !windowNotStarted && start === today) {
         const { data: existing } = await supabase
           .from("push_reminder_log")
           .select("id")
@@ -309,7 +330,7 @@ serve(async (req: Request) => {
       // Fechamento: janela encerrada
       const closeCfg = minConfig?.settings?.window_close;
       const closeHour = closeCfg?.hour ?? 10;
-      if (closeCfg?.enabled !== false && currentHour === closeHour && end && !end.startsWith("1970") && end < today) {
+      if (closeCfg?.enabled !== false && currentHour === closeHour && end && !end.startsWith("1970") && windowClosed) {
         const { data: existing } = await supabase
           .from("push_reminder_log")
           .select("id")

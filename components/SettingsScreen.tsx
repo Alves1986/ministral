@@ -45,7 +45,7 @@ export type { NotificationSettings };
 export { DEFAULT_NOTIFICATION_SETTINGS };
 import { sendNotificationSQL, getSupabase } from "../services/supabaseService";
 import { getSystemLogo } from "../utils/branding";
-import { isAvailabilityWindowOpen, parseAvailabilityWindowDate } from "../utils/availabilityWindow";
+import { getAvailabilityWindowState, isAvailabilityWindowOpen, parseAvailabilityWindowDate } from "../utils/availabilityWindow";
 
 interface NewMinistryData {
   code: string;
@@ -321,12 +321,20 @@ export const SettingsScreen: React.FC<Props> = ({
 
       const now = new Date();
       const e = parseAvailabilityWindowDate(endISO);
-      const isOpenNow = isAvailabilityWindowOpen(startISO, endISO, now);
+      const windowState = getAvailabilityWindowState(startISO, endISO, now);
 
-      if (isOpenNow) {
+      if (windowState === 'open') {
         await sendNotificationSQL(ministryId, orgId, {
           title: "🗓️ Apontamento de Ausências Liberado!",
           message: e ? `O prazo para registrar ausências na escala está aberto até ${e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.` : "O prazo para registrar ausências na escala está aberto.",
+          type: "info",
+          actionLink: "availability",
+        });
+      } else if (windowState === 'not_started') {
+        const s = parseAvailabilityWindowDate(startISO);
+        await sendNotificationSQL(ministryId, orgId, {
+          title: "🗓️ Janela de Ausências Agendada",
+          message: s ? `O apontamento de ausências será liberado em ${s.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${s.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.` : "O apontamento de ausências foi agendado.",
           type: "info",
           actionLink: "availability",
         });
