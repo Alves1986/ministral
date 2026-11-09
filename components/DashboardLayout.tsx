@@ -8,7 +8,7 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { useSession } from '../context/SessionContext';
 import { getSystemLogo, getPublicUrl } from '../utils/branding';
-import { isNotificationForMinistry } from '../utils/joinRequestUtils';
+import { isNotificationForMinistry, sanitizeMessagePreview } from '../utils/joinRequestUtils';
 
 export interface NavItem {
   id: string;
@@ -594,7 +594,7 @@ export const DashboardLayout: React.FC<Props> = ({
                             </h4>
                           </div>
                           <p className="text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                            {unreadBroadcast.message}
+                            {sanitizeMessagePreview(unreadBroadcast.message)}
                           </p>
                         </div>
                       </div>
@@ -673,4 +673,3 @@ export const DashboardLayout: React.FC<Props> = ({
     </div>
   );
 };
-

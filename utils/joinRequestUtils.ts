@@ -152,3 +152,26 @@ export function sanitizeNotificationMessage(msg: string): string {
   return cleaned;
 }
 
+/** Prepara mensagens ricas para previews sem exibir tags ou entidades HTML. */
+export function sanitizeMessagePreview(msg: string): string {
+  if (!msg || typeof msg !== 'string') return '';
+
+  const cleaned = sanitizeNotificationMessage(msg)
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<\/div\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ');
+
+  if (typeof document !== 'undefined') {
+    const parser = new DOMParser();
+    const decoded = parser.parseFromString(cleaned, 'text/html').body.textContent || '';
+    return decoded
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/[ \t]*\n[ \t]*/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  return cleaned.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}

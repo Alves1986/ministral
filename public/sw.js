@@ -23,12 +23,20 @@ self.addEventListener('push', (event) => {
   try {
     if (event.data) {
       const parsed = event.data.json();
+      const parsedData = parsed.data || {};
+      const actionLink = parsed.actionLink || parsed.action_link || parsedData.actionLink || parsedData.action_link;
+      const targetData = { ...parsedData };
+      if (!targetData.url && actionLink) {
+        targetData.url = /^https?:\/\//i.test(actionLink)
+          ? actionLink
+          : `/?tab=${encodeURIComponent(actionLink)}`;
+      }
       data = {
         title: parsed.title || data.title,
         body: parsed.body || data.body,
         icon: parsed.icon || data.icon,
         badge: parsed.badge || data.badge,
-        data: parsed.data || data.data
+        data: Object.keys(targetData).length > 0 ? targetData : data.data
       };
     }
   } catch (e) {

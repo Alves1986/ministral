@@ -36,6 +36,7 @@ import { handleLoginCallback } from "./services/spotifyService";
 import { autoSyncIfConnected } from "./services/googleCalendar";
 import { logAuditAction } from "./services/supabase/audit";
 import { normalizeTabAlias } from "./utils/navigation";
+import { sanitizeMessagePreview } from "./utils/joinRequestUtils";
 
 
 import {
@@ -1160,7 +1161,7 @@ const InnerApp = () => {
                       <span className="text-zinc-400 dark:text-zinc-600">•</span>
                       <h4 className="font-bold text-xs lg:text-sm text-zinc-900 dark:text-white truncate">{lastAnnouncement.title}</h4>
                     </div>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-300 truncate">{lastAnnouncement.message}</p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 truncate whitespace-pre-line">{sanitizeMessagePreview(lastAnnouncement.message)}</p>
                   </div>
                 </div>
                 <span className="text-[11px] text-ministral-gold font-bold group-hover:underline whitespace-nowrap self-end sm:self-center">Ver todos avisos →</span>

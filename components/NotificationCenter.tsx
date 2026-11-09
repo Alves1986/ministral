@@ -9,6 +9,7 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 import { extractMinistryIdFromNotification, sanitizeNotificationMessage } from '../utils/joinRequestUtils';
 import { deduplicatePlaylistNotifications, extractPlaylistNotificationKey } from '../utils/repertoireUtils';
+import { normalizeTabAlias } from '../utils/navigation';
 
 interface Props {
   notifications: AppNotification[];
@@ -159,8 +160,42 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
           onSwitchMinistry(notification.ministryId);
       } 
       
-      if (notification.actionLink && onNavigate) {
-          const targetTab = notification.actionLink === 'schedule' ? 'calendar' : notification.actionLink;
+      if (onNavigate) {
+          let target = notification.actionLink?.trim() || '';
+
+          try {
+              if (/^https?:\/\//i.test(target)) {
+                  const parsed = new URL(target);
+                  if (parsed.origin !== window.location.origin) {
+                      window.open(target, '_blank', 'noopener,noreferrer');
+                      setIsOpen(false);
+                      return;
+                  }
+                  target = parsed.searchParams.get('tab') || 'dashboard';
+              } else if (target.startsWith('/')) {
+                  target = new URL(target, window.location.origin).searchParams.get('tab') || target;
+              }
+          } catch {
+              // Mantém o valor original para a normalização abaixo.
+          }
+
+          // Compatibilidade com notificações antigas que não tinham destino salvo.
+          if (!target || target === 'dashboard') {
+              const text = `${notification.title || ''} ${notification.message || ''}`.toLowerCase();
+              if (notification.type === 'join_request' || text.includes('solicita') || text.includes('entrada')) {
+                  target = 'members';
+              } else if (text.includes('aviso') || text.includes('comunicado')) {
+                  target = 'announcements';
+              } else if (text.includes('repertório') || text.includes('repertorio') || text.includes('música')) {
+                  target = 'repertoire';
+              } else if (text.includes('troca')) {
+                  target = 'swaps';
+              } else if (text.includes('escala') || text.includes('calendário') || text.includes('calendario')) {
+                  target = 'calendar';
+              }
+          }
+
+          const targetTab = normalizeTabAlias(target || 'dashboard').tab;
           onNavigate(targetTab);
       }
       
