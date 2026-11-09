@@ -179,23 +179,25 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const { addToast } = useToast();
 
-    const toLocalInput = (isoString?: string) => {
-    if (!isoString) return "";
-    if (isoString.includes("1970")) return "";
-    const d = new Date(isoString);
-    if (d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
-    try {
-      // Evita deslocamento de fuso: mantém o horário exatamente como salvo
-      return new Date(isoString).toISOString().slice(0, 16);
-    } catch (e) {
-      return "";
-    }
+  const toLocalInput = (isoString?: string) => {
+    if (!isoString || isoString.includes("1970")) return "";
+
+    // O valor representa o horário de parede escolhido pelo administrador.
+    // Extrair os primeiros 16 caracteres evita que Date/toISOString altere a hora.
+    const directMatch = isoString.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+    if (directMatch) return directMatch[1];
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoString)) return `${isoString}T00:00`;
+    return "";
   };
 
   const fromLocalInput = (localString: string) => {
     if (!localString) return "";
-    // Trata o valor do input como UTC para não haver deslocamento de fuso
-    return new Date(localString + "Z").toISOString();
+    // Persiste o horário de parede como UTC nominal, sem conversão automática.
+    // Assim, 18:30 digitado continua 18:30 ao ser lido novamente.
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localString)
+      ? `${localString}:00.000Z`
+      : localString;
   };
 
   const validateField = (field: 'ministryName' | 'availStart' | 'availEnd', value: string) => {

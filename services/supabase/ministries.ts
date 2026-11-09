@@ -701,11 +701,15 @@ export const saveMinistrySettings = async (
     if (displayName !== undefined) minUpdates.label = displayName;
     if (reminderHour !== undefined) minUpdates.reminder_hour = reminderHour;
 
-    await sb
+    const { error: windowError } = await sb
       .from("organization_ministries")
       .update(minUpdates)
       .eq("id", ministryId)
       .eq("organization_id", orgId);
+    if (windowError) {
+      console.error("[saveMinistrySettings] Erro ao salvar janela de ausências:", windowError);
+      throw windowError;
+    }
   }
 };
 
@@ -747,4 +751,3 @@ export const saveNotificationSettings = async (
     throw error;
   }
 };
-
