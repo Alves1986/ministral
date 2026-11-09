@@ -216,6 +216,13 @@ export const SettingsScreen: React.FC<Props> = ({
   }, [initialTitle]);
 
   useEffect(() => {
+    setLogoPreview(
+      organization?.logo_url ||
+        getSystemLogo(themeMode === "dark" ? "dark" : "light"),
+    );
+  }, [organization?.logo_url, themeMode]);
+
+  useEffect(() => {
     if (availabilityWindow) {
       setAvailStart(toLocalInput(availabilityWindow.start));
       setAvailEnd(toLocalInput(availabilityWindow.end));
@@ -477,6 +484,57 @@ export const SettingsScreen: React.FC<Props> = ({
       }
     } catch (err: any) {
       addToast("Erro ao exibir notificação: " + (err?.message || err), "error");
+    }
+  };
+
+  const handleOrganizationLogoChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !onSaveOrgLogo) return;
+
+    if (!file.type.startsWith("image/")) {
+      addToast("Selecione um arquivo de imagem válido.", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      addToast("A logo deve ter no máximo 5 MB.", "error");
+      return;
+    }
+
+    setLogoLoading(true);
+    try {
+      const url = await onSaveOrgLogo(file);
+      if (url) {
+        setLogoPreview(url);
+        addToast("Logo da organização atualizada com sucesso!", "success");
+      } else {
+        addToast("Não foi possível salvar a logo da organização.", "error");
+      }
+    } catch {
+      addToast("Erro ao salvar a logo da organização.", "error");
+    } finally {
+      setLogoLoading(false);
+    }
+  };
+
+  const handleRemoveOrganizationLogo = async () => {
+    if (!onSaveOrgLogo || !organization?.logo_url) return;
+
+    setLogoLoading(true);
+    try {
+      const result = await onSaveOrgLogo(null);
+      if (result !== null) {
+        setLogoPreview(getSystemLogo(themeMode === "dark" ? "dark" : "light"));
+        addToast("Logo da organização removida.", "success");
+      } else {
+        addToast("Não foi possível remover a logo da organização.", "error");
+      }
+    } catch {
+      addToast("Erro ao remover a logo da organização.", "error");
+    } finally {
+      setLogoLoading(false);
     }
   };
 
@@ -1175,6 +1233,60 @@ export const SettingsScreen: React.FC<Props> = ({
               </div>
             )}
           </div>
+
+          {isEnterprise && isAdmin && onSaveOrgLogo && (
+            <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-amber-200 dark:border-amber-900/50 shadow-sm">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                    <ImageIcon size={16} /> Identidade da Organização
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    A logo será exibida no sistema para os membros da sua organização.
+                  </p>
+                </div>
+                <span className="shrink-0 px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                  Enterprise
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-20 h-20 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center overflow-hidden shrink-0">
+                  <img
+                    src={logoPreview}
+                    alt="Logo da organização"
+                    className="w-full h-full object-contain p-2"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary hover:bg-secondaryHover text-white text-xs font-bold transition-colors ${logoLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                    {logoLoading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {logoLoading ? "Salvando..." : "Enviar logo"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={handleOrganizationLogoChange}
+                      disabled={logoLoading}
+                      className="sr-only"
+                    />
+                  </label>
+                  {organization?.logo_url && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveOrganizationLogo}
+                      disabled={logoLoading}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      <X size={14} /> Remover
+                    </button>
+                  )}
+                  <p className="basis-full text-[11px] text-zinc-400">
+                    PNG, JPG, WebP ou SVG · máximo de 5 MB
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isPaidPlan && <div className="bg-white dark:bg-zinc-800 p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
             <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
