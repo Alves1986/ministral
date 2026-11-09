@@ -45,6 +45,7 @@ export type { NotificationSettings };
 export { DEFAULT_NOTIFICATION_SETTINGS };
 import { sendNotificationSQL, getSupabase } from "../services/supabaseService";
 import { getSystemLogo } from "../utils/branding";
+import { isAvailabilityWindowOpen, parseAvailabilityWindowDate } from "../utils/availabilityWindow";
 
 interface NewMinistryData {
   code: string;
@@ -133,6 +134,7 @@ export const SettingsScreen: React.FC<Props> = ({
   );
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
+  const [windowNow, setWindowNow] = useState(() => new Date());
   const [selectedReminderHour, setSelectedReminderHour] = useState<number>(
     typeof ministryConfig?.reminderHour === "number" ? ministryConfig.reminderHour : 8,
   );
@@ -230,6 +232,11 @@ export const SettingsScreen: React.FC<Props> = ({
   }, [availabilityWindow]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setWindowNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if ("Notification" in window) setNotifPermission(Notification.permission);
   }, []);
 
@@ -294,12 +301,7 @@ export const SettingsScreen: React.FC<Props> = ({
 
     if (!startIso || !endIso) return true;
 
-    const now = new Date();
-    const s = new Date(startIso);
-    const e = new Date(endIso);
-    if (s.getUTCFullYear() === 1970) return false;
-
-    return now >= s && now <= e;
+    return isAvailabilityWindowOpen(startIso, endIso, windowNow);
   };
 
   const status = isWindowActive();
@@ -316,15 +318,13 @@ export const SettingsScreen: React.FC<Props> = ({
       await onSaveAvailabilityWindow(startISO, endISO);
 
       const now = new Date();
-      const s = new Date(startISO);
-      const e = new Date(endISO);
-
-      const isOpenNow = now >= s && now <= e;
+      const e = parseAvailabilityWindowDate(endISO);
+      const isOpenNow = isAvailabilityWindowOpen(startISO, endISO, now);
 
       if (isOpenNow) {
         await sendNotificationSQL(ministryId, orgId, {
           title: "🗓️ Apontamento de Ausências Liberado!",
-          message: `O prazo para registrar ausências na escala está aberto até ${e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`,
+          message: e ? `O prazo para registrar ausências na escala está aberto até ${e.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${e.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.` : "O prazo para registrar ausências na escala está aberto.",
           type: "info",
           actionLink: "availability",
         });

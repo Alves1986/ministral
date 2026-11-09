@@ -3,6 +3,7 @@ import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile, CustomE
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert, AlertTriangle, Clock } from 'lucide-react';
 import { useToast } from './Toast';
+import { isAvailabilityWindowOpen } from '../utils/availabilityWindow';
 
 interface Props {
   availability: AvailabilityMap; // Now keyed by User ID
@@ -47,6 +48,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   
   // Flag para impedir que o Realtime do Supabase sobrescreva um optimistic update em andamento
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [windowNow, setWindowNow] = useState(() => new Date());
   
   // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -67,24 +69,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   // Check Window Status
-  const isWindowOpenForMembers = React.useMemo(() => {
-      if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-      if (availabilityWindow.start?.includes('1970')) return false;
+  React.useEffect(() => {
+      const timer = window.setInterval(() => setWindowNow(new Date()), 30_000);
+      return () => window.clearInterval(timer);
+  }, []);
 
-      const now = new Date();
-      let start = new Date(0);
-      let end = new Date(8640000000000000); 
-
-      if (availabilityWindow.start) start = new Date(availabilityWindow.start);
-      if (availabilityWindow.end) end = new Date(availabilityWindow.end);
-      
-      return now >= start && now <= end;
-  }, [availabilityWindow]);
+  const isWindowOpenForMembers = React.useMemo(
+      () => isAvailabilityWindowOpen(availabilityWindow?.start, availabilityWindow?.end, windowNow),
+      [availabilityWindow?.start, availabilityWindow?.end, windowNow],
+  );
 
   const deadlineInfo = React.useMemo(() => {
       if (!availabilityWindow?.end || availabilityWindow.start?.includes('1970')) return null;
-      const end = new Date(availabilityWindow.end);
-      const now = new Date();
+      const end = new Date(availabilityWindow.end.replace(/Z$/, ''));
+      const now = windowNow;
       const diffMs = end.getTime() - now.getTime();
       if (diffMs <= 0) return { expired: true, isUrgent: false, text: 'Prazo encerrado' };
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -98,7 +96,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               ? `Atenção: o prazo encerra hoje às ${end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}!`
               : `Prazo para envio: encerra em ${formattedEnd} (${diffDays}d ${diffHours % 24}h restantes)`
       };
-  }, [availabilityWindow]);
+  }, [availabilityWindow, windowNow]);
 
   const canEdit = isAdmin || isWindowOpenForMembers;
 
@@ -251,6 +249,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   const handleToggleSpecificEvent = (eventTime: string, isSunday: boolean, day: number) => {
+      if (!canEdit) {
+          addToast("O período de envio está fechado.", "warning");
+          return;
+      }
       if (isSaveLocked) return;
       setIsSyncing(true);
       setSaveState('dirty');
@@ -328,6 +330,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const executeSave = async (noteToSave?: string) => {
       if (!selectedMemberId) return;
+      if (!isAdmin && !isAvailabilityWindowOpen(availabilityWindow?.start, availabilityWindow?.end)) {
+          setIsSyncing(false);
+          setSaveState('idle');
+          addToast("O período de envio está fechado.", "warning");
+          return;
+      }
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
