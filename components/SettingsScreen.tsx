@@ -200,6 +200,11 @@ export const SettingsScreen: React.FC<Props> = ({
       : localString;
   };
 
+  const formatLocalDateTime = (date: Date) => {
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const validateField = (field: 'ministryName' | 'availStart' | 'availEnd', value: string) => {
     let error = '';
     if (field === 'ministryName' && (!value.trim() || value.trim() === 'Carregando...')) {
@@ -374,9 +379,13 @@ export const SettingsScreen: React.FC<Props> = ({
     } else {
       const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       const startNow = new Date(now.getTime() - 60000);
+      const startLocal = formatLocalDateTime(startNow);
+      const endLocal = formatLocalDateTime(nextWeek);
 
-      newStartStr = startNow.toISOString();
-      newEndStr = nextWeek.toISOString();
+      // Usa o horário local do administrador, sem converter para UTC antes
+      // de persistir. Assim, a janela não retorna com horário 00:00.
+      newStartStr = fromLocalInput(startLocal);
+      newEndStr = fromLocalInput(endLocal);
 
       addToast("Janela liberada por 7 dias.", "success");
 
@@ -393,8 +402,8 @@ export const SettingsScreen: React.FC<Props> = ({
     }
 
     await onSaveAvailabilityWindow(newStartStr, newEndStr);
-    setAvailStart(toLocalInput(newStartStr));
-    setAvailEnd(toLocalInput(newEndStr));
+    setAvailStart(action === "open" ? newStartStr.slice(0, 16) : toLocalInput(newStartStr));
+    setAvailEnd(action === "open" ? newEndStr.slice(0, 16) : toLocalInput(newEndStr));
   };
 
   const handleSendDeadlineAlert = async () => {
