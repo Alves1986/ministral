@@ -4,7 +4,7 @@ import {
   Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, 
   FileText, AlignLeft, ListPlus, Clock, Sun, Moon, ChevronLeft, 
   ChevronRight, Eye, EyeOff, Sparkles, Check, CheckCircle2,
-  Trophy, Archive, History, ChevronDown, ChevronUp, BarChart3, TrendingUp, Music2, Edit2
+  Trophy, Archive, History, ChevronDown, ChevronUp, BarChart3, TrendingUp, Music2, Edit2, BellRing
 } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
@@ -180,6 +180,36 @@ export const RepertoireScreen: React.FC<Props> = ({
   const [playlistFilter, setPlaylistFilter] = useState<'upcoming' | 'all' | 'past'>('upcoming');
 
   const orgId = currentUser?.organizationId;
+  const isAdmin = currentUser?.access_role === 'admin' || currentUser?.isOrgAdmin || currentUser?.isSuperAdmin;
+  const [notifyingPlaylistKey, setNotifyingPlaylistKey] = useState<string | null>(null);
+
+  const handleManualPlaylistNotification = async (group: {
+    groupKey: string;
+    cultoTitle: string;
+    cultoTime?: string | null;
+    date: string;
+    items: RepertoireItem[];
+    eventRuleId?: string | null;
+  }) => {
+    if (!orgId || !ministryId || !isAdmin) return;
+    setNotifyingPlaylistKey(group.groupKey);
+    try {
+      await notifyRepertoirePlaylistPublished(ministryId, orgId, {
+        cultoTitle: group.cultoTitle,
+        cultoTime: group.cultoTime || undefined,
+        date: group.date,
+        songsCount: group.items.length,
+        addedBy: group.items[0]?.addedBy,
+        eventRuleId: group.eventRuleId,
+      });
+      addToast('Notificação manual da playlist enviada aos envolvidos.', 'success');
+    } catch (error: any) {
+      console.error('[RepertoireScreen] Falha no disparo manual da playlist:', error);
+      addToast(error?.message || 'Não foi possível enviar a notificação manual.', 'error');
+    } finally {
+      setNotifyingPlaylistKey(null);
+    }
+  };
 
   // Buscar regras de cultos do ministério atual (com fallback para organização apenas se o ministério não tiver regras próprias)
   const { data: eventRules = [] } = useQuery({
@@ -1094,6 +1124,21 @@ export const RepertoireScreen: React.FC<Props> = ({
               >
                 <Edit2 size={12} />
                 <span>{editingPlaylistGroupKey === group.groupKey ? 'Fechar Edição' : 'Editar Playlist'}</span>
+              </button>
+            )}
+            {mode === 'manage' && isAdmin && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleManualPlaylistNotification(group);
+                }}
+                disabled={notifyingPlaylistKey === group.groupKey}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-400/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                title="Disparar manualmente a notificação desta playlist para os envolvidos"
+              >
+                {notifyingPlaylistKey === group.groupKey ? <Loader2 className="animate-spin" size={12} /> : <BellRing size={12} />}
+                <span>{notifyingPlaylistKey === group.groupKey ? 'Enviando...' : 'Testar notificação'}</span>
               </button>
             )}
             <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200/60 dark:border-zinc-700">
