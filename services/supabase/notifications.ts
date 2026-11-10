@@ -221,18 +221,13 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
             pushBody.userIds = [notification.targetUserId];
         }
 
-        sb.functions.invoke('push-notification', { body: pushBody })
-            .then(({ data, error }) => {
-                if (error) {
-                    console.warn("[Push Notification] Edge function aviso/erro:", error);
-                } else {
-                    pushDispatched = true;
-                    console.log("[Push Notification] Disparo concluído:", data?.message || data);
-                }
-            })
-            .catch(err => {
-                console.warn("[Push Notification] Falha de rede ao disparar push:", err);
-            });
+        const { data, error } = await sb.functions.invoke('push-notification', { body: pushBody });
+        if (error) {
+            console.warn("[Push Notification] Edge function aviso/erro:", error);
+        } else {
+            pushDispatched = data?.success !== false;
+            console.log("[Push Notification] Disparo concluído:", data?.message || data);
+        }
     } catch (pushErr) {
         console.warn("[Push Notification] Erro ao invocar push:", pushErr);
     }

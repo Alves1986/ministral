@@ -246,6 +246,40 @@ export const notifyRepertoirePlaylistPublished = async (
         const cultoDesc = cultoName ? `${cultoName} (${dateFormatted})` : `culto de ${dateFormatted}`;
         const songsText = `${details.songsCount} ${details.songsCount === 1 ? 'música' : 'músicas'}`;
 
+        // A playlist deve chegar a todos os membros da organização, não apenas
+        // aos usuários que têm função de Projeção/Dança ou ao ministério ativo.
+        // O target_user_id garante que o in-app e o push alcancem também membros
+        // cujo allowed_ministries esteja desatualizado ou que pertençam a outro ministério.
+        const [{ data: organizationMembers }, { data: organizationProfiles }] = await Promise.all([
+            sb.from('ministry_members')
+                .select('profile_id')
+                .eq('organization_id', orgId),
+            sb.from('profiles')
+                .select('id')
+                .eq('organization_id', orgId),
+        ]);
+
+        const recipientIds = Array.from(new Set([
+            ...(organizationMembers || []).map((member: any) => member.profile_id),
+            ...(organizationProfiles || []).map((profile: any) => profile.id),
+        ].filter(Boolean)));
+
+        if (recipientIds.length > 0) {
+            await Promise.all(recipientIds.map((targetUserId) =>
+                sendNotificationSQL(ministryId, orgId, {
+                    title: '🎵 Playlist do Culto Postada!',
+                    message: `A playlist para o ${cultoDesc} foi publicada no repertório com ${songsText}. Acesse o repertório para conferir.`,
+                    type: 'info',
+                    actionLink: 'repertoire',
+                    targetUserId,
+                }).catch((error) => {
+                    console.warn('[notifyRepertoirePlaylistPublished] Falha ao notificar membro:', targetUserId, error);
+                    return null;
+                }),
+            ));
+            return;
+        }
+
         // 1. Notificação única para o ministério de Louvor
         await sendNotificationSQL(ministryId, orgId, {
             title: '🎵 Playlist do Culto Postada!',
