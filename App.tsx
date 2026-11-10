@@ -37,6 +37,7 @@ import { autoSyncIfConnected } from "./services/googleCalendar";
 import { logAuditAction } from "./services/supabase/audit";
 import { normalizeTabAlias } from "./utils/navigation";
 import { sanitizeMessagePreview } from "./utils/joinRequestUtils";
+import { FULL_ACCESS_TABS } from "./utils/planPolicy";
 
 
 import {
@@ -630,7 +631,8 @@ const InnerApp = () => {
   const isPro = activeUser?.isPro ?? false;
   const isEnterprise = activeUser?.isEnterprise ?? false;
   const isUpgradeEligible = !isEnterprise && (organization?.plan_type === "trial" || isPro);
-  const paidOnlyTabs = ["repertoire", "schedule-rules", "monthly-report", "report", "advanced-ai"];
+  // O Trial permite experimentar o fluxo operacional completo; os limites ficam em volume e cotas.
+  const paidOnlyTabs: string[] = [];
 
   useEffect(() => {
     if (!isUpgradeEligible) {
@@ -967,15 +969,12 @@ const InnerApp = () => {
   }, [ministryConfig, ministryTitle]);
 
   const planEnabledTabs = useMemo(() => {
-    return isPro
-      ? safeEnabledTabs
-      : safeEnabledTabs.filter((tab) => !paidOnlyTabs.includes(tab));
-  }, [safeEnabledTabs, isPro]);
+    const enabled = new Set(safeEnabledTabs);
+    FULL_ACCESS_TABS.forEach((tab) => enabled.add(tab));
+    return Array.from(enabled);
+  }, [safeEnabledTabs]);
 
-  const visiblePlanTabs = useMemo(
-    () => (isEnterprise ? planEnabledTabs : [...new Set([...planEnabledTabs, ...paidOnlyTabs])]),
-    [isEnterprise, planEnabledTabs],
-  );
+  const visiblePlanTabs = useMemo(() => planEnabledTabs, [planEnabledTabs]);
 
   const MAIN_NAV = useMemo(
     () => RAW_MAIN_NAV.filter((item) => visiblePlanTabs.includes(item.id)),

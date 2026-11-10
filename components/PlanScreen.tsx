@@ -20,12 +20,13 @@ const PLANS = {
       { label: 'Disponibilidade inteligente', included: true },
       { label: 'Avisos e Comunicados', included: true },
       { label: 'Ranking e Destaques', included: true },
-      { label: 'Relatório Mensal', included: false },
-      { label: 'Relatório de Disponibilidade', included: false },
-      { label: 'Regras de Escala (conflitos)', included: false },
-      { label: 'Gerenciamento de Repertório', included: false },
-      { label: 'Notificações Push', included: false },
-      { label: 'Integrações Spotify e YouTube', included: false },
+      { label: 'Relatório Mensal básico', included: true },
+      { label: 'Relatório de Disponibilidade', included: true },
+      { label: 'Regras de Escala (conflitos)', included: true },
+      { label: 'Gerenciamento de Repertório', included: true },
+      { label: 'Notificações Push', included: true },
+      { label: 'Integrações Spotify e YouTube', included: true },
+      { label: 'IA básica — 25 usos por semana', included: true },
       { label: 'Suporte prioritário', included: false },
     ]
   },
@@ -265,7 +266,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
             <div className="flex items-baseline gap-1">
               <span className="text-3xl font-black text-zinc-800 dark:text-white">{PLANS.trial.price}</span>
             </div>
-            <p className="text-zinc-500 text-sm mt-1">{PLANS.trial.duration}</p>
+            <p className="text-zinc-500 text-sm mt-1">{PLANS.trial.duration} · acesso operacional completo</p>
           </div>
           
           <div className="flex-1 space-y-3 mb-8">

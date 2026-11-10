@@ -9,6 +9,7 @@ import { fetchAuditLogs, AuditLogEntry, AUDIT_ACTION_LABELS, AUDIT_ACTION_COLORS
 import { getSupabase } from '../services/supabase/client';
 import { cleanupStaleJoinNotifications } from '../services/supabase/ministries';
 import { isNotificationForMinistry, extractMinistryIdFromNotification } from '../utils/joinRequestUtils';
+import { getPlanLimits } from '../utils/planPolicy';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -460,16 +461,10 @@ export const MembersScreen: React.FC<Props> = ({
 
   const handleInviteClick = () => {
     const plan = organization?.plan_type || 'trial';
-    if (plan === 'trial' && members.length >= 10) {
+    const memberLimit = getPlanLimits(plan).membersPerMinistry;
+    if (Number.isFinite(memberLimit) && members.length >= memberLimit) {
       addToast(
-        'Limite do Trial atingido (10 membros). Faça o upgrade para o Plano Pro.',
-        'error'
-      );
-      return;
-    }
-    if (plan === 'pro' && members.length >= 50) {
-      addToast(
-        'Limite do Plano Pro atingido (50 membros). Faça o upgrade para Enterprise.',
+        `Limite do plano atingido (${memberLimit} membros por ministério). Faça upgrade para ampliar sua equipe.`,
         'error'
       );
       return;

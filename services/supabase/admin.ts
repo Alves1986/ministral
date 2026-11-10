@@ -1,6 +1,7 @@
 import { getSupabase } from "./client";
 import { notifySuperAdmins } from "./notifications";
 import { AuditAction, AUDIT_ACTION_LABELS } from "./audit";
+import { getPlanLimits, getPlanType } from "../../utils/planPolicy";
 
 export const fetchOrganizationsWithStats = async () => {
   const sb = getSupabase();
@@ -238,7 +239,9 @@ export const checkMinistryLimit = async (
   orgId: string,
   plan_type: string,
 ): Promise<{ allowed: boolean; reason?: string }> => {
-  if (plan_type === "enterprise") return { allowed: true };
+  const normalizedPlan = getPlanType(plan_type);
+  const limits = getPlanLimits(normalizedPlan);
+  if (!Number.isFinite(limits.ministries)) return { allowed: true };
   const sb = getSupabase();
   if (!sb) return { allowed: false };
   const { count } = await sb
@@ -246,18 +249,11 @@ export const checkMinistryLimit = async (
     .select("id", { count: "exact", head: true })
     .eq("organization_id", orgId);
 
-  if (plan_type === "trial" && (count || 0) >= 2) {
+  if ((count || 0) >= limits.ministries) {
     return {
       allowed: false,
       reason:
-        "O plano Trial permite no máximo 2 ministérios. Faça upgrade para Pro.",
-    };
-  }
-  if (plan_type === "pro" && (count || 0) >= 3) {
-    return {
-      allowed: false,
-      reason:
-        "O plano Pro permite no máximo 3 ministérios. Faça upgrade para Enterprise.",
+        `O plano ${normalizedPlan.toUpperCase()} permite no máximo ${limits.ministries} ministérios. Faça upgrade para ampliar sua organização.`,
     };
   }
   return { allowed: true };
@@ -506,4 +502,3 @@ export const fetchSystemTelemetry = async (): Promise<SystemTelemetryLog[]> => {
 
   return items;
 };
-

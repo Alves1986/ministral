@@ -2,6 +2,7 @@ import { getSupabase } from "./client";
 import { notifySuperAdmins } from "./notifications";
 import { log } from "../../utils/logger";
 import { setSavedLocalUserFunctions } from "../../utils/swapUtils";
+import { getPlanLimits, getPlanType } from "../../utils/planPolicy";
 
 export const loginWithEmail = async (email: string, pass: string) => {
   const sb = getSupabase();
@@ -324,7 +325,9 @@ export const checkMemberLimit = async (
   orgId: string,
   plan_type: string,
 ): Promise<{ allowed: boolean; reason?: string }> => {
-  if (plan_type === "enterprise") return { allowed: true };
+  const normalizedPlan = getPlanType(plan_type);
+  const limits = getPlanLimits(normalizedPlan);
+  if (!Number.isFinite(limits.membersPerMinistry)) return { allowed: true };
   const sb = getSupabase();
   if (!sb) return { allowed: false, reason: "Sem conexão" };
   const { count } = await sb
@@ -332,18 +335,11 @@ export const checkMemberLimit = async (
     .select("id", { count: "exact", head: true })
     .eq("ministry_id", ministryId);
 
-  if (plan_type === "trial" && (count || 0) >= 30) {
+  if ((count || 0) >= limits.membersPerMinistry) {
     return {
       allowed: false,
       reason:
-        "O plano Trial permite no máximo 30 membros por ministério. Faça upgrade para Pro.",
-    };
-  }
-  if (plan_type === "pro" && (count || 0) >= 50) {
-    return {
-      allowed: false,
-      reason:
-        "O plano Pro permite no máximo 50 membros por ministério. Faça upgrade para Enterprise.",
+        `O plano ${normalizedPlan.toUpperCase()} permite no máximo ${limits.membersPerMinistry} membros por ministério. Faça upgrade para ampliar sua equipe.`,
     };
   }
   return { allowed: true };

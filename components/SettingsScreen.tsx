@@ -46,6 +46,7 @@ export { DEFAULT_NOTIFICATION_SETTINGS };
 import { sendNotificationSQL, getSupabase } from "../services/supabaseService";
 import { getSystemLogo } from "../utils/branding";
 import { getAvailabilityWindowState, isAvailabilityWindowOpen, parseAvailabilityWindowDate } from "../utils/availabilityWindow";
+import { getPlanLimits } from "../utils/planPolicy";
 
 interface NewMinistryData {
   code: string;
@@ -1125,8 +1126,7 @@ export const SettingsScreen: React.FC<Props> = ({
               <button
                 onClick={() => {
                   const planType = organization?.plan_type || "trial";
-                  const limits = { trial: 2, pro: 3, enterprise: Infinity };
-                  const limit = limits[planType as keyof typeof limits] || 2;
+                  const limit = getPlanLimits(planType).ministries;
                   if ((ministries?.length || 0) >= limit) {
                     addToast(`Seu plano (${planType.toUpperCase()}) permite até ${limit} ministérios. Faça upgrade para criar mais.`, "error");
                     return;

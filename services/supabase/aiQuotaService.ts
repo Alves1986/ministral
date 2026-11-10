@@ -9,10 +9,11 @@ import {
   OrganizationAIQuotaStatus,
   GlobalAIQuotaOverview,
 } from '../../types';
+import { getPlanLimits } from '../../utils/planPolicy';
 
 export const DEFAULT_TIER_LIMITS: Record<AIPlanTier, { weeklyLimit: number; allowedModels: 'basic' | 'all'; label: string }> = {
   free: {
-    weeklyLimit: 25,
+    weeklyLimit: getPlanLimits('trial').aiWeeklyLimit,
     allowedModels: 'basic',
     label: 'Gratuito (Básico)',
   },

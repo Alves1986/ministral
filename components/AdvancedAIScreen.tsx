@@ -75,6 +75,10 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const { addToast } = useToast();
 
   const [quotaStatus, setQuotaStatus] = useState<OrganizationAIQuotaStatus | null>(null);
+  const isBasicAI = quotaStatus?.allowedModels === 'basic';
+  const availableModels = provider === 'gemini'
+    ? AI_MODELS.filter(model => !isBasicAI || ['gemini-2.5-flash', 'gemini-3.5-flash-lite'].includes(model.id))
+    : OPENROUTER_MODELS;
 
   const fetchQuota = async () => {
     if (!orgId) return;
@@ -89,6 +93,13 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   useEffect(() => {
     fetchQuota();
   }, [orgId, orgName]);
+
+  useEffect(() => {
+    if (isBasicAI) {
+      setProvider('gemini');
+      setSelectedModel(DEFAULT_MODEL);
+    }
+  }, [isBasicAI]);
 
   const getAIContext = () => ({
     organization_id: orgId,
@@ -872,7 +883,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                   <button onClick={() => handleProviderChange('gemini')} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'gemini' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'}`}>
                     Google Gemini
                   </button>
-                  <button onClick={() => handleProviderChange('openrouter')} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'openrouter' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'}`}>
+                  <button onClick={() => !isBasicAI && handleProviderChange('openrouter')} disabled={isBasicAI} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'openrouter' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'} ${isBasicAI ? 'cursor-not-allowed opacity-50' : ''}`}>
                     OpenRouter
                   </button>
                 </div>
@@ -884,7 +895,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                   </div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(provider === 'gemini' ? AI_MODELS : OPENROUTER_MODELS).map(model => (
+                  {availableModels.map(model => (
                     <button key={model.id} onClick={() => setSelectedModel(model.id)} aria-pressed={selectedModel === model.id} className={`min-w-0 p-4 rounded-xl border-2 text-left transition-all ${selectedModel === model.id ? 'border-ministral-500 bg-ministral-50 dark:bg-ministral-600/10' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600'}`}>
                       <p className={`font-bold text-sm truncate ${selectedModel === model.id ? 'text-ministral-500 dark:text-ministral-400' : 'text-zinc-800 dark:text-zinc-200'}`}>{model.name}</p>
                       <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 break-words">{model.description}</p>
