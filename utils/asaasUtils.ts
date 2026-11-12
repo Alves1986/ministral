@@ -9,13 +9,13 @@ import { Organization } from '../types';
 export const ASAAS_PLANS = {
   pro: {
     name: 'Pro',
-    value: 99.00,
+    value: 49.90,
     cycle: 'MONTHLY' as const,
     description: 'Plano Pro - Ministral'
   },
   enterprise: {
     name: 'Enterprise',
-    value: 149.00,
+    value: 99.90,
     cycle: 'MONTHLY' as const,
     description: 'Plano Enterprise - Ministral'
   }
@@ -93,7 +93,7 @@ export function mapAsaasEventToBillingStatus(payload: any): AsaasBillingStatusMa
     shouldUpdateOrg = true;
 
     const val = Number(payment?.value || 0);
-    planType = val >= 149 ? 'enterprise' : 'pro';
+    planType = val >= ASAAS_PLANS.enterprise.value ? 'enterprise' : 'pro';
   } else if (event === 'PAYMENT_OVERDUE') {
     billingStatus = 'past_due';
     accessLocked = true;

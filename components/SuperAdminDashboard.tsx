@@ -543,10 +543,10 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
       if (!org.active) return;
       if (org.plan_type === "pro") {
         proCount++;
-        if (org.billing_status !== "trialing") mrr += 99;
+        if (org.billing_status !== "trialing") mrr += 49.90;
       } else if (org.plan_type === "enterprise") {
         enterpriseCount++;
-        if (org.billing_status !== "trialing") mrr += 149;
+        if (org.billing_status !== "trialing") mrr += 99.90;
       } else if (
         org.billing_status === "trialing" ||
         org.plan_type === "trial"
@@ -771,7 +771,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
           customer: targetOrg.asaas_customer_id || `cus_sim_${Date.now()}`,
           subscription: targetOrg.asaas_subscription_id || `sub_sim_${Date.now()}`,
           externalReference: targetOrg.id,
-          value: testPlanType === 'enterprise' ? 149.00 : 99.00,
+          value: testPlanType === 'enterprise' ? 99.90 : 49.90,
           status: 'CONFIRMED',
           billingType: 'PIX',
           description: `Assinatura Plano ${testPlanType === 'enterprise' ? 'Enterprise' : 'Pro'} - Ministral`
@@ -781,7 +781,7 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
           id: `pay_sim_${Date.now()}`,
           customer: targetOrg.asaas_customer_id || `cus_sim_${Date.now()}`,
           externalReference: targetOrg.id,
-          value: 99.00,
+          value: 49.90,
           status: 'OVERDUE'
         };
       } else if (eventType === 'SUBSCRIPTION_DELETED') {
@@ -2100,8 +2100,8 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                     onChange={(e) => setTestPlanType(e.target.value as 'pro' | 'enterprise')}
                     className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white"
                   >
-                    <option value="pro">Plano Pro (R$ 99,00/mês)</option>
-                    <option value="enterprise">Plano Enterprise (R$ 149,00/mês)</option>
+                    <option value="pro">Plano Pro (R$ 49,90/mês)</option>
+                    <option value="enterprise">Plano Enterprise (R$ 99,90/mês)</option>
                   </select>
                 </div>
 

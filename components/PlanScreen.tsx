@@ -31,7 +31,7 @@ const PLANS = {
     ]
   },
   pro: {
-    name: 'Pro', price: 'R$ 99,00', duration: 'por mês',
+    name: 'Pro', price: 'R$ 49,90', duration: 'por mês',
     features: [
       { label: 'Até 50 membros por ministério', included: true },
       { label: 'Até 3 ministérios por organização', included: true },
@@ -49,7 +49,7 @@ const PLANS = {
     ]
   },
   enterprise: {
-    name: 'Enterprise', price: 'R$ 149,00', duration: 'por mês',
+    name: 'Enterprise', price: 'R$ 99,90', duration: 'por mês',
     features: [
       { label: 'Membros ilimitados', included: true },
       { label: 'Ministérios ilimitados', included: true },
