@@ -4,7 +4,7 @@
 // Usa REST direto (sem o SDK @google/genai) para evitar erros de bundling.
 
 import { createClient } from '@supabase/supabase-js';
-import { buildSchedulePrompt, extractAssignments } from '../../services/aiScheduleUtils';
+import { buildSchedulePrompt, extractAssignments } from '../../services/aiScheduleUtils.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELS_FALLBACK = [
