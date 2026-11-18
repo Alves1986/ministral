@@ -4,7 +4,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { generateScheduleWithAI } from "./services/aiOrchestrator.ts";
 import { generateAISchedule } from "./services/aiScheduleService.ts";
-import { polishAnnouncementAI } from "./services/aiService.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,41 +104,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error fetching weather:", error);
       res.status(500).json({ error: "Failed to fetch weather" });
-    }
-  });
-
-  app.post("/api/ai/polish", async (req, res) => {
-    try {
-      const { text, tone, model } = req.body;
-      const result = await polishAnnouncementAI(text, tone, model);
-      res.json({ text: result });
-    } catch (error: any) {
-      console.error("Error polishing text:", error);
-      res.status(500).json({ error: "Failed to polish text" });
-    }
-  });
-
-  app.post("/api/ai/run", async (req, res) => {
-    try {
-      const { runAI } = await import("./services/aiOrchestrator.ts");
-      const { taskType, context, payload, preferredModel } = req.body;
-      const result = await runAI(taskType, context, payload, preferredModel);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/ai/run:", error?.message || error);
-      res.status(500).json({ error: error?.message || "Failed to run AI task" });
-    }
-  });
-
-  app.post("/api/youtube/search", async (req, res) => {
-    try {
-      const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
-      const { query } = req.body;
-      const result = await searchYouTubeVideos(query);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/youtube/search:", error);
-      res.status(500).json({ error: "Failed to search YouTube" });
     }
   });
 
