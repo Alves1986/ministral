@@ -444,9 +444,9 @@ export default async function handler(req: any, res: any) {
   const openRouterApiKey = rawOpenRouter.trim().replace(/^["']|["']$/g, '');
 
   if (!geminiApiKey && !openRouterApiKey) {
-    console.error('[api/ai/run] Nenhuma chave de IA (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY) configurada.');
+    console.error('[api/ai/run] Nenhuma chave de IA (GEMINI_API_KEY ou OPENROUTER_API_KEY) configurada.');
     return res.status(500).json({
-      error: 'Serviço de IA indisponível. Verifique se a variável VITE_GEMINI_API_KEY está configurada no painel da Vercel.',
+      error: 'Serviço de IA indisponível. Verifique se a variável GEMINI_API_KEY está configurada no painel da Vercel.',
     });
   }
 

@@ -110,7 +110,7 @@ export default async function handler(req: any, res: any) {
 
   if (!geminiApiKey && !openRouterApiKey) {
     return res.status(500).json({
-      error: 'Serviço de IA indisponível. Verifique se a variável VITE_GEMINI_API_KEY está configurada no painel da Vercel.',
+      error: 'Serviço de IA indisponível. Verifique se a variável GEMINI_API_KEY está configurada no painel da Vercel.',
     });
   }
 
