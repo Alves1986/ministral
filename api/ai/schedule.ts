@@ -15,7 +15,7 @@ const MODELS_FALLBACK = [
   'gemini-2.5-pro',
 ];
 
-async function callGeminiJSON(apiKey: string, model: string, prompt: string): Promise<string> {
+async function callGeminiJSON(apiKey: string, model: string, prompt: string, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<string> {
   const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
   const body = {
     systemInstruction: {
@@ -33,6 +33,7 @@ async function callGeminiJSON(apiKey: string, model: string, prompt: string): Pr
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -51,14 +52,18 @@ async function callGeminiJSON(apiKey: string, model: string, prompt: string): Pr
 }
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1/chat/completions';
+// Catalogo NVIDIA NIM validado em 2026-11-18. Modelos com fim de vida
+// respondem HTTP 410 (Gone) e queimam o orcamento da funcao em fallback.
 const NVIDIA_MODELS = [
-  'meta/llama-3.3-70b-instruct',
-  'meta/llama-3.1-8b-instruct',
-  'nvidia/llama-3.1-nemoguard-8b',
-  'mistralai/mistral-7b-instruct-v0.3'
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+  'mistralai/mistral-large-4-1t-a52b'
 ];
 
-async function callNvidiaJSON(apiKey: string, model: string, prompt: string): Promise<string> {
+const REQUEST_TIMEOUT_MS = 18000;
+const TOTAL_BUDGET_MS = 26000;
+
+async function callNvidiaJSON(apiKey: string, model: string, prompt: string, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<string> {
   const response = await fetch(NVIDIA_BASE, {
     method: 'POST',
     headers: {
@@ -75,6 +80,7 @@ async function callNvidiaJSON(apiKey: string, model: string, prompt: string): Pr
       max_tokens: 8192,
       response_format: { type: 'json_object' }
     }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -191,27 +197,37 @@ export default async function handler(req: any, res: any) {
         ? [model, ...NVIDIA_MODELS.filter((m) => m !== model)]
         : NVIDIA_MODELS;
 
+    // Teto da funcao e 30s (vercel.json); para antes para nao virar 504.
+    const startedAt = Date.now();
+    const remainingMs = () => Math.max(0, TOTAL_BUDGET_MS - (Date.now() - startedAt));
+    const timeoutFor = () => Math.min(REQUEST_TIMEOUT_MS, remainingMs());
+    const fatalStatus = (status?: number) => status === 404 || status === 410;
+
     let lastErr: Error | null = null;
     let raw = '';
 
     for (const m of geminiOrder) {
+      if (remainingMs() < 4000) break;
       try {
-        raw = await callGeminiJSON(geminiApiKey, m, prompt);
+        raw = await callGeminiJSON(geminiApiKey, m, prompt, timeoutFor());
         break;
       } catch (err: any) {
         lastErr = err;
         console.warn(`[api/ai/schedule] Modelo ${m} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
+        if (fatalStatus(err?.status)) break;
       }
     }
 
     if (!raw && nvidiaApiKey) {
       for (const m of nvidiaOrder) {
+        if (remainingMs() < 4000) break;
         try {
-          raw = await callNvidiaJSON(nvidiaApiKey, m, prompt);
+          raw = await callNvidiaJSON(nvidiaApiKey, m, prompt, timeoutFor());
           break;
         } catch (err: any) {
           lastErr = err;
           console.warn(`[api/ai/schedule] Modelo NVIDIA ${m} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
+          if (fatalStatus(err?.status)) break;
         }
       }
     }

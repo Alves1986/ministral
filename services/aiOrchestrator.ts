@@ -73,25 +73,20 @@ export const DEFAULT_MODEL = AI_MODELS[0].id;
 export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS[0].id;
 export const NVIDIA_MODELS = [
   {
-    id: 'meta/llama-3.3-70b-instruct',
-    name: 'Llama 3.3 70B (NVIDIA)',
-    description: 'Raciocínio forte para análises e escalas mais complexas.'
+    id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+    name: 'Nemotron 3.5 Lightning 30B (NVIDIA)',
+    description: 'Rápido e estável para análises e reescritas do dia a dia.',
   },
   {
-    id: 'meta/llama-3.1-8b-instruct',
-    name: 'Llama 3.1 8B (NVIDIA)',
-    description: 'Rápido e econômico para o dia a dia do ministério.'
+    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    name: 'Nemotron 3 Nano Omni 30B (NVIDIA)',
+    description: 'Raciocínio com bom custo-benefício para sugestões de escala.',
   },
   {
-    id: 'nvidia/llama-3.1-nemoguard-8b',
-    name: 'Nemoguard 8B (NVIDIA)',
-    description: 'Modelo com guardrails de segurança da NVIDIA.'
+    id: 'mistralai/mistral-large-4-1t-a52b',
+    name: 'Mistral Large 4 1T (NVIDIA)',
+    description: 'Contexto longo para análises profundas do ministério.',
   },
-  {
-    id: 'mistralai/mistral-7b-instruct-v0.3',
-    name: 'Mistral 7B (NVIDIA)',
-    description: 'Compacto e direto para respostas objetivas.'
-  }
 ];
 
 export const DEFAULT_NVIDIA_MODEL = NVIDIA_MODELS[0].id;
