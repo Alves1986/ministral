@@ -163,7 +163,7 @@ export const fetchMinistrySettings = async (
   const { data: settings } = await sb
     .from("ministry_settings")
     .select(
-      "*, spotify_client_id, spotify_client_secret, youtube_api_key, qr_code_url, social_link_url, practical_guidelines",
+      "*, youtube_api_key, qr_code_url, social_link_url, practical_guidelines",
     )
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
@@ -194,8 +194,6 @@ export const fetchMinistrySettings = async (
     reminderHour: ministryDef?.reminder_hour ?? 8,
     notificationSettings: ministryDef?.notification_settings || undefined,
     organizationId: orgId,
-    spotifyClientId: settings?.spotify_client_id,
-    spotifyClientSecret: settings?.spotify_client_secret,
     youtubeApiKey: settings?.youtube_api_key,
     practicalGuidelines: settings?.practical_guidelines,
     qrCodeUrl: settings?.qr_code_url,
@@ -621,8 +619,6 @@ export const saveMinistrySettings = async (
   roles?: string[],
   start?: string,
   end?: string,
-  spotifyClientId?: string,
-  spotifyClientSecret?: string,
   youtubeApiKey?: string,
   qrCodeUrl?: string,
   socialLinkUrl?: string,
@@ -639,10 +635,6 @@ export const saveMinistrySettings = async (
     updates.display_name = cleanDisplayName;
   }
   if (roles !== undefined) updates.roles = roles;
-  if (spotifyClientId !== undefined)
-    updates.spotify_client_id = spotifyClientId;
-  if (spotifyClientSecret !== undefined)
-    updates.spotify_client_secret = spotifyClientSecret;
   if (youtubeApiKey !== undefined) updates.youtube_api_key = youtubeApiKey;
   if (qrCodeUrl !== undefined) updates.qr_code_url = qrCodeUrl;
   if (socialLinkUrl !== undefined) updates.social_link_url = socialLinkUrl;

@@ -25,7 +25,7 @@ const PLANS = {
       { label: 'Regras de Escala (conflitos)', included: true },
       { label: 'Gerenciamento de Repertório', included: true },
       { label: 'Notificações Push', included: true },
-      { label: 'Integrações Spotify e YouTube', included: true },
+      { label: 'Integração YouTube', included: true },
       { label: 'IA básica — 25 usos por semana', included: true },
       { label: 'Suporte prioritário', included: false },
     ]
@@ -44,7 +44,7 @@ const PLANS = {
       { label: 'Regras de Escala (conflitos)', included: true },
       { label: 'Gerenciamento de Repertório', included: true },
       { label: 'Notificações Push', included: true },
-      { label: 'Integrações Spotify e YouTube', included: true },
+      { label: 'Integração YouTube', included: true },
       { label: 'Suporte prioritário via WhatsApp', included: true },
     ]
   },

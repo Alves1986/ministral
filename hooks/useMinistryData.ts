@@ -222,8 +222,6 @@ export function useMinistryData(
 
   const integrations = useMemo(
     () => ({
-      spotifyClientId: settingsQuery.data?.spotifyClientId,
-      spotifyClientSecret: settingsQuery.data?.spotifyClientSecret,
       youtubeApiKey: settingsQuery.data?.youtubeApiKey,
       practicalGuidelines: settingsQuery.data?.practicalGuidelines,
       qrCodeUrl: settingsQuery.data?.qrCodeUrl,

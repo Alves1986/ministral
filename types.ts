@@ -135,8 +135,6 @@ export interface MinistrySettings {
   availabilityStart?: string;
   availabilityEnd?: string;
   reminderHour?: number;
-  spotifyClientId?: string;
-  spotifyClientSecret?: string;
   youtubeApiKey?: string;
   practicalGuidelines?: string;
   organizationId?: string;

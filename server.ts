@@ -4,7 +4,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { generateScheduleWithAI } from "./services/aiOrchestrator.ts";
 import { generateAISchedule } from "./services/aiScheduleService.ts";
-import { polishAnnouncementAI } from "./services/aiService.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,99 +104,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error fetching weather:", error);
       res.status(500).json({ error: "Failed to fetch weather" });
-    }
-  });
-
-  app.post("/api/ai/polish", async (req, res) => {
-    try {
-      const { text, tone, model } = req.body;
-      const result = await polishAnnouncementAI(text, tone, model);
-      res.json({ text: result });
-    } catch (error: any) {
-      console.error("Error polishing text:", error);
-      res.status(500).json({ error: "Failed to polish text" });
-    }
-  });
-
-  app.post("/api/ai/run", async (req, res) => {
-    try {
-      const { runAI } = await import("./services/aiOrchestrator.ts");
-      const { taskType, context, payload, preferredModel } = req.body;
-      const result = await runAI(taskType, context, payload, preferredModel);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/ai/run:", error?.message || error);
-      res.status(500).json({ error: error?.message || "Failed to run AI task" });
-    }
-  });
-
-  app.post("/api/cifraclub/search", async (req, res) => {
-    try {
-      const { searchCifraClub } = await import("./services/cifraClubService.ts");
-      const { query } = req.body;
-      const result = await searchCifraClub(query);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/cifraclub/search:", error);
-      res.status(500).json({ error: "Failed to search Cifra Club" });
-    }
-  });
-
-  app.post("/api/cifraclub/lyrics", async (req, res) => {
-    try {
-      const { getVagalumeLyrics } = await import("./services/cifraClubService.ts");
-      const { artist, song } = req.body;
-      const result = await getVagalumeLyrics(artist, song);
-      res.json({ lyrics: result });
-    } catch (error: any) {
-      console.error("Error in /api/cifraclub/lyrics:", error);
-      res.status(500).json({ error: "Failed to fetch Vagalume lyrics" });
-    }
-  });
-
-  app.post("/api/youtube/search", async (req, res) => {
-    try {
-      const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
-      const { query } = req.body;
-      const result = await searchYouTubeVideos(query);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/youtube/search:", error);
-      res.status(500).json({ error: "Failed to search YouTube" });
-    }
-  });
-
-  app.get("/api/spotify/config", (req, res) => {
-    res.json({
-      clientId: process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || ""
-    });
-  });
-
-  app.post("/api/spotify/token", async (req, res) => {
-    try {
-      // Segurança: NUNCA aceitar credenciais do body do cliente.
-      // O secret deve vir apenas das variáveis de ambiente do servidor.
-      const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID;
-      const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET;
-
-      if (!clientId || !clientSecret) {
-        return res.status(500).json({ error: "Spotify credentials not configured on server" });
-      }
-
-      const response = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
-        },
-        body: 'grant_type=client_credentials'
-      });
-
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      console.error("Error fetching Spotify token:", error);
-      res.status(500).json({ error: "Failed to fetch Spotify token" });
     }
   });
 
