@@ -71,6 +71,30 @@ export const OPENROUTER_MODELS = [
 
 export const DEFAULT_MODEL = AI_MODELS[0].id;
 export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS[0].id;
+export const NVIDIA_MODELS = [
+  {
+    id: 'meta/llama-3.3-70b-instruct',
+    name: 'Llama 3.3 70B (NVIDIA)',
+    description: 'Raciocínio forte para análises e escalas mais complexas.'
+  },
+  {
+    id: 'meta/llama-3.1-8b-instruct',
+    name: 'Llama 3.1 8B (NVIDIA)',
+    description: 'Rápido e econômico para o dia a dia do ministério.'
+  },
+  {
+    id: 'nvidia/llama-3.1-nemoguard-8b',
+    name: 'Nemoguard 8B (NVIDIA)',
+    description: 'Modelo com guardrails de segurança da NVIDIA.'
+  },
+  {
+    id: 'mistralai/mistral-7b-instruct-v0.3',
+    name: 'Mistral 7B (NVIDIA)',
+    description: 'Compacto e direto para respostas objetivas.'
+  }
+];
+
+export const DEFAULT_NVIDIA_MODEL = NVIDIA_MODELS[0].id;
 
 function getOpenRouterApiKey(): string {
   if (typeof process !== 'undefined' && process.env) {
@@ -319,9 +343,69 @@ async function callOpenRouterAI(prompt: string, taskType: AI_TASKS, modelId: str
   return content;
 }
 
+function getNvidiaApiKey(): string {
+  if (typeof window !== 'undefined') return '';
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.NVIDIA_API_KEY || '';
+  }
+  return '';
+}
+
+async function callNvidiaAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
+  const apiKey = getNvidiaApiKey();
+  if (!apiKey) throw new Error('NVIDIA_API_KEY não configurada.');
+
+  const systemInstruction = 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.';
+
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    let errMessage = response.statusText;
+    try {
+      const errorData = await response.json();
+      errMessage = errorData?.error?.message || JSON.stringify(errorData);
+    } catch (e) {}
+    const err = new Error(`NVIDIA API Error: ${errMessage}`);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content || '';
+  if (!content) throw new Error('NVIDIA retornou resposta vazia.');
+  return content;
+}
+
+type AIProvider = 'gemini' | 'openrouter' | 'nvidia';
+
+function providerForModel(modelId: string): AIProvider | null {
+  if (OPENROUTER_MODELS.some(m => m.id === modelId)) return 'openrouter';
+  if (NVIDIA_MODELS.some(m => m.id === modelId)) return 'nvidia';
+  if (AI_MODELS.some(m => m.id === modelId)) return 'gemini';
+  return null;
+}
+
 async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredModel?: string): Promise<string> {
-  const isPreferredOpenRouter = preferredModel && OPENROUTER_MODELS.some(m => m.id === preferredModel);
-  const knownModelIds = isPreferredOpenRouter ? OPENROUTER_MODELS.map(m => m.id) : AI_MODELS.map(m => m.id);
+  const preferredProvider = preferredModel ? providerForModel(preferredModel) : null;
+
+  const knownModelIds =
+    preferredProvider === 'openrouter' ? OPENROUTER_MODELS.map(m => m.id) :
+    preferredProvider === 'nvidia' ? NVIDIA_MODELS.map(m => m.id) :
+    AI_MODELS.map(m => m.id);
+
   const validPreferred = preferredModel && knownModelIds.includes(preferredModel) ? preferredModel : undefined;
 
   const order = validPreferred
@@ -331,12 +415,14 @@ async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredMod
   let lastErr: Error = new Error('Todos os modelos falharam.');
   for (const model of order) {
     try {
-      const isOpenRouter = OPENROUTER_MODELS.some(m => m.id === model);
-      if (isOpenRouter) {
+      const provider = providerForModel(model);
+      if (provider === 'openrouter') {
         return await callOpenRouterAI(prompt, taskType, model);
-      } else {
-        return await callAI(prompt, taskType, model);
       }
+      if (provider === 'nvidia') {
+        return await callNvidiaAI(prompt, taskType, model);
+      }
+      return await callAI(prompt, taskType, model);
     } catch (err: any) {
       const errMsg: string = err.message || '';
       console.warn(`[runAI] Modelo ${model} falhou: ${errMsg}`);
