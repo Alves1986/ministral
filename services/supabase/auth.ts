@@ -470,6 +470,9 @@ export const registerWithInvite = async (token: string, userData: any) => {
   const sb = getSupabase();
   if (!sb) return { success: false };
 
+  const acceptedAt = userData.termsAcceptedAt || new Date().toISOString();
+  const termsVersion = userData.termsVersion || "2026.11";
+
   try {
     const { data, error } = await sb.functions.invoke("accept-invite", {
       body: {
@@ -480,6 +483,11 @@ export const registerWithInvite = async (token: string, userData: any) => {
         whatsapp: userData.whatsapp,
         birthDate: userData.birthDate,
         functions: userData.roles || userData.ministry_functions || [],
+        termsAcceptedAt: acceptedAt,
+        termsVersion,
+        marketingOptIn: !!userData.marketingOptIn,
+        guardianName: userData.guardianName || undefined,
+        guardianEmail: userData.guardianEmail || undefined,
       },
     });
 
@@ -503,6 +511,21 @@ export const registerWithInvite = async (token: string, userData: any) => {
 
     if (signInError) {
       console.warn("Login automático falhou após cadastro:", signInError);
+    } else {
+      try {
+        const { data: uData } = await sb.auth.getUser();
+        await sb.from("consent_logs").insert({
+          user_id: uData?.user?.id,
+          email: userData.email,
+          terms_version: termsVersion,
+          terms_accepted_at: acceptedAt,
+          privacy_accepted_at: acceptedAt,
+          marketing_opt_in: !!userData.marketingOptIn,
+          guardian_name: userData.guardianName || null,
+          guardian_email: userData.guardianEmail || null,
+          user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        });
+      } catch {}
     }
 
     return { success: true };
@@ -520,19 +543,47 @@ export const registerNewOrganization = async (data: {
   churchName: string;
   slug: string;
   ministryName: string;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
+  marketingOptIn?: boolean;
 }) => {
   const sb = getSupabase();
   if (!sb)
     return { success: false, message: "Erro: Supabase não inicializado." };
 
+  const acceptedAt = data.termsAcceptedAt || new Date().toISOString();
+  const termsVersion = data.termsVersion || "2026.11";
+
   const { data: authData, error: authError } = await (sb.auth as any).signUp({
     email: data.email,
     password: data.password,
+    options: {
+      data: {
+        terms_accepted_at: acceptedAt,
+        terms_version: termsVersion,
+        privacy_accepted_at: acceptedAt,
+        marketing_opt_in: !!data.marketingOptIn,
+        ai_training_opt_out: true,
+      },
+    },
   });
 
   if (authError) return { success: false, message: authError.message };
   const userId = authData.user?.id;
   if (!userId) return { success: false, message: "Erro ao criar usuário" };
+
+  try {
+    await sb.from("consent_logs").insert({
+      user_id: userId,
+      email: data.email,
+      terms_version: termsVersion,
+      terms_accepted_at: acceptedAt,
+      privacy_accepted_at: acceptedAt,
+      marketing_opt_in: !!data.marketingOptIn,
+      ai_training_opt_out: true,
+      user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    });
+  } catch {}
 
   const { error: rpcError } = await sb.rpc("setup_new_tenant", {
     p_user_id: userId,

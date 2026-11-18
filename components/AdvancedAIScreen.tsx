@@ -665,6 +665,10 @@ export const AdvancedAIScreen: React.FC<Props> = ({
               Utilize nossa inteligência artificial orquestrada para gerir seu ministério.
               Análise de saúde, geração de escalas e comunicação automatizada.
             </p>
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/15 border border-white/25 text-[11px] font-semibold text-white">
+              <Sparkles size={13} className="text-amber-300 shrink-0" />
+              <span>Aviso de IA: Análises e sugestões abaixo são geradas por Inteligência Artificial e devem ser revisadas pela liderança. Seus dados não são usados para treinamento de modelos.</span>
+            </div>
 
             {quotaStatus && (
               <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-white/15">

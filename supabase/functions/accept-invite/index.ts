@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
+﻿import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const ALLOWED_ORIGIN = Deno.env.get('APP_ORIGIN') || '*';
@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { token, email, password, name, whatsapp, birthDate, functions = [] } = await req.json()
+    const { token, email, password, name, whatsapp, birthDate, functions = [], termsAcceptedAt, termsVersion, marketingOptIn, guardianName, guardianEmail } = await req.json()
 
     if (!token || !email || !password || !name) {
       return new Response(
@@ -22,6 +22,9 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
+
+    const acceptedAtIso = termsAcceptedAt || new Date().toISOString();
+    const versionStr = termsVersion || '2026.11';
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -61,6 +64,13 @@ serve(async (req) => {
         full_name: name,
         ministry_id: invite.ministry_id,
         organization_id: invite.organization_id,
+        terms_accepted_at: acceptedAtIso,
+        terms_version: versionStr,
+        privacy_accepted_at: acceptedAtIso,
+        marketing_opt_in: !!marketingOptIn,
+        ai_training_opt_out: true,
+        guardian_name: guardianName || null,
+        guardian_email: guardianEmail || null,
       }
     })
 

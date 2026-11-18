@@ -1,90 +1,147 @@
-
-import React, { useRef, useEffect } from 'react';
-import { X, Shield, FileText, ArrowLeft, Mail } from 'lucide-react';
+﻿import React, { useRef, useEffect } from 'react';
+import { X, Shield, FileText, Building2, Mail, MapPin } from 'lucide-react';
 
 export type LegalDocType = 'terms' | 'privacy' | null;
 
+export const LEGAL_TERMS_VERSION = '2026.11';
+
+const getEnv = (key: string, fallback: string): string => {
+  try {
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv && metaEnv[key]) return String(metaEnv[key]);
+  } catch {}
+  return fallback;
+};
+
+export const LEGAL_COMPANY_INFO = {
+  name: getEnv('VITE_COMPANY_NAME', 'Ministral Gestão Ministerial (Configurar VITE_COMPANY_NAME)'),
+  cnpj: getEnv('VITE_COMPANY_CNPJ', 'Configurar em VITE_COMPANY_CNPJ'),
+  address: getEnv('VITE_COMPANY_ADDRESS', 'Configurar endereço físico em VITE_COMPANY_ADDRESS'),
+  dpoEmail: getEnv('VITE_DPO_EMAIL', 'contato.ministral@gmail.com'),
+  supportEmail: getEnv('VITE_SUPPORT_EMAIL', 'contato.ministral@gmail.com'),
+};
+
 // --- CONTEÚDO PURO (Reutilizável) ---
-const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
+export const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
   if (type === 'terms') {
-      return (
-        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
-          <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
-          
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Aceitação dos Termos</h3>
-          <p>Ao acessar e utilizar o sistema <strong>Ministral</strong>, você concorda em cumprir e ficar vinculado aos seguintes termos e condições de uso. Se você não concordar com estes termos, não deverá utilizar o serviço.</p>
+    return (
+      <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
+        <p>
+          <strong>Versão: {LEGAL_TERMS_VERSION} — Última atualização: 18/11/2026</strong>
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Descrição do Serviço</h3>
-          <p>O Ministral é uma ferramenta de gestão de escalas, disponibilidade e comunicação para equipes voluntárias e ministeriais. O serviço é fornecido "como está", sem garantias de que será ininterrupto ou livre de erros.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Aceitação dos Termos e Capacidade</h3>
+        <p>
+          Ao criar uma conta ou utilizar o sistema <strong>Ministral</strong>, você declara ter lido, compreendido e aceitado integralmente estes Termos de Uso e a Política de Privacidade. O cadastro de nova organização exige idade mínima de <strong>18 (dezoito) anos</strong>. Para membros voluntários menores de 12 (doze) anos em ministérios infantis ou de jovens, o tratamento de dados exige o consentimento específico e em destaque de pelo menos um dos pais ou responsável legal (LGPD, art. 14, § 1º).
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Responsabilidades do Usuário</h3>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Você é responsável por manter a confidencialidade de sua senha e conta.</li>
-            <li>Você concorda em fornecer informações verdadeiras e precisas sobre sua disponibilidade.</li>
-            <li>É proibido usar o sistema para fins ilegais ou não autorizados pela liderança da equipe.</li>
-          </ul>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Descrição do Serviço</h3>
+        <p>
+          O Ministral é uma plataforma SaaS de gestão de escalas, disponibilidade, repertório e comunicação para equipes voluntárias e ministeriais. Buscamos manter alta disponibilidade contínua, mas o serviço pode passar por manutenções programadas ou eventos externos de infraestrutura de terceiros, sem promessa de SLA de 100% livre de falhas.
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Propriedade Intelectual</h3>
-          <p>Todo o código-fonte, design, logotipos e funcionalidades do sistema são propriedade exclusiva dos desenvolvedores ou licenciados para a organização. O uso não autorizado de qualquer material é estritamente proibido.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Planos, Renovação Automática, Cancelamento e Reembolso (CDC art. 49)</h3>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Preço Total e Transparência (CDC art. 31):</strong> Os valores exibidos na tela de planos (Pro: R$ 99,00/mês; Enterprise: R$ 149,00/mês) representam o preço final mensal, sem taxas ocultas adicionais.</li>
+          <li><strong>Renovação Automática:</strong> As assinaturas mensais são renovadas automaticamente a cada ciclo de 30 dias pelo gateway oficial (Asaas ou Stripe), salvo cancelamento prévio pelo administrador da organização.</li>
+          <li><strong>Cancelamento Fácil no App:</strong> O administrador pode cancelar a assinatura a qualquer momento diretamente em <em>Planos e Assinatura → Gerenciar / Cancelar Assinatura</em> ou solicitando pelo suporte, sem multa ou fidelidade, mantendo o acesso até o fim do período já pago.</li>
+          <li><strong>Direito de Arrependimento em 7 Dias (CDC art. 49):</strong> Em qualquer contratação ou primeiro pagamento online, o contratante tem o direito de desistir da assinatura no prazo de até <strong>7 (sete) dias corridos</strong> a contar da contratação, com reembolso integral (100%) e imediato dos valores pagos.</li>
+        </ul>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Encerramento</h3>
-          <p>A administração reserva-se o direito de suspender ou encerrar sua conta a qualquer momento, por qualquer motivo, incluindo, sem limitação, a violação destes Termos de Uso.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Uso de Inteligência Artificial</h3>
+        <p>
+          O sistema oferece recursos opcionais de Inteligência Artificial (sugestão de escalas, análise de conflitos e revisão de comunicados). Todo conteúdo sugerido por IA é devidamente identificado na interface e deve ser revisado por um líder humano antes de sua aplicação oficial.
+        </p>
+
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Conteúdo Gerado por Usuários (UGC), Denúncias e Direitos Autorais</h3>
+        <p>
+          É proibido publicar no Mural de Avisos ou no Chat do Evento conteúdos ilícitos, ofensivos ou que violem direitos autorais de terceiros. Qualquer membro pode reportar conteúdo inadequado ou violação de direitos autorais diretamente pelo botão <strong>Denunciar</strong> presente nos avisos e no chat, ou pelo canal <span className="font-semibold">{LEGAL_COMPANY_INFO.dpoEmail}</span>.
+        </p>
+
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">6. Identificação Empresarial (Decreto nº 7.962/2013, art. 2º)</h3>
+        <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl space-y-1 text-xs">
+          <p className="flex items-center gap-2"><Building2 size={14} className="text-ministral-500 shrink-0" /> <strong>Razão Social / Responsável:</strong> {LEGAL_COMPANY_INFO.name}</p>
+          <p className="flex items-center gap-2"><FileText size={14} className="text-ministral-500 shrink-0" /> <strong>CNPJ:</strong> {LEGAL_COMPANY_INFO.cnpj}</p>
+          <p className="flex items-center gap-2"><MapPin size={14} className="text-ministral-500 shrink-0" /> <strong>Endereço:</strong> {LEGAL_COMPANY_INFO.address}</p>
+          <p className="flex items-center gap-2"><Mail size={14} className="text-ministral-500 shrink-0" /> <strong>Atendimento e Suporte:</strong> {LEGAL_COMPANY_INFO.supportEmail}</p>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    if (type === 'privacy') {
-      return (
-        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
-          <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
+  if (type === 'privacy') {
+    return (
+      <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
+        <p>
+          <strong>Versão: {LEGAL_TERMS_VERSION} — Última atualização: 18/11/2026</strong>
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Coleta de Informações</h3>
-          <p>Para o funcionamento adequado das escalas, coletamos as seguintes informações pessoais:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Nome completo (para identificação na escala).</li>
-            <li>E-mail (para login e recuperação de senha).</li>
-            <li>Telefone/WhatsApp (para comunicação urgente e notificações).</li>
-            <li>Foto de perfil (opcional, para identificação visual).</li>
-            <li>Dados de disponibilidade (datas em que você pode ou não servir).</li>
-          </ul>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Dados Coletados e Minimização (LGPD art. 6º, III)</h3>
+        <p>Coletamos estritamente os dados necessários para a execução das escalas ministeriais:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Nome completo e E-mail:</strong> Identificação na escala, autenticação e alertas essenciais.</li>
+          <li><strong>Telefone / WhatsApp:</strong> Comunicação operacional sobre escalas e lembretes de culto.</li>
+          <li><strong>Data de Nascimento:</strong> Verificação de faixa etária (consentimento parental quando menor de 12 anos) e mural de aniversariantes da equipe.</li>
+          <li><strong>Foto de perfil (opcional), funções ministeriais e datas de disponibilidade:</strong> Gestão das escalas.</li>
+          <li><strong>Registros de consentimento:</strong> Data, hora UTC e versão dos termos aceitos (LGPD art. 8º, § 2º).</li>
+        </ul>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Uso das Informações</h3>
-          <p>Seus dados são utilizados exclusivamente para:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Organização e geração de escalas de voluntários.</li>
-            <li>Envio de notificações sobre eventos, trocas e avisos.</li>
-            <li>Gestão administrativa da equipe.</li>
-          </ul>
-          <p>Nós <strong>não</strong> vendemos, trocamos ou transferimos suas informações pessoais para terceiros externos para fins de marketing.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Finalidade, Marketing e Treinamento de IA</h3>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>Seus dados pessoais são utilizados para geração e gestão de escalas, avisos internos da equipe e controle de acesso.</li>
+          <li><strong>Comunicações de Marketing (LGPD art. 8º, § 4º):</strong> Só enviamos novidades institucionais caso você tenha marcado o consentimento específico (opt-in separado), podendo cancelar a inscrição a qualquer momento em 1 clique.</li>
+          <li><strong>Não Treinamento de IA e Opt-Out:</strong> Não vendemos seus dados e não utilizamos dados pessoais dos membros para treinamento de modelos públicos de Inteligência Artificial. O titular pode desativar o processamento de seus dados por recursos de IA a qualquer momento em <em>Meu Perfil → Privacidade e Proteção de Dados (LGPD)</em>.</li>
+        </ul>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Segurança dos Dados</h3>
-          <p>Implementamos medidas de segurança para manter suas informações pessoais protegidas. Os dados são armazenados em bancos de dados seguros (Supabase) com autenticação criptografada.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Operadores e Suboperadores de Dados (Terceiros)</h3>
+        <p>Para operar o serviço com segurança, compartilhamos apenas os dados estritamente necessários com os seguintes operadores de infraestrutura:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Supabase Inc.:</strong> Banco de dados PostgreSQL com Row Level Security (RLS), autenticação criptografada e armazenamento de arquivos.</li>
+          <li><strong>Vercel Inc.:</strong> Hospedagem da aplicação web e execução de rotas serverless.</li>
+          <li><strong>Asaas Gestão Financeira S.A. e Stripe:</strong> Processamento seguro de pagamentos e assinaturas das organizações contratantes.</li>
+          <li><strong>Google LLC (Google OAuth, Google Calendar, YouTube API e Google Gemini) e OpenRouter:</strong> Login social opcional, exportação de agenda, busca de vídeos para repertório e processamento sob demanda de sugestões de escala (sem retenção para treino).</li>
+        </ul>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Dados do Google (Limited Use Policy)</h3>
-          <p>O uso de informações recebidas das APIs do Google por este aplicativo adere à <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-ministral-500 hover:underline">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de uso limitado.</p>
-          <p>Ao utilizar o login com Google:</p>
-          <ul className="list-disc pl-5 space-y-1">
-             <li>Acessamos apenas seu nome, e-mail e foto de perfil para criar sua conta no sistema.</li>
-             <li>Não compartilhamos seus dados do Google com ferramentas de IA de terceiros para fins de treinamento.</li>
-             <li>Não armazenamos dados além do necessário para a identificação do usuário na escala.</li>
-          </ul>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Dados do Google (Google API Services User Data Policy)</h3>
+        <p>
+          O uso de informações recebidas das APIs do Google por este aplicativo adere à{' '}
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-ministral-500 hover:underline">
+            Política de Dados do Usuário dos Serviços de API do Google
+          </a>
+          , incluindo os requisitos de Uso Limitado (Limited Use). Não transferimos nem utilizamos dados do Google Workspace/Calendar para publicidade ou treinamento de modelos de IA.
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Seus Direitos</h3>
-          <p>Você tem o direito de acessar, corrigir ou solicitar a exclusão de seus dados pessoais a qualquer momento. Para excluir sua conta, entre em contato com o administrador do sistema ou utilize a opção de exclusão nas configurações (se disponível).</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Prazos de Retenção e Expurgo de Dados (LGPD arts. 15 e 16)</h3>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Dados de perfil e disponibilidade:</strong> Mantidos enquanto o membro fizer parte da organização ou até a exclusão imediata pelo titular.</li>
+          <li><strong>Mensagens e áudios de chat de eventos:</strong> Retidos por até 180 dias após o evento para coordenação da equipe.</li>
+          <li><strong>Logs de acesso e segurança:</strong> Retidos por no mínimo 6 meses (Marco Civil da Internet, art. 15).</li>
+          <li><strong>Registros fiscais, pagamentos e prova de consentimento:</strong> Retidos por 5 anos para cumprimento de obrigação legal e exercício regular de direitos (LGPD art. 16, I).</li>
+        </ul>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">6. Alterações nesta Política</h3>
-          <p>Podemos atualizar nossa Política de Privacidade periodicamente. Recomendamos que você revise esta página regularmente para quaisquer alterações.</p>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">6. Direitos do Titular: Portabilidade e Exclusão (LGPD art. 18)</h3>
+        <p>
+          Você pode, a qualquer momento e sem custo, acessar, corrigir, <strong>baixar todos os seus dados pessoais (formato JSON ou CSV)</strong>, revogar consentimentos e <strong>excluir permanentemente sua conta</strong> diretamente em <em>Meu Perfil → Privacidade e Proteção de Dados (LGPD)</em>.
+        </p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">7. Contato</h3>
-          <p>Se você tiver dúvidas sobre esta Política de Privacidade, entre em contato conosco:</p>
-          <div className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg w-fit">
-             <Mail size={16} className="text-zinc-500"/>
-             <span className="font-medium text-zinc-700 dark:text-zinc-300">contato@ministerio.com</span>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">7. Cookies e Armazenamento Local (Guia ANPD)</h3>
+        <p>
+          Utilizamos armazenamento local estritamente necessário para manter sua sessão autenticada e tema visual. Qualquer armazenamento analítico ou não essencial permanece bloqueado por padrão até que você escolha aceitar no banner de privacidade, com opção de mesmo destaque para <strong>Recusar não essenciais</strong>.
+        </p>
+
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">8. Encarregado pelo Tratamento de Dados (DPO — LGPD art. 41, § 1º)</h3>
+        <p>Para exercer seus direitos ou tirar dúvidas sobre proteção de dados pessoais, contate nosso Encarregado (DPO):</p>
+        <div className="flex flex-col gap-1 mt-2 p-3.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-fit text-xs">
+          <div className="flex items-center gap-2">
+            <Mail size={16} className="text-ministral-500" />
+            <span className="font-bold text-zinc-800 dark:text-zinc-200">Encarregado de Dados (DPO): {LEGAL_COMPANY_INFO.dpoEmail}</span>
           </div>
+          <span className="text-zinc-500 dark:text-zinc-400">Controladora: {LEGAL_COMPANY_INFO.name} — CNPJ: {LEGAL_COMPANY_INFO.cnpj}</span>
         </div>
-      );
-    }
-    return null;
+      </div>
+    );
+  }
+  return null;
 };
 
 // --- MODAL (Uso interno no App) ---
@@ -131,7 +188,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
 
   if (!isOpen || !type) return null;
 
-  const modalTitle = type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade';
+  const modalTitle = type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade e LGPD';
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" role="presentation">

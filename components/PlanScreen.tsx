@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Crown, CheckCircle2, XCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Crown, CheckCircle2, XCircle, Loader2, ExternalLink, ShieldCheck, Info } from 'lucide-react';
 import { Organization } from '../types';
 import { getSupabase } from '../services/supabaseService';
 import { useToast } from './Toast';
+import { LegalModal, LegalDocType, LEGAL_COMPANY_INFO } from './LegalDocuments';
 
 interface PlanScreenProps {
   organization: Organization | null;
@@ -30,7 +31,7 @@ const PLANS = {
     ]
   },
   pro: {
-    name: 'Pro', price: 'R$ 99,00', duration: 'por mês',
+    name: 'Pro', price: 'R$ 99,00', duration: 'por mês (preço total final, sem taxas extras)',
     features: [
       { label: 'Até 50 membros por ministério', included: true },
       { label: 'Até 3 ministérios por organização', included: true },
@@ -48,7 +49,7 @@ const PLANS = {
     ]
   },
   enterprise: {
-    name: 'Enterprise', price: 'R$ 149,00', duration: 'por mês',
+    name: 'Enterprise', price: 'R$ 149,00', duration: 'por mês (preço total final, sem taxas extras)',
     features: [
       { label: 'Membros ilimitados', included: true },
       { label: 'Ministérios ilimitados', included: true },
@@ -56,7 +57,7 @@ const PLANS = {
       { label: 'Suporte dedicado via WhatsApp/Call', included: true },
       { label: 'Relatórios avançados e customizados', included: true },
       { label: 'Treinamento para equipe', included: true },
-      { label: 'SLA de disponibilidade', included: true },
+      { label: 'Atendimento prioritário de suporte', included: true },
       { label: 'Backup extra de dados', included: true },
     ]
   }
@@ -67,6 +68,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'waiting' | 'confirmed'>('idle');
   const [loadingCheckout, setLoadingCheckout] = useState(false);
   const [loadingPortal, setLoadingPortal] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -170,6 +172,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
 
   return (
     <div className="max-w-6xl mx-auto pb-20">
+      <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
       {paymentStatus === 'waiting' && (
         <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 rounded-xl flex items-center justify-center gap-3 animate-pulse">
           <Loader2 className="animate-spin text-blue-500" size={20} />
@@ -241,20 +244,25 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
         ) : null}
       </div>
 
-      {/* Seletor de Gateway: Permite testar Asaas mantendo Stripe ativo */}
-      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/60 shadow-sm">
-        <div>
+      {/* Aviso de Transparência CDC (Renovação Automática, Cancelamento Fácil, Arrependimento 7 dias e Preço Total) */}
+      <div className="mb-6 p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700/60 shadow-sm space-y-2">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Pagamento via Asaas</h3>
-            <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-              Gateway oficial
-            </span>
+            <ShieldCheck size={18} className="text-emerald-500 shrink-0" />
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+              Transparência de Assinatura, Renovação e Reembolso (CDC)
+            </h3>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Contrate com PIX, boleto ou cartão. A confirmação e a liberação do plano são feitas pelo webhook seguro do Asaas.
-          </p>
+          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+            Pagamento via Asaas
+          </span>
         </div>
-        <span className="text-2xl" aria-label="Asaas">⚡</span>
+        <ul className="text-xs text-zinc-600 dark:text-zinc-400 space-y-1 list-disc pl-5">
+          <li><strong>Preço Total Final (CDC art. 31):</strong> Os valores abaixo já incluem todos os tributos e tarifas aplicáveis, sem taxas ocultas no checkout (PIX, boleto ou cartão).</li>
+          <li><strong>Renovação Automática e Lembretes:</strong> Planos pagos têm renovação mensal automática a cada 30 dias, com envio de lembrete antes de cada cobrança recorrente pelo gateway oficial.</li>
+          <li><strong>Direito de Arrependimento em 7 Dias (CDC art. 49):</strong> Você pode cancelar e solicitar reembolso integral (100%) em até 7 dias corridos após a contratação.</li>
+          <li><strong>Cancelamento Fácil no App:</strong> Cancele a qualquer momento em 1 clique pelo botão <em>Gerenciar / Cancelar Assinatura</em> abaixo, sem multa ou fidelidade.</li>
+        </ul>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -305,6 +313,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
               <span className="text-4xl font-black text-zinc-800 dark:text-white">{PLANS.pro.price}</span>
               <span className="text-zinc-500 font-medium">/mês</span>
             </div>
+            <p className="text-[11px] text-zinc-500 mt-1">{PLANS.pro.duration} • Renovação mensal automática</p>
           </div>
           
           <div className="flex-1 space-y-3 mb-8">
@@ -333,7 +342,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
                       disabled={loadingPortal}
                       className="w-full py-3 rounded-xl font-bold text-sm bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors flex items-center justify-center gap-2"
                     >
-                      {loadingPortal ? <Loader2 className="animate-spin" size={18} /> : <ExternalLink size={18} />} Gerenciar Assinatura
+                      {loadingPortal ? <Loader2 className="animate-spin" size={18} /> : <ExternalLink size={18} />} Gerenciar / Cancelar Assinatura
                     </button>
                 )}
               </>
@@ -365,6 +374,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
               <span className="text-3xl font-black text-white">{PLANS.enterprise.price}</span>
               <span className="text-zinc-400 font-medium">/mês</span>
             </div>
+            <p className="text-[11px] text-zinc-400 mt-1">{PLANS.enterprise.duration} • Renovação mensal automática</p>
           </div>
           
           <div className="flex-1 space-y-3 mb-8">
@@ -393,7 +403,7 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
                       disabled={loadingPortal}
                       className="w-full py-3 rounded-xl font-bold text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors flex items-center justify-center gap-2"
                     >
-                      {loadingPortal ? <Loader2 className="animate-spin" size={18} /> : <ExternalLink size={18} />} Gerenciar Assinatura
+                      {loadingPortal ? <Loader2 className="animate-spin text-zinc-300" size={18} /> : <ExternalLink size={18} />} Gerenciar / Cancelar Assinatura
                     </button>
                 )}
               </>
@@ -410,8 +420,40 @@ export const PlanScreen: React.FC<PlanScreenProps> = ({ organization, isAdmin, o
         </div>
       </div>
 
-      <div className="mt-12 text-center text-sm text-zinc-500">
-        Dúvidas sobre o plano? <a href="mailto:contato.ministral@gmail.com" className="text-ministral-500 hover:underline">Entre em contato via contato.ministral@gmail.com</a>
+      {/* Seção direta de Cancelamento e Reembolso para qualquer plano ativo */}
+      <div className="mt-8 p-4 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Info size={18} className="text-ministral-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-zinc-600 dark:text-zinc-300">
+            <p className="font-bold text-zinc-800 dark:text-white">Precisa cancelar sua assinatura ou solicitar reembolso nos 7 dias (CDC art. 49)?</p>
+            <p className="mt-0.5">
+              Acesse o portal da assinatura ao lado ou envie um e-mail direto para <a href={`mailto:${LEGAL_COMPANY_INFO.supportEmail}?subject=Cancelamento%20ou%20Reembolso%20CDC`} className="text-ministral-500 font-bold underline">{LEGAL_COMPANY_INFO.supportEmail}</a>.
+            </p>
+          </div>
+        </div>
+        {hasActiveSubscription && (
+          <button
+            type="button"
+            onClick={handleManageSubscription}
+            disabled={loadingPortal}
+            className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white text-xs font-bold shrink-0"
+          >
+            {loadingPortal ? 'Abrindo...' : 'Cancelar / Gerenciar no Portal'}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-8 text-center text-xs text-zinc-500 space-y-2">
+        <p>
+          Dúvidas sobre o plano? <a href={`mailto:${LEGAL_COMPANY_INFO.supportEmail}`} className="text-ministral-500 hover:underline">Entre em contato via {LEGAL_COMPANY_INFO.supportEmail}</a>
+        </p>
+        <p className="text-[11px] text-zinc-400">
+          {LEGAL_COMPANY_INFO.name} • CNPJ: {LEGAL_COMPANY_INFO.cnpj} • {LEGAL_COMPANY_INFO.address}
+        </p>
+        <div className="flex justify-center gap-4 pt-1">
+          <button type="button" onClick={() => setLegalDoc('terms')} className="underline hover:text-zinc-300">Termos de Uso</button>
+          <button type="button" onClick={() => setLegalDoc('privacy')} className="underline hover:text-zinc-300">Política de Privacidade</button>
+        </div>
       </div>
     </div>
   );

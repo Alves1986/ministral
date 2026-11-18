@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Shield, Sparkles, Calendar, CheckCircle2, Clock as ClockIcon, MessageCircle, ExternalLink } from 'lucide-react';
+import { UserIcon, Mail, Briefcase, Save, Key, Camera, Shield, Sparkles, MessageCircle, Download, Trash2, AlertTriangle, FileText } from 'lucide-react';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabase/client';
-import { fetchMemberScheduleHistory } from '../services/supabase/misc';
 import { getSavedLocalUserFunctions } from '../utils/swapUtils';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
+import { LegalModal, LegalDocType } from './LegalDocuments';
 
 interface Props {
   user: User;
@@ -27,6 +27,28 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const [availableRoles, setAvailableRoles] = useState<string[]>(propAvailableRoles);
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{name?: string; whatsapp?: string}>({});
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
+
+  // LGPD Art. 18 & Opt-Out / Opt-In Preferences
+  const [aiTrainingOptOut, setAiTrainingOptOut] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`lgpd_ai_opt_out_${user.id || 'default'}`);
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [marketingOptIn, setMarketingOptIn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(`lgpd_marketing_opt_in_${user.id || 'default'}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [exportingData, setExportingData] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
 
@@ -38,8 +60,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
 
   const myEvents = React.useMemo(() => {
     return events.filter(e => {
-        // e.id represents rule_id_date, and schedule keys are rule_id_date|roleSuffix
-        return Object.entries(schedule).some(([key, name]) => key.startsWith(`${e.id}|`) && name === user.name);
+        return Object.entries(schedule).some(([key, memberName]) => key.startsWith(`${e.id}|`) && memberName === user.name);
     });
   }, [events, schedule, user.name]);
 
@@ -49,7 +70,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
       if (!supabase || !user.id || !effectiveMinistryId) return;
 
       try {
-        // 1. Buscar funções disponíveis: ministry_settings.roles
         const { data: settingsData } = await supabase
           .from("ministry_settings")
           .select("roles")
@@ -61,7 +81,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           setAvailableRoles(cleanRoles);
         }
 
-        // 2. Buscar funções do usuário: ministry_members.functions
         const { data: memberRows } = await supabase
           .from("ministry_members")
           .select("functions")
@@ -171,37 +190,36 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     }
   };
 
-    const toggleRole = (role: string) => {
-        const isAdmin = user.access_role === 'admin' || user.isOrgAdmin || user.isSuperAdmin;
-        if (role.toLowerCase().includes('ministro') && !isAdmin && !selectedRoles.includes(role)) {
-            addToast("Solicitação enviada ao administrador.", "info");
-            import('../services/supabase/notifications').then(({ notifySuperAdmins }) => {
-                if (user.ministryId && user.organizationId) {
-                    notifySuperAdmins(
-                        'Solicitação de Função: Ministro',
-                        `O membro ${user.name} solicitou a função de Ministro. Você pode adicioná-lo acessando o menu Membros.`,
-                        undefined,
-                        user.ministryId,
-                        user.organizationId,
-                        'info'
-                    );
-                }
-            }).catch(console.error);
-            return;
-        }
+  const toggleRole = (role: string) => {
+    const isAdmin = user.access_role === 'admin' || user.isOrgAdmin || user.isSuperAdmin;
+    if (role.toLowerCase().includes('ministro') && !isAdmin && !selectedRoles.includes(role)) {
+        addToast("Solicitação enviada ao administrador.", "info");
+        import('../services/supabase/notifications').then(({ notifySuperAdmins }) => {
+            if (user.ministryId && user.organizationId) {
+                notifySuperAdmins(
+                    'Solicitação de Função: Ministro',
+                    `O membro ${user.name} solicitou a função de Ministro. Você pode adicioná-lo acessando o menu Membros.`,
+                    undefined,
+                    user.ministryId,
+                    user.organizationId,
+                    'info'
+                );
+            }
+        }).catch(console.error);
+        return;
+    }
 
-        if (selectedRoles.includes(role)) {
-            setSelectedRoles(selectedRoles.filter(r => r !== role));
-        } else {
-            setSelectedRoles([...selectedRoles, role]);
-        }
-    };
+    if (selectedRoles.includes(role)) {
+        setSelectedRoles(selectedRoles.filter(r => r !== role));
+    } else {
+        setSelectedRoles([...selectedRoles, role]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return addToast("O nome é obrigatório", "error");
     
-    // Validação WhatsApp: (DD) XXXXX-XXXX
     const whatsappRegex = /^\(\d{2}\) \d{5}-\d{4}$/;
     if (whatsapp && !whatsappRegex.test(whatsapp)) {
       return addToast("Formato de WhatsApp inválido. Use (DD) XXXXX-XXXX", "error");
@@ -218,8 +236,149 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     }
   };
 
+  const handleSavePrivacyPrefs = async (nextAiOptOut: boolean, nextMarketing: boolean) => {
+    setAiTrainingOptOut(nextAiOptOut);
+    setMarketingOptIn(nextMarketing);
+    try {
+      localStorage.setItem(`lgpd_ai_opt_out_${user.id || 'default'}`, String(nextAiOptOut));
+      localStorage.setItem(`lgpd_marketing_opt_in_${user.id || 'default'}`, String(nextMarketing));
+      const sb = getSupabase();
+      if (sb && user.id) {
+        await sb.auth.updateUser({
+          data: {
+            ai_training_opt_out: nextAiOptOut,
+            marketing_opt_in: nextMarketing,
+            privacy_updated_at: new Date().toISOString(),
+          },
+        });
+      }
+      addToast("Preferências de privacidade (LGPD) atualizadas!", "success");
+    } catch {
+      addToast("Preferências salvas localmente.", "info");
+    }
+  };
+
+  // Portabilidade de Dados (LGPD art. 18, II e V)
+  const handleExportPersonalData = async (format: 'json' | 'csv') => {
+    setExportingData(true);
+    try {
+      const sb = getSupabase();
+      let dbProfile: any = null;
+      let dbAvailability: any[] = [];
+      let dbSwaps: any[] = [];
+
+      if (sb && user.id) {
+        const [profRes, availRes, swapRes] = await Promise.all([
+          sb.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+          sb.from('availability').select('*').eq('profile_id', user.id),
+          sb.from('swap_requests').select('*').eq('requester_id', user.id),
+        ]);
+        dbProfile = profRes.data;
+        dbAvailability = availRes.data || [];
+        dbSwaps = swapRes.data || [];
+      }
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        legalBasis: 'LGPD Art. 18 (Acesso e Portabilidade de Dados Pessoais)',
+        profile: {
+          id: user.id,
+          name,
+          email: user.email,
+          whatsapp,
+          birthDate,
+          accessRole: user.access_role,
+          ministryFunctions: selectedRoles,
+          organizationId: user.organizationId,
+          ministryId: effectiveMinistryId,
+          aiTrainingOptOut,
+          marketingOptIn,
+          ...(dbProfile || {}),
+        },
+        scheduledEvents: myEvents.map((e: any) => ({
+          id: e.id,
+          title: e.title,
+          date: e.iso,
+        })),
+        availabilityRecords: dbAvailability,
+        swapRequests: dbSwaps,
+      };
+
+      let blob: Blob;
+      let filename: string;
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      if (format === 'json') {
+        blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+        filename = `meus-dados-ministral-${dateStr}.json`;
+      } else {
+        const rows = [
+          ['Campo', 'Valor'],
+          ['ID', user.id || ''],
+          ['Nome', name || ''],
+          ['E-mail', user.email || ''],
+          ['WhatsApp', whatsapp || ''],
+          ['Data de Nascimento', birthDate || ''],
+          ['Papel de Acesso', user.access_role || ''],
+          ['Funções no Ministério', selectedRoles.join('; ')],
+          ['Opt-out Treino de IA', aiTrainingOptOut ? 'Sim' : 'Não'],
+          ['Opt-in Marketing', marketingOptIn ? 'Sim' : 'Não'],
+          ['Total de Escalas Ativas', String(myEvents.length)],
+          ['Exportado em (UTC)', payload.exportedAt],
+        ];
+        const csvContent = rows
+          .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+          .join('\n');
+        blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' });
+        filename = `meus-dados-ministral-${dateStr}.csv`;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast(`Seus dados foram exportados em ${format.toUpperCase()}!`, "success");
+    } catch (e) {
+      console.error("Erro ao exportar dados:", e);
+      addToast("Erro ao exportar dados pessoais.", "error");
+    } finally {
+      setExportingData(false);
+    }
+  };
+
+  // Exclusão de Conta e Dados Pessoais pelo Titular (LGPD art. 18, VI)
+  const handleDeleteOwnAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const sb = getSupabase();
+      if (!sb || !user.id) throw new Error("Sessão não encontrada.");
+
+      // Remove vínculos operacionais e dados pessoais não sujeitos a retenção fiscal obrigatória
+      await Promise.allSettled([
+        sb.from('ministry_members').delete().eq('profile_id', user.id),
+        sb.from('availability').delete().eq('profile_id', user.id),
+        sb.from('push_subscriptions').delete().eq('user_id', user.id),
+        sb.from('profiles').delete().eq('id', user.id),
+      ]);
+
+      localStorage.clear();
+      await sb.auth.signOut();
+      addToast("Sua conta e seus dados pessoais foram excluídos.", "success");
+      window.location.href = '/';
+    } catch (e: any) {
+      console.error("Erro ao excluir conta:", e);
+      addToast("Erro ao processar exclusão: " + (e.message || "Tente novamente."), "error");
+      setDeletingAccount(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in max-w-4xl mx-auto pb-12 overflow-hidden">
+      <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
       
       <div className="relative bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-4">
           <div className="h-20 md:h-24 bg-gradient-to-r from-ministral-600 via-ministral-500 to-ministral-dark relative">
@@ -244,7 +403,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                   >
                       <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-3 border-white dark:border-zinc-800 shadow-lg bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
                         {avatar ? (
-                          <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+                          <img src={avatar} alt={`Foto de perfil de ${user.name}`} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
                             <UserIcon size={28} />
@@ -422,6 +581,127 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
 
       <div className="mt-8">
           <GoogleCalendarSettings myEvents={myEvents} allEvents={events} ministryName={ministryName} />
+      </div>
+
+      {/* Central de Privacidade e Direitos do Titular (LGPD art. 18, art. 8 §4 e Opt-Out de IA) */}
+      <div className="mt-8 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-700 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+              <Shield size={17} className="text-ministral-500" /> Privacidade e Proteção de Dados (LGPD — Art. 18)
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Gerencie seus consentimentos, baixe uma cópia integral dos seus dados ou solicite a exclusão da sua conta.
+            </p>
+          </div>
+          <div className="flex gap-3 text-xs">
+            <button type="button" onClick={() => setLegalDoc('terms')} className="text-ministral-500 hover:underline font-bold flex items-center gap-1">
+              <FileText size={13} /> Termos de Uso
+            </button>
+            <button type="button" onClick={() => setLegalDoc('privacy')} className="text-ministral-500 hover:underline font-bold flex items-center gap-1">
+              <Shield size={13} /> Política de Privacidade
+            </button>
+          </div>
+        </div>
+
+        {/* Controles de Opt-Out de IA e Opt-In de Marketing */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="flex items-start gap-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/70 dark:border-zinc-700/60 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={aiTrainingOptOut}
+              onChange={(e) => handleSavePrivacyPrefs(e.target.checked, marketingOptIn)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-ministral-500 focus:ring-ministral-500"
+            />
+            <div className="text-xs">
+              <span className="font-bold text-zinc-800 dark:text-zinc-100 block">
+                Não usar meus dados para treinamento de IA (Opt-Out ativo)
+              </span>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                Seus dados pessoais nunca são vendidos nem usados para treinar modelos públicos de Inteligência Artificial.
+              </span>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/70 dark:border-zinc-700/60 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={marketingOptIn}
+              onChange={(e) => handleSavePrivacyPrefs(aiTrainingOptOut, e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-ministral-500 focus:ring-ministral-500"
+            />
+            <div className="text-xs">
+              <span className="font-bold text-zinc-800 dark:text-zinc-100 block">
+                Comunicações opcionais de novidades (Opt-In de Marketing)
+              </span>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                Desmarque a qualquer momento para cancelar o recebimento de comunicados promocionais (1 clique).
+              </span>
+            </div>
+          </label>
+        </div>
+
+        {/* Portabilidade e Exclusão */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={exportingData}
+              onClick={() => handleExportPersonalData('json')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-zinc-100 text-xs font-bold transition-colors disabled:opacity-50"
+            >
+              <Download size={15} /> Baixar Meus Dados (JSON)
+            </button>
+            <button
+              type="button"
+              disabled={exportingData}
+              onClick={() => handleExportPersonalData('csv')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-zinc-100 text-xs font-bold transition-colors disabled:opacity-50"
+            >
+              <Download size={15} /> Baixar Meus Dados (CSV)
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 text-xs font-bold transition-colors"
+          >
+            <Trash2 size={15} /> Excluir Minha Conta e Dados
+          </button>
+        </div>
+
+        {confirmDeleteOpen && (
+          <div role="alertdialog" aria-labelledby="delete-account-title" className="p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 space-y-3 animate-fade-in">
+            <div className="flex items-start gap-2.5 text-red-700 dark:text-red-300 text-xs">
+              <AlertTriangle size={18} className="shrink-0 mt-0.5 text-red-500" />
+              <div>
+                <p id="delete-account-title" className="font-bold text-sm">Confirmar exclusão permanente da conta (LGPD art. 18, VI)</p>
+                <p className="mt-1">
+                  Esta ação removerá imediatamente seu perfil, funções, disponibilidades e inscrições de notificações. Serão mantidos apenas registros obrigatórios por lei (Marco Civil da Internet / obrigações fiscais).
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOpen(false)}
+                disabled={deletingAccount}
+                className="px-3.5 py-2 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOwnAccount}
+                disabled={deletingAccount}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50"
+              >
+                {deletingAccount ? 'Excluindo...' : 'Confirmar Exclusão Definitiva'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

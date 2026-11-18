@@ -14,6 +14,7 @@ import {
   Building2,
   Check,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 import {
   validateInviteToken,
@@ -22,14 +23,27 @@ import {
   joinMinistry,
   registerWithGoogleInvite,
   processGoogleInviteAfterRedirect,
-  clearPendingInvite,
 } from "../services/supabaseService";
 import { isValidEmail } from "../utils/validation";
+import { LegalModal, LegalDocType, LEGAL_TERMS_VERSION } from "./LegalDocuments";
 
 interface Props {
   token: string;
   onClear: () => void;
 }
+
+const calculateAge = (birthDateStr: string): number | null => {
+  if (!birthDateStr) return null;
+  const birth = new Date(birthDateStr + "T00:00:00");
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
 
 export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   const [status, setStatus] = useState<
@@ -37,6 +51,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   >("loading");
   const [inviteData, setInviteData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
 
   // Ministry Data
   const [ministryName, setMinistryName] = useState("");
@@ -44,7 +59,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   // Roles Data
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [loadingRoles] = useState(false);
 
   // Form Data
   const [name, setName] = useState("");
@@ -53,6 +68,13 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   const [confirmPass, setConfirmPass] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [birthDate, setBirthDate] = useState("");
+
+  // LGPD Consent & Parental Consent (Art. 8 §2, §4 and Art. 14 §1)
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianEmail, setGuardianEmail] = useState("");
+  const [parentalConsentConfirmed, setParentalConsentConfirmed] = useState(false);
 
   const [registering, setRegistering] = useState(false);
   const [isExistingUser, setIsExistingUser] = useState(false);
@@ -106,20 +128,16 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const checkGoogleAuth = async () => {
       const { data: { session } } = await sb.auth.getSession();
       if (session?.user) {
-        // Usuário voltou do Google OAuth com sessão ativa — processar convite
         setProcessingGoogleInvite(true);
         try {
           const result = await processGoogleInviteAfterRedirect();
           if (result.success) {
             setStatus('success');
-            // Limpar a URL
             try {
               const url = new URL(window.location.href);
               url.searchParams.delete('invite');
               window.history.replaceState({}, '', url.toString());
-            } catch (_e) {
-              // ignore
-            }
+            } catch (_e) {}
             setTimeout(() => onClear(), 2000);
           } else {
             setErrorMsg(result.message || 'Erro ao processar convite com Google.');
@@ -145,6 +163,16 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     setSelectedRoles(newRoles);
   };
 
+  const userAge = calculateAge(birthDate);
+  const isChildUnder12 = userAge !== null && userAge >= 0 && userAge < 12;
+  const isInvalidAge = userAge !== null && (userAge < 0 || userAge > 120);
+
+  const isParentalValid =
+    !isChildUnder12 ||
+    (guardianName.trim().length > 2 &&
+      isValidEmail(guardianEmail) &&
+      parentalConsentConfirmed);
+
   const isFormValid =
     name.trim().length > 0 &&
     isValidEmail(email) &&
@@ -152,7 +180,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     password === confirmPass &&
     whatsapp.trim().length > 0 &&
     birthDate.length > 0 &&
-    selectedRoles.length > 0;
+    !isInvalidAge &&
+    selectedRoles.length > 0 &&
+    acceptedTerms &&
+    isParentalValid;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,8 +193,23 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
       return;
     }
 
+    if (isInvalidAge) {
+      setErrorMsg("Por favor, informe uma data de nascimento válida.");
+      return;
+    }
+
+    if (isChildUnder12 && !isParentalValid) {
+      setErrorMsg("Para menores de 12 anos (LGPD art. 14, § 1º), é obrigatório o consentimento expresso de um dos pais ou responsável legal.");
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setErrorMsg("Você deve aceitar os Termos de Uso e a Política de Privacidade para se cadastrar.");
+      return;
+    }
+
     if (!isFormValid) {
-      setErrorMsg("Preencha todos os campos e selecione ao menos uma função.");
+      setErrorMsg("Preencha todos os campos obrigatórios e selecione ao menos uma função.");
       return;
     }
 
@@ -178,6 +224,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     }
 
     try {
+      const acceptedAtIso = new Date().toISOString();
       const res = await registerWithInvite(token, {
         name,
         email,
@@ -185,12 +232,16 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         whatsapp,
         birthDate,
         roles: selectedRoles,
+        termsAcceptedAt: acceptedAtIso,
+        termsVersion: LEGAL_TERMS_VERSION,
+        marketingOptIn,
+        guardianName: isChildUnder12 ? guardianName.trim() : undefined,
+        guardianEmail: isChildUnder12 ? guardianEmail.trim() : undefined,
       });
 
       if (res.success) {
         setStatus("success");
 
-        // Limpar a URL após o sucesso (validação e uso concluídos)
         try {
           const url = new URL(window.location.href);
           url.searchParams.delete("invite");
@@ -236,7 +287,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
       if (loginError) throw loginError;
 
-      // Se sucesso: aceitar convite
       await joinMinistry(
         inviteData.ministryId,
         inviteData.orgId,
@@ -244,11 +294,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         true,
       );
 
-      // Marcar token como usado
       await sb.from("invite_tokens").update({ used: true }).eq("token", token);
 
       setStatus("success");
-      onClear(); // Limpar convite da URL
+      onClear();
     } catch (e: unknown) {
       setErrorMsg(e instanceof Error ? e.message : 'Erro ao fazer login.');
     } finally {
@@ -261,6 +310,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
       setErrorMsg('Selecione pelo menos uma função antes de cadastrar com Google.');
       return;
     }
+    if (!acceptedTerms) {
+      setErrorMsg('Aceite os Termos de Uso e a Política de Privacidade antes de continuar com o Google.');
+      return;
+    }
     setGoogleLoading(true);
     setErrorMsg('');
     try {
@@ -269,7 +322,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         setErrorMsg(res.message || 'Erro ao conectar com Google.');
         setGoogleLoading(false);
       }
-      // Se sucesso, o navegador será redirecionado para o Google
     } catch (e: unknown) {
       setErrorMsg(e instanceof Error ? e.message : 'Erro desconhecido.');
       setGoogleLoading(false);
@@ -277,7 +329,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
   };
 
   const handleGoogleLoginWithInvite = async () => {
-    // Para usuários existentes que querem fazer login com Google e aceitar convite
     setGoogleLoading(true);
     setErrorMsg('');
     try {
@@ -353,6 +404,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+      <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
       <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 shadow-2xl animate-fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex p-3 bg-ministral-500/10 rounded-2xl mb-4">
@@ -448,7 +500,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     <Loader2 className="animate-spin" size={18} />
                   ) : (
                     <>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
                         <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -553,6 +605,57 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 </div>
               </div>
 
+              {/* Fluxo de Consentimento Parental para Crianças < 12 anos (LGPD art. 14, § 1º) */}
+              {isChildUnder12 && (
+                <div className="md:col-span-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 space-y-3 animate-fade-in">
+                  <div className="flex items-start gap-2.5 text-amber-300 text-xs font-bold">
+                    <ShieldAlert size={18} className="shrink-0 mt-0.5 text-amber-400" />
+                    <span>
+                      Proteção de Crianças (LGPD art. 14, § 1º): Para menores de 12 anos, o cadastro exige autorização expressa de um dos pais ou responsável legal.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-amber-200/80 uppercase block mb-1">
+                        Nome do Pai/Mãe ou Responsável *
+                      </label>
+                      <input
+                        type="text"
+                        value={guardianName}
+                        onChange={(e) => setGuardianName(e.target.value)}
+                        placeholder="Nome completo do responsável"
+                        className="w-full bg-zinc-950 border border-amber-500/30 rounded-xl px-3 py-2 text-white text-xs outline-none focus:ring-1 focus:ring-amber-400"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-amber-200/80 uppercase block mb-1">
+                        E-mail do Responsável Legal *
+                      </label>
+                      <input
+                        type="email"
+                        value={guardianEmail}
+                        onChange={(e) => setGuardianEmail(e.target.value)}
+                        placeholder="responsavel@email.com"
+                        className="w-full bg-zinc-950 border border-amber-500/30 rounded-xl px-3 py-2 text-white text-xs outline-none focus:ring-1 focus:ring-amber-400"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-amber-100 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={parentalConsentConfirmed}
+                      onChange={(e) => setParentalConsentConfirmed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-amber-500 bg-zinc-950 text-amber-500 focus:ring-amber-500"
+                    />
+                    <span>
+                      Declaro ser pai, mãe ou representante legal e autorizo de forma específica e destacada o tratamento dos dados pessoais do(a) menor exclusivamente para participação nas escalas do ministério. *
+                    </span>
+                  </label>
+                </div>
+              )}
+
               {/* ROLES SELECTION */}
               <div className="md:col-span-2 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-3 block flex items-center gap-2">
@@ -643,11 +746,54 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                   />
                 </div>
               </div>
+
+              {/* Checkboxes de Aceite de Termos e Marketing (LGPD art. 8º, § 2º e § 4º) */}
+              <div className="md:col-span-2 space-y-2.5 pt-2 border-t border-zinc-800 text-xs text-zinc-300">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-ministral-500 focus:ring-ministral-500"
+                  />
+                  <span>
+                    Li e concordo com os{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLegalDoc("terms")}
+                      className="text-ministral-400 underline font-bold"
+                    >
+                      Termos de Uso
+                    </button>{" "}
+                    e a{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLegalDoc("privacy")}
+                      className="text-ministral-400 underline font-bold"
+                    >
+                      Política de Privacidade
+                    </button>{" "}
+                    (v{LEGAL_TERMS_VERSION}). *
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={marketingOptIn}
+                    onChange={(e) => setMarketingOptIn(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-ministral-500 focus:ring-ministral-500"
+                  />
+                  <span>
+                    (Opcional) Aceito receber novidades e comunicações institucionais do Ministral por e-mail/WhatsApp.
+                  </span>
+                </label>
+              </div>
             </div>
           )}
 
           {errorMsg && (
-            <p className="text-red-400 text-xs text-center font-bold bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+            <p role="alert" className="text-red-400 text-xs text-center font-bold bg-red-500/10 p-2 rounded-lg border border-red-500/20">
               {errorMsg}
             </p>
           )}
@@ -677,14 +823,14 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
               <button
                 type="button"
                 onClick={handleGoogleRegister}
-                disabled={googleLoading || (availableRoles.length > 0 && selectedRoles.length === 0)}
+                disabled={googleLoading || !acceptedTerms || (availableRoles.length > 0 && selectedRoles.length === 0)}
                 className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-bold py-3.5 rounded-xl shadow-lg shadow-white/5 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {googleLoading ? (
                   <Loader2 className="animate-spin" size={18} />
                 ) : (
                   <>
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
                       <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -694,14 +840,31 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                   </>
                 )}
               </button>
-              {availableRoles.length > 0 && selectedRoles.length === 0 && (
-                <p className="text-[10px] text-zinc-600 text-center">
-                  Selecione suas funções acima para habilitar o cadastro com Google.
+              {(!acceptedTerms || (availableRoles.length > 0 && selectedRoles.length === 0)) && (
+                <p className="text-[10px] text-zinc-500 text-center">
+                  Selecione suas funções e aceite os Termos de Uso acima para habilitar o cadastro com Google.
                 </p>
               )}
             </>
           )}
         </form>
+
+        <div className="mt-6 pt-4 border-t border-zinc-800 flex justify-center gap-6">
+          <button
+            type="button"
+            onClick={() => setLegalDoc("terms")}
+            className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+          >
+            Termos de Uso
+          </button>
+          <button
+            type="button"
+            onClick={() => setLegalDoc("privacy")}
+            className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+          >
+            Política de Privacidade
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Mic, Square, Loader2, Play, Pause } from 'lucide-react';
+import { X, Send, Mic, Square, Loader2, Flag } from 'lucide-react';
 import { getSupabase } from '../services/supabase/client';
 import { useAppStore } from '../store/appStore';
 import { useToast } from './Toast';
@@ -181,6 +181,22 @@ export const EventChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, even
     return `${m}:${s}`;
   };
 
+  const handleReportMessage = async (msgId: string) => {
+    const reason = window.prompt('Denunciar mensagem ou áudio inadequado / violação de direitos:');
+    if (!reason || !reason.trim()) return;
+    try {
+      await supabase.from('content_reports').insert({
+        organization_id: orgId,
+        ministry_id: ministryId,
+        reporter_id: currentUser?.id,
+        content_type: 'chat_message',
+        content_id: msgId,
+        reason: reason.trim(),
+      });
+    } catch {}
+    addToast('Denúncia enviada à moderação.', 'info');
+  };
+
   const getSenderName = (id: string) => {
     if (id === currentUser?.id) return 'Você';
     const member = members.find(m => m.id === id);
@@ -199,7 +215,7 @@ export const EventChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, even
             <h2 className="font-bold text-lg leading-tight">Chat do Evento</h2>
             <p className="text-xs text-white/80">{eventTitle}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+          <button onClick={onClose} aria-label="Fechar chat do evento" className="p-2 hover:bg-white/10 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -225,6 +241,11 @@ export const EventChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, even
                   </div>
                   <span className="text-[10px] text-zinc-400 mt-1 mr-1">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {!isMine && (
+                      <button type="button" onClick={() => handleReportMessage(msg.id)} aria-label="Denunciar mensagem" title="Denunciar mensagem" className="ml-2 inline-flex items-center text-zinc-400 hover:text-red-500">
+                        <Flag size={10} />
+                      </button>
+                    )}
                   </span>
                 </div>
               );

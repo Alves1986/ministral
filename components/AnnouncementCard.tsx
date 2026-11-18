@@ -2,7 +2,9 @@
 import React, { useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { Announcement, User } from '../types';
-import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube, Pin, Edit } from 'lucide-react';
+import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart, ExternalLink, Youtube, Pin, Edit, Flag } from 'lucide-react';
+import { getSupabase } from '../services/supabase/client';
+import { useToast } from './Toast';
 import { canUserEditAnnouncement } from '../utils/announcementUtils';
 
 interface Props {
@@ -23,6 +25,25 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
 
   const [showReaders, setShowReaders] = useState(false);
   const [showLikers, setShowLikers] = useState(false);
+  const { addToast } = useToast();
+  const handleReportUGC = async () => {
+    const reason = window.prompt('Denunciar conteúdo ilícito ou violação de direitos autorais (informe o motivo):');
+    if (!reason || !reason.trim()) return;
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        await sb.from('content_reports').insert({
+          organization_id: announcement.organizationId || currentUser.organizationId,
+          ministry_id: currentUser.ministryId,
+          reporter_id: currentUser.id,
+          content_type: 'announcement',
+          content_id: announcement.id,
+          reason: reason.trim(),
+        });
+      }
+    } catch {}
+    addToast('Denúncia registrada para análise da administração e DPO.', 'info');
+  };
   const [isReading, setIsReading] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(hasRead && !isAdmin && !canEdit);
   
@@ -262,7 +283,7 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
 
                         <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
                             <div className="text-xs text-zinc-500">
-                                Enviado por: <span className="font-semibold">{announcement.author}</span>
+                                Enviado por: <span className="font-semibold">{announcement.author}</span> • <button type="button" onClick={handleReportUGC} className="inline-flex items-center gap-1 text-[10px] text-zinc-400 hover:text-red-500 underline ml-1" title="Denunciar conteúdo inadequado ou direito autoral"><Flag size={10} /> Denunciar</button>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">

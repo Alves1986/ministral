@@ -34,6 +34,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
   });
   const [isSending, setIsSending] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [isAiGenerated, setIsAiGenerated] = useState(false);
   
   const { addToast } = useToast();
 
@@ -97,7 +98,8 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
             ? refined
             : (refined?.html || refined?.text || JSON.stringify(refined));
           setMessage(newHtml);
-          addToast("Texto melhorado com IA!", "success");
+          setIsAiGenerated(true);
+          addToast("Texto revisado por IA! Confira antes de enviar.", "success");
       } catch (error) {
           console.error("AI Polish error:", error);
           addToast("Erro ao processar com IA.", "error");
@@ -259,7 +261,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend, orgName, ministryName, 
 
                 <div>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase">Mensagem</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">Mensagem {isAiGenerated && <span className="px-2 py-0.5 rounded-full bg-ministral-500/10 text-ministral-500 text-[9px] font-bold">Revisado por IA — Confira antes de publicar</span>}</label>
                         <div className="flex flex-wrap gap-2 items-center">
                             <div className="flex gap-1">
                                 <button type="button" onClick={() => handlePolish('professional')} disabled={isPolishing} className="text-[10px] text-ministral-500 hover:bg-ministral-50 px-2 py-0.5 rounded border border-ministral-200 dark:border-ministral-900/30 disabled:opacity-50 font-bold">Formal</button>

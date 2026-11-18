@@ -3,6 +3,7 @@ import React, { ReactNode, useState, useRef, useEffect } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield, Crown } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
+import { LegalModal, LegalDocType } from './LegalDocuments';
 import { markNotificationsReadSQL } from '../services/supabaseService';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
@@ -59,6 +60,7 @@ export const DashboardLayout: React.FC<Props> = ({
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
   const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
@@ -664,6 +666,14 @@ export const DashboardLayout: React.FC<Props> = ({
                   );
                 })()}
                 {children}
+                <footer className="mt-12 pt-4 border-t border-slate-200/60 dark:border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 print:hidden">
+                  <span>© 2026 Ministral — Proteção de Dados (LGPD)</span>
+                  <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => setLegalDoc('terms')} className="hover:text-slate-600 dark:hover:text-slate-200 underline">Termos de Uso</button>
+                    <button type="button" onClick={() => setLegalDoc('privacy')} className="hover:text-slate-600 dark:hover:text-slate-200 underline">Política de Privacidade</button>
+                  </div>
+                </footer>
+                <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
             </div>
         </div>
 

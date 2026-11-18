@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { ArrowRight, Loader2, Building2, Mail, Lock, Phone, User, CheckCircle2, ChevronLeft, Music } from 'lucide-react';
 import { registerNewOrganization } from '../services/supabase/auth';
 import { getSystemLogo } from '../utils/branding';
 import { isValidEmail } from '../utils/validation';
+import { LegalModal, LegalDocType, LEGAL_TERMS_VERSION } from './LegalDocuments';
 
 export const RegisterOrganizationScreen: React.FC = () => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [success, setSuccess] = useState(false);
+    const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
 
     const [formData, setFormData] = useState({
         churchName: '',
@@ -19,6 +21,10 @@ export const RegisterOrganizationScreen: React.FC = () => {
         password: '',
         confirmPassword: ''
     });
+
+    const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [marketingOptIn, setMarketingOptIn] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -62,11 +68,22 @@ export const RegisterOrganizationScreen: React.FC = () => {
             return;
         }
 
+        if (!isAdultConfirmed) {
+            setErrorMsg("Para criar uma organização responsável, você deve confirmar ter 18 anos ou mais.");
+            return;
+        }
+
+        if (!acceptedTerms) {
+            setErrorMsg("Você precisa ler e aceitar os Termos de Uso e a Política de Privacidade para concluir o cadastro.");
+            return;
+        }
+
         setLoading(true);
         setErrorMsg("");
 
         try {
             const slug = generateSlug(formData.churchName);
+            const acceptedAtIso = new Date().toISOString();
             const result = await registerNewOrganization({
                 name: formData.name,
                 email: formData.email,
@@ -74,7 +91,10 @@ export const RegisterOrganizationScreen: React.FC = () => {
                 whatsapp: formData.whatsapp,
                 churchName: formData.churchName,
                 slug: slug,
-                ministryName: formData.ministryName
+                ministryName: formData.ministryName,
+                termsAcceptedAt: acceptedAtIso,
+                termsVersion: LEGAL_TERMS_VERSION,
+                marketingOptIn: marketingOptIn,
             });
 
             if (result.success) {
@@ -113,10 +133,11 @@ export const RegisterOrganizationScreen: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans">
+            <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
             <div className="w-full max-w-md">
                 <div className="text-center mb-10">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl overflow-hidden mb-6">
-                        <img src={getSystemLogo('dark')} alt="Logo" className="w-full h-full object-contain p-3 bg-white" />
+                        <img src={getSystemLogo('dark')} alt="Logo Ministral" className="w-full h-full object-contain p-3 bg-white" />
                     </div>
                     <h1 className="text-3xl font-black text-white tracking-tight mb-2">Nova Organização</h1>
                     <p className="text-slate-400 text-sm">Crie sua conta e comece a gerenciar escalas</p>
@@ -132,7 +153,7 @@ export const RegisterOrganizationScreen: React.FC = () => {
                     </div>
 
                     {errorMsg && (
-                        <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold text-center">
+                        <div role="alert" className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold text-center">
                             {errorMsg}
                         </div>
                     )}
@@ -257,17 +278,61 @@ export const RegisterOrganizationScreen: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-3 mt-8">
+                                {/* Checkboxes de Conformidade LGPD */}
+                                <div className="space-y-3 pt-2 border-t border-white/10 text-xs text-slate-300">
+                                    <label className="flex items-start gap-2.5 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={isAdultConfirmed}
+                                            onChange={(e) => setIsAdultConfirmed(e.target.checked)}
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-secondary focus:ring-secondary"
+                                        />
+                                        <span>Declaro ter <strong>18 anos ou mais</strong> e capacidade legal para representar esta organização. *</span>
+                                    </label>
+
+                                    <label className="flex items-start gap-2.5 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={acceptedTerms}
+                                            onChange={(e) => setAcceptedTerms(e.target.checked)}
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-secondary focus:ring-secondary"
+                                        />
+                                        <span>
+                                            Li e aceito os{' '}
+                                            <button type="button" onClick={() => setLegalDoc('terms')} className="text-secondary underline font-bold">
+                                                Termos de Uso
+                                            </button>{' '}
+                                            e a{' '}
+                                            <button type="button" onClick={() => setLegalDoc('privacy')} className="text-secondary underline font-bold">
+                                                Política de Privacidade
+                                            </button>{' '}
+                                            (v{LEGAL_TERMS_VERSION}). *
+                                        </span>
+                                    </label>
+
+                                    <label className="flex items-start gap-2.5 cursor-pointer text-slate-400">
+                                        <input
+                                            type="checkbox"
+                                            checked={marketingOptIn}
+                                            onChange={(e) => setMarketingOptIn(e.target.checked)}
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-secondary focus:ring-secondary"
+                                        />
+                                        <span>(Opcional) Desejo receber novidades, dicas de gestão e comunicações sobre recursos do Ministral por e-mail/WhatsApp.</span>
+                                    </label>
+                                </div>
+
+                                <div className="flex gap-3 mt-6">
                                     <button 
                                         type="button"
                                         onClick={() => setStep(1)}
+                                        aria-label="Voltar para etapa anterior"
                                         className="py-4 px-6 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-all active:scale-95"
                                     >
                                         <ChevronLeft size={20} />
                                     </button>
                                     <button 
                                         type="submit" 
-                                        disabled={loading}
+                                        disabled={loading || !acceptedTerms || !isAdultConfirmed}
                                         className="flex-1 bg-secondary hover:bg-secondaryHover text-white font-black py-4 rounded-2xl shadow-xl shadow-secondary/20 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
                                     >
                                         {loading ? <Loader2 size={20} className="animate-spin" /> : <>Finalizar Cadastro <CheckCircle2 size={18}/></>}
@@ -278,13 +343,17 @@ export const RegisterOrganizationScreen: React.FC = () => {
                     </form>
                 </div>
 
-                <div className="mt-8 text-center">
+                <div className="mt-8 text-center space-y-3">
                     <button 
                         onClick={() => window.location.href = '/'} 
-                        className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors"
+                        className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
                     >
                         Já tem uma conta? Faça Login
                     </button>
+                    <div className="flex justify-center gap-6">
+                        <button type="button" onClick={() => setLegalDoc('terms')} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors">Termos de Uso</button>
+                        <button type="button" onClick={() => setLegalDoc('privacy')} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors">Política de Privacidade</button>
+                    </div>
                 </div>
             </div>
         </div>

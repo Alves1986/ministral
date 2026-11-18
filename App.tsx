@@ -643,12 +643,14 @@ const InnerApp = () => {
       setShowUpgradeReminder(true);
       localStorage.setItem(reminderKey, new Date().toISOString());
     };
-    const firstReminder = window.setTimeout(showReminder, 30_000);
-    const recurringReminder = window.setInterval(showReminder, 10 * 60_000);
+    if (sessionStorage.getItem(reminderKey)) return;
+    const firstReminder = window.setTimeout(() => {
+      sessionStorage.setItem(reminderKey, "shown");
+      showReminder();
+    }, 60_000);
 
     return () => {
       window.clearTimeout(firstReminder);
-      window.clearInterval(recurringReminder);
     };
   }, [isUpgradeEligible, organization?.id]);
 
@@ -2883,6 +2885,7 @@ const queryClientInstance = new QueryClient({
 });
 
 import { LegalModal } from "./components/LegalDocuments";
+import { CookieConsentBanner } from "./components/CookieConsentBanner";
 
 const App = () => {
   const docType = new URLSearchParams(window.location.search).get("doc");
@@ -2904,6 +2907,7 @@ const App = () => {
         <SessionProvider>
           <ToastProvider>
             <InnerApp />
+            <CookieConsentBanner />
           </ToastProvider>
         </SessionProvider>
       </SupabaseHealthCheck>
