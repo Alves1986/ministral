@@ -2,10 +2,10 @@
 // ─── Gemini API — nativa e otimizada ───────────────────────
 
 function getApiKey(): string {
+  // Nunca ler chave de API no navegador: o bundle e publico.
+  if (typeof window !== 'undefined') return '';
   if (typeof process !== 'undefined' && process.env) {
-    const primary = process.env.GEMINI_API_KEY || '';
-    const fallback = process.env.VITE_GEMINI_API_KEY || '';
-    return primary || fallback;
+    return process.env.GEMINI_API_KEY || '';
   }
   return '';
 }
