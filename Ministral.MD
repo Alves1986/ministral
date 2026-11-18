@@ -55,6 +55,7 @@
 
 ### A. Pendente / Prioritário
 - [ ] **[DIAGNÓSTICO] Integração Google Agenda**: Investigar em runtime o fluxo OAuth no perfil do usuário (verificar URLs de redirecionamento no Google Cloud Console e persistência do `provider_token` do Supabase).
+- [ ] **[CONFIG] Inserir a chave `NVIDIA_API_KEY` no painel da Vercel** (variável já criada, produção/preview/development).
 - [ ] **[CONFIG] Validação de Secrets de Produção**:
   - Supabase Edge Functions: garantir secrets `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` e `CHECKIN_SECRET_KEY`.
   - Vercel: validar paridade de `VITE_VAPID_PUBLIC_KEY` e `VITE_SUPABASE_URL` em todos os ambientes.
@@ -75,6 +76,7 @@
   1. **Correção dos endpoints de IA em produção (`api/ai/polish.ts`, `api/ai/schedule.ts`)**: os imports locais usavam a extensão `.ts` (`../../services/aiService.ts`), permitida pelo `tsconfig` (`allowImportingTsExtensions`), mas o bundle da Vercel mantinha o specifier `.ts` e o Node falhava com `ERR_MODULE_NOT_FOUND`. Produção passava 500 e a geração de escala por IA caía silenciosamente na heurística local.
   2. **Remoção das integrações Spotify, CifraClub/Vagalume (recursos sem uso)**: endpoints `api/spotify/token` e `api/cifraclub/search` (expostos sem autenticação), rotas correspondentes em `server.ts`, serviços `spotifyService`/`cifraClubService`, estados e handlers mortos em `RepertoireScreen.tsx`, fluxo de callback no `App.tsx`, campos de settings (`types.ts`, `useMinistryData.ts`, `ministries.ts`, `SettingsScreen.tsx`), declaração de tipos `vite-env.d.ts` e a dependência `vagalume`.
   3. **Redução de vulnerabilidades**: de 40 (32 críticas) para 8 (2 críticas: `dompurify` e `proxy-addr`) após a remoção da árvore babel-6 trazida por `vagalume`.
+  4. **Provedor NVIDIA (`NVIDIA_API_KEY`)**: integração adicionada nos três caminhos de IA (`services/aiOrchestrator.ts`, `api/ai/run.ts`, `api/ai/schedule.ts`) com modelos Llama 3.3 70B, Llama 3.1 8B, Nemoguard 8B e Mistral 7B, e seletor de provedor na tela de IA (`AdvancedAIScreen.tsx`). Variável `NVIDIA_API_KEY` criada na Vercel (production/preview/development) — **aguardando o usuário inserir a chave**.
 - **Validação**:
   - `npx tsc --noEmit`: sem erros.
   - `npm test`: 23 arquivos e 114 testes aprovados.

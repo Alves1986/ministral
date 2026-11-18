@@ -29,7 +29,7 @@ import {
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL } from '../services/aiOrchestrator';
+import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL, NVIDIA_MODELS, DEFAULT_NVIDIA_MODEL } from '../services/aiOrchestrator';
 import { generateAISchedule } from '../services/aiScheduleService';
 import { getOrganizationAIStatus } from '../services/supabase/aiQuotaService';
 import type { OrganizationAIQuotaStatus } from '../types';
@@ -70,7 +70,7 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<any[]>([]);
-  const [provider, setProvider] = useState<'gemini' | 'openrouter'>('gemini');
+  const [provider, setProvider] = useState<'gemini' | 'openrouter' | 'nvidia'>('gemini');
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const { addToast } = useToast();
 
@@ -78,7 +78,9 @@ export const AdvancedAIScreen: React.FC<Props> = ({
   const isBasicAI = quotaStatus?.allowedModels === 'basic';
   const availableModels = provider === 'gemini'
     ? AI_MODELS.filter(model => !isBasicAI || ['gemini-2.5-flash', 'gemini-3.5-flash-lite'].includes(model.id))
-    : OPENROUTER_MODELS;
+    : provider === 'openrouter'
+      ? OPENROUTER_MODELS
+      : NVIDIA_MODELS;
 
   const fetchQuota = async () => {
     if (!orgId) return;
@@ -116,12 +118,12 @@ export const AdvancedAIScreen: React.FC<Props> = ({
 
   useEffect(() => {
     const savedProvider = localStorage.getItem(`ai_provider_preference_${ministryId}`);
-    if (savedProvider === 'openrouter' || savedProvider === 'gemini') {
+    if (savedProvider === 'openrouter' || savedProvider === 'gemini' || savedProvider === 'nvidia') {
       setProvider(savedProvider);
     }
     const savedModel = localStorage.getItem(`ai_model_preference_${ministryId}`);
     if (savedModel) {
-      const valid = AI_MODELS.some(m => m.id === savedModel) || OPENROUTER_MODELS.some(m => m.id === savedModel);
+      const valid = AI_MODELS.some(m => m.id === savedModel) || OPENROUTER_MODELS.some(m => m.id === savedModel) || NVIDIA_MODELS.some(m => m.id === savedModel);
       if (valid) {
         setSelectedModel(savedModel);
       } else {
@@ -130,9 +132,13 @@ export const AdvancedAIScreen: React.FC<Props> = ({
     }
   }, [ministryId]);
 
-  const handleProviderChange = (newProvider: 'gemini' | 'openrouter') => {
+  const handleProviderChange = (newProvider: 'gemini' | 'openrouter' | 'nvidia') => {
     setProvider(newProvider);
-    setSelectedModel(newProvider === 'gemini' ? DEFAULT_MODEL : DEFAULT_OPENROUTER_MODEL);
+    setSelectedModel(
+      newProvider === 'gemini' ? DEFAULT_MODEL :
+      newProvider === 'openrouter' ? DEFAULT_OPENROUTER_MODEL :
+      DEFAULT_NVIDIA_MODEL
+    );
   };
 
   // Recurso 1: Analise de saude
@@ -885,6 +891,9 @@ export const AdvancedAIScreen: React.FC<Props> = ({
                   </button>
                   <button onClick={() => !isBasicAI && handleProviderChange('openrouter')} disabled={isBasicAI} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'openrouter' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'} ${isBasicAI ? 'cursor-not-allowed opacity-50' : ''}`}>
                     OpenRouter
+                  </button>
+                  <button onClick={() => !isBasicAI && handleProviderChange('nvidia')} disabled={isBasicAI} className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${provider === 'nvidia' ? 'border-ministral-500 bg-ministral-50 text-ministral-600 dark:bg-ministral-600/20 dark:text-ministral-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'} ${isBasicAI ? 'cursor-not-allowed opacity-50' : ''}`}>
+                    NVIDIA
                   </button>
                 </div>
                 

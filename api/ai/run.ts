@@ -21,6 +21,14 @@ const OPENROUTER_MODELS = [
   'google/gemini-flash-1.5',
 ];
 
+const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_MODELS = [
+  'meta/llama-3.3-70b-instruct',
+  'meta/llama-3.1-8b-instruct',
+  'nvidia/llama-3.1-nemoguard-8b',
+  'mistralai/mistral-7b-instruct-v0.3'
+];
+
 const SYSTEM_INSTRUCTION =
   'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.';
 
@@ -277,19 +285,64 @@ async function callOpenRouterREST(apiKey: string, model: string, prompt: string)
   return text;
 }
 
+async function callNvidiaREST(apiKey: string, model: string, prompt: string): Promise<string> {
+  const url = NVIDIA_BASE;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://ministral.app',
+      'X-Title': 'Ministral'
+    },
+    body: JSON.stringify({
+      model: model || NVIDIA_MODELS[0],
+      messages: [
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
+    const errMsg = errBody?.error?.message || response.statusText;
+    const err = new Error(`NVIDIA API Error: ${errMsg}`);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const text: string = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('NVIDIA retornou resposta vazia.');
+  return text;
+}
+
 async function callWithFallback(
   geminiKey: string,
   openRouterKey: string,
+  nvidiaKey: string,
   prompt: string,
   useJson: boolean,
   preferredModel?: string
 ): Promise<string> {
+  const isNvidiaModel = Boolean(preferredModel && NVIDIA_MODELS.includes(preferredModel));
   const isOpenRouterModel = Boolean(
-    preferredModel && (
+    preferredModel && !isNvidiaModel && (
       preferredModel.includes('/') ||
       OPENROUTER_MODELS.includes(preferredModel)
     )
   );
+
+  // Se o modelo solicitado for NVIDIA e houver chave, prioriza a NVIDIA
+  if (isNvidiaModel && nvidiaKey) {
+    try {
+      return await callNvidiaREST(nvidiaKey, preferredModel!, prompt);
+    } catch (err: any) {
+      console.warn(`[api/ai/run] Modelo NVIDIA ${preferredModel} falhou:`, err?.message);
+      if (!geminiKey) throw err;
+    }
+  }
 
   // Se o modelo solicitado for OpenRouter e houver chave, prioriza OpenRouter
   if (isOpenRouterModel && openRouterKey) {
@@ -304,7 +357,7 @@ async function callWithFallback(
   // Prepara ordem de modelos Gemini
   const knownModels = MODELS_FALLBACK;
   const order =
-    preferredModel && !isOpenRouterModel
+    preferredModel && !isNvidiaModel && !isOpenRouterModel
       ? [preferredModel, ...knownModels.filter((m) => m !== preferredModel)]
       : knownModels;
 
@@ -329,6 +382,15 @@ async function callWithFallback(
       return await callOpenRouterREST(openRouterKey, 'meta-llama/llama-3-8b-instruct:free', prompt);
     } catch (openRouterErr: any) {
       console.warn('[api/ai/run] Fallback OpenRouter falhou:', openRouterErr?.message);
+    }
+  }
+
+  // Último recurso: NVIDIA
+  if (nvidiaKey && !isNvidiaModel) {
+    try {
+      return await callNvidiaREST(nvidiaKey, NVIDIA_MODELS[0], prompt);
+    } catch (nvidiaErr: any) {
+      console.warn('[api/ai/run] Fallback NVIDIA falhou:', nvidiaErr?.message);
     }
   }
 
@@ -443,8 +505,11 @@ export default async function handler(req: any, res: any) {
     '';
   const openRouterApiKey = rawOpenRouter.trim().replace(/^["']|["']$/g, '');
 
-  if (!geminiApiKey && !openRouterApiKey) {
-    console.error('[api/ai/run] Nenhuma chave de IA (GEMINI_API_KEY ou OPENROUTER_API_KEY) configurada.');
+  const rawNvidia = process.env.NVIDIA_API_KEY || '';
+  const nvidiaApiKey = rawNvidia.trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiApiKey && !openRouterApiKey && !nvidiaApiKey) {
+    console.error('[api/ai/run] Nenhuma chave de IA (GEMINI_API_KEY, OPENROUTER_API_KEY ou NVIDIA_API_KEY) configurada.');
     return res.status(500).json({
       error: 'Serviço de IA indisponível. Verifique se a variável GEMINI_API_KEY está configurada no painel da Vercel.',
     });
@@ -465,7 +530,7 @@ export default async function handler(req: any, res: any) {
     const useJson = JSON_TASKS.has(taskType);
     const prompt = buildPrompt(taskType, context, payload);
 
-    const content = await callWithFallback(geminiApiKey, openRouterApiKey, prompt, useJson, preferredModel);
+    const content = await callWithFallback(geminiApiKey, openRouterApiKey, nvidiaApiKey, prompt, useJson, preferredModel);
     const result = parseResponse(content, taskType);
 
     return res.status(200).json(result);

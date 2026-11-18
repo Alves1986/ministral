@@ -50,6 +50,47 @@ async function callGeminiJSON(apiKey: string, model: string, prompt: string): Pr
   return text;
 }
 
+const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_MODELS = [
+  'meta/llama-3.3-70b-instruct',
+  'meta/llama-3.1-8b-instruct',
+  'nvidia/llama-3.1-nemoguard-8b',
+  'mistralai/mistral-7b-instruct-v0.3'
+];
+
+async function callNvidiaJSON(apiKey: string, model: string, prompt: string): Promise<string> {
+  const response = await fetch(NVIDIA_BASE, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: 'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 8192,
+      response_format: { type: 'json_object' }
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
+    const errMsg = errBody?.error?.message || response.statusText;
+    const err = new Error(`NVIDIA API Error: ${errMsg}`);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const parts = data?.choices?.[0]?.message?.content || '';
+  if (!parts) throw new Error('NVIDIA retornou resposta vazia.');
+  return parts;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
@@ -108,7 +149,10 @@ export default async function handler(req: any, res: any) {
     '';
   const openRouterApiKey = rawOpenRouter.trim().replace(/^["']|["']$/g, '');
 
-  if (!geminiApiKey && !openRouterApiKey) {
+  const rawNvidia = process.env.NVIDIA_API_KEY || '';
+  const nvidiaApiKey = rawNvidia.trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiApiKey && !openRouterApiKey && !nvidiaApiKey) {
     return res.status(500).json({
       error: 'Serviço de IA indisponível. Verifique se a variável GEMINI_API_KEY está configurada no painel da Vercel.',
     });
@@ -137,15 +181,20 @@ export default async function handler(req: any, res: any) {
       memberNotes: memberNotes || undefined,
     });
 
-    const knownModels = MODELS_FALLBACK;
-    const order =
-      model && knownModels.includes(model)
-        ? [model, ...knownModels.filter((m) => m !== model)]
-        : knownModels;
+    const geminiOrder =
+      model && MODELS_FALLBACK.includes(model)
+        ? [model, ...MODELS_FALLBACK.filter((m) => m !== model)]
+        : MODELS_FALLBACK;
+
+    const nvidiaOrder =
+      model && NVIDIA_MODELS.includes(model)
+        ? [model, ...NVIDIA_MODELS.filter((m) => m !== model)]
+        : NVIDIA_MODELS;
 
     let lastErr: Error | null = null;
     let raw = '';
-    for (const m of order) {
+
+    for (const m of geminiOrder) {
       try {
         raw = await callGeminiJSON(geminiApiKey, m, prompt);
         break;
@@ -154,6 +203,19 @@ export default async function handler(req: any, res: any) {
         console.warn(`[api/ai/schedule] Modelo ${m} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
       }
     }
+
+    if (!raw && nvidiaApiKey) {
+      for (const m of nvidiaOrder) {
+        try {
+          raw = await callNvidiaJSON(nvidiaApiKey, m, prompt);
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          console.warn(`[api/ai/schedule] Modelo NVIDIA ${m} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
+        }
+      }
+    }
+
     if (!raw) throw lastErr || new Error('Todos os modelos de IA falharam.');
 
     const assignments = extractAssignments(raw);
