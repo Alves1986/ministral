@@ -22,12 +22,16 @@ const OPENROUTER_MODELS = [
 ];
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1/chat/completions';
+// Catalogo NVIDIA NIM validado em 2026-11-18. Modelos com fim de vida
+// respondem HTTP 410 (Gone) e queimam o orcamento da funcao em fallback.
 const NVIDIA_MODELS = [
-  'meta/llama-3.3-70b-instruct',
-  'meta/llama-3.1-8b-instruct',
-  'nvidia/llama-3.1-nemoguard-8b',
-  'mistralai/mistral-7b-instruct-v0.3'
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+  'mistralai/mistral-large-4-1t-a52b'
 ];
+
+const REQUEST_TIMEOUT_MS = 18000;
+const TOTAL_BUDGET_MS = 26000;
 
 const SYSTEM_INSTRUCTION =
   'Você é um assistente especialista em gestão eclesiástica. Responda de forma direta e técnica.';
@@ -207,7 +211,8 @@ async function callGeminiREST(
   apiKey: string,
   model: string,
   prompt: string,
-  useJson: boolean
+  useJson: boolean,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
 ): Promise<string> {
   const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
 
@@ -235,6 +240,7 @@ async function callGeminiREST(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -254,7 +260,7 @@ async function callGeminiREST(
   return text;
 }
 
-async function callOpenRouterREST(apiKey: string, model: string, prompt: string): Promise<string> {
+async function callOpenRouterREST(apiKey: string, model: string, prompt: string, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<string> {
   const url = 'https://openrouter.ai/api/v1/chat/completions';
   const response = await fetch(url, {
     method: 'POST',
@@ -270,7 +276,8 @@ async function callOpenRouterREST(apiKey: string, model: string, prompt: string)
         { role: 'system', content: SYSTEM_INSTRUCTION },
         { role: 'user', content: prompt }
       ]
-    })
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -289,7 +296,7 @@ async function callOpenRouterREST(apiKey: string, model: string, prompt: string)
   return text;
 }
 
-async function callNvidiaREST(apiKey: string, model: string, prompt: string): Promise<string> {
+async function callNvidiaREST(apiKey: string, model: string, prompt: string, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<string> {
   const url = NVIDIA_BASE;
   const response = await fetch(url, {
     method: 'POST',
@@ -305,7 +312,8 @@ async function callNvidiaREST(apiKey: string, model: string, prompt: string): Pr
         { role: 'system', content: SYSTEM_INSTRUCTION },
         { role: 'user', content: prompt }
       ]
-    })
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -332,6 +340,13 @@ async function callWithFallback(
   useJson: boolean,
   preferredModel?: string
 ): Promise<string> {
+  // Teto da funcao e 30s (vercel.json). Para antes disso para devolver um
+  // erro claro em vez de um 504 por tempo esgotado.
+  const startedAt = Date.now();
+  const remainingMs = () => Math.max(0, TOTAL_BUDGET_MS - (Date.now() - startedAt));
+  const timeoutFor = () => Math.min(REQUEST_TIMEOUT_MS, remainingMs());
+  const fatalStatus = (status?: number) => status === 404 || status === 410;
+
   const isNvidiaModel = Boolean(preferredModel && NVIDIA_MODELS.includes(preferredModel));
   const isOpenRouterModel = Boolean(
     preferredModel && !isNvidiaModel && (
@@ -341,21 +356,21 @@ async function callWithFallback(
   );
 
   // Se o modelo solicitado for NVIDIA e houver chave, prioriza a NVIDIA
-  if (isNvidiaModel && nvidiaKey) {
+  if (isNvidiaModel && nvidiaKey && remainingMs() > 4000) {
     try {
-      return await callNvidiaREST(nvidiaKey, preferredModel!, prompt);
+      return await callNvidiaREST(nvidiaKey, preferredModel!, prompt, timeoutFor());
     } catch (err: any) {
-      console.warn(`[api/ai/run] Modelo NVIDIA ${preferredModel} falhou:`, err?.message);
-      if (!geminiKey) throw err;
+      console.warn(`[api/ai/run] Modelo NVIDIA ${preferredModel} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
+      if (!geminiKey && !openRouterKey) throw err;
     }
   }
 
   // Se o modelo solicitado for OpenRouter e houver chave, prioriza OpenRouter
-  if (isOpenRouterModel && openRouterKey) {
+  if (isOpenRouterModel && openRouterKey && remainingMs() > 4000) {
     try {
-      return await callOpenRouterREST(openRouterKey, preferredModel!, prompt);
+      return await callOpenRouterREST(openRouterKey, preferredModel!, prompt, timeoutFor());
     } catch (err: any) {
-      console.warn(`[api/ai/run] OpenRouter model ${preferredModel} falhou:`, err?.message);
+      console.warn(`[api/ai/run] OpenRouter model ${preferredModel} falhou (${err?.status || 0}): ${(err?.message || '').slice(0, 150)}`);
       if (!geminiKey) throw err;
     }
   }
@@ -371,32 +386,38 @@ async function callWithFallback(
 
   if (geminiKey) {
     for (const model of order) {
+      if (remainingMs() < 4000) break;
       try {
-        return await callGeminiREST(geminiKey, model, prompt, useJson);
+        return await callGeminiREST(geminiKey, model, prompt, useJson, timeoutFor());
       } catch (err: any) {
         const status: number = err.status || 0;
         const msg: string = err.message || '';
         console.warn(`[api/ai/run] Modelo ${model} falhou (${status}): ${msg.slice(0, 150)}`);
         lastErr = err;
+        if (fatalStatus(status)) break;
       }
     }
   }
 
-  // Se o Gemini falhou ou não tem chave configurada, tenta OpenRouter se disponível
-  if (openRouterKey && !isOpenRouterModel) {
+  // Se o Gemini falhou ou nao tem chave configurada, tenta OpenRouter se disponivel
+  if (openRouterKey && !isOpenRouterModel && remainingMs() > 4000) {
     try {
-      return await callOpenRouterREST(openRouterKey, 'meta-llama/llama-3-8b-instruct:free', prompt);
+      return await callOpenRouterREST(openRouterKey, 'meta-llama/llama-3-8b-instruct:free', prompt, timeoutFor());
     } catch (openRouterErr: any) {
       console.warn('[api/ai/run] Fallback OpenRouter falhou:', openRouterErr?.message);
     }
   }
 
-  // Último recurso: NVIDIA
-  if (nvidiaKey && !isNvidiaModel) {
-    try {
-      return await callNvidiaREST(nvidiaKey, NVIDIA_MODELS[0], prompt);
-    } catch (nvidiaErr: any) {
-      console.warn('[api/ai/run] Fallback NVIDIA falhou:', nvidiaErr?.message);
+  // Ultimo recurso: NVIDIA (ignora o catalogo preferido, tenta os vivos)
+  if (nvidiaKey && !isNvidiaModel && remainingMs() > 4000) {
+    for (const model of NVIDIA_MODELS) {
+      if (remainingMs() < 4000) break;
+      try {
+        return await callNvidiaREST(nvidiaKey, model, prompt, timeoutFor());
+      } catch (nvidiaErr: any) {
+        console.warn(`[api/ai/run] Fallback NVIDIA ${model} falhou (${nvidiaErr?.status || 0}): ${(nvidiaErr?.message || '').slice(0, 150)}`);
+        if (fatalStatus(nvidiaErr?.status)) break;
+      }
     }
   }
 
