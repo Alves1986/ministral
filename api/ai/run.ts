@@ -250,7 +250,8 @@ async function callGeminiREST(
   const text: string = parts.map((p: any) => p.text).join('') || '';
   if (!text) throw new Error('Gemini retornou resposta vazia.');
   return text;
-  console.log(`[api/ai/run] provedor=gemini model=${model}`);
+  // warn (stderr) para aparecer nos runtime logs da Vercel no plano hobby
+  console.warn(`[api/ai/run] provedor=gemini model=${model}`);
 }
 
 async function callOpenRouterREST(apiKey: string, model: string, prompt: string): Promise<string> {
@@ -284,7 +285,8 @@ async function callOpenRouterREST(apiKey: string, model: string, prompt: string)
   const text: string = data?.choices?.[0]?.message?.content || '';
   if (!text) throw new Error('OpenRouter retornou resposta vazia.');
   return text;
-  console.log(`[api/ai/run] provedor=openrouter model=${model}`);
+  // warn (stderr) para aparecer nos runtime logs da Vercel no plano hobby
+  console.warn(`[api/ai/run] provedor=openrouter model=${model}`);
 }
 
 async function callNvidiaREST(apiKey: string, model: string, prompt: string): Promise<string> {
@@ -318,7 +320,8 @@ async function callNvidiaREST(apiKey: string, model: string, prompt: string): Pr
   const text: string = data?.choices?.[0]?.message?.content || '';
   if (!text) throw new Error('NVIDIA retornou resposta vazia.');
   return text;
-  console.log(`[api/ai/run] provedor=nvidia model=${model}`);
+  // warn (stderr) para aparecer nos runtime logs da Vercel no plano hobby
+  console.warn(`[api/ai/run] provedor=nvidia model=${model}`);
 }
 
 async function callWithFallback(
