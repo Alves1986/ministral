@@ -131,30 +131,6 @@ async function startServer() {
     }
   });
 
-  app.post("/api/cifraclub/search", async (req, res) => {
-    try {
-      const { searchCifraClub } = await import("./services/cifraClubService.ts");
-      const { query } = req.body;
-      const result = await searchCifraClub(query);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in /api/cifraclub/search:", error);
-      res.status(500).json({ error: "Failed to search Cifra Club" });
-    }
-  });
-
-  app.post("/api/cifraclub/lyrics", async (req, res) => {
-    try {
-      const { getVagalumeLyrics } = await import("./services/cifraClubService.ts");
-      const { artist, song } = req.body;
-      const result = await getVagalumeLyrics(artist, song);
-      res.json({ lyrics: result });
-    } catch (error: any) {
-      console.error("Error in /api/cifraclub/lyrics:", error);
-      res.status(500).json({ error: "Failed to fetch Vagalume lyrics" });
-    }
-  });
-
   app.post("/api/youtube/search", async (req, res) => {
     try {
       const { searchYouTubeVideos } = await import("./services/youtubeService.ts");
@@ -164,40 +140,6 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error in /api/youtube/search:", error);
       res.status(500).json({ error: "Failed to search YouTube" });
-    }
-  });
-
-  app.get("/api/spotify/config", (req, res) => {
-    res.json({
-      clientId: process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || ""
-    });
-  });
-
-  app.post("/api/spotify/token", async (req, res) => {
-    try {
-      // Segurança: NUNCA aceitar credenciais do body do cliente.
-      // O secret deve vir apenas das variáveis de ambiente do servidor.
-      const clientId = process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID;
-      const clientSecret = process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET;
-
-      if (!clientId || !clientSecret) {
-        return res.status(500).json({ error: "Spotify credentials not configured on server" });
-      }
-
-      const response = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
-        },
-        body: 'grant_type=client_credentials'
-      });
-
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      console.error("Error fetching Spotify token:", error);
-      res.status(500).json({ error: "Failed to fetch Spotify token" });
     }
   });
 

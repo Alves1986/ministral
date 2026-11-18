@@ -60,7 +60,7 @@
   - Vercel: validar paridade de `VITE_VAPID_PUBLIC_KEY` e `VITE_SUPABASE_URL` em todos os ambientes.
 
 ### B. Em Análise / Dependências Externas
-- [ ] **[API] CifraClub / Vagalume**: Monitorar estabilidade dos endpoints de letras/cifras e avaliar necessidade de chave dedicada caso a API pública apresente limites de requisição.
+- [x] **[API] CifraClub / Vagalume**: Integração removida em 18/11/2026 (recurso sem uso). Endpoints, serviços, telas e a dependência `vagalume` foram eliminados.
 - [x] **[TESTES] Suíte Completa de Concorrência, Resiliência e Multi-Tenancy**: 8 suítes com 32 testes automatizados executados e aprovados via Vitest (`tests/concurrency/`, `tests/multi-tenant/`, `tests/resilience/`).
 
 ### C. Débito Técnico / Refatorações Futuras
@@ -70,18 +70,14 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 06/11/2026
+- **Data**: 18/11/2026
 - **Realizações**:
-  1. **Correção Definitiva de Exibição de Trocas por Função e Sincronização Imediata de Funções do Membro (`utils/swapUtils.ts`, `components/SwapRequestsScreen.tsx`, `components/ProfileScreen.tsx`, `services/supabase/auth.ts`, `services/supabase/misc.ts`, `hooks/useScreenMemos.tsx`, `hooks/useMinistryData.ts`, `App.tsx`, `tests/swapRoleFilter.test.ts`)**:
-     - **Correspondência Inteligente de Vagas Numeradas e Acentuação (`normalizeSwapBaseRole` & `hasMatchingSwapRole`)**: Vagas expandidas na escala (`"Vocal 1"`, `"Vocal 2"`, `"Dança 1"`, `"Back Vocal 2"`, etc.) agora correspondem automaticamente à função base cadastrada no perfil do membro (`"Vocal"`, `"Dança"`, `"Back Vocal"`, etc.), com normalização de acentos (`"Violão"` vs `"Violao"`, `"Dança"` vs `"Danca"`), preservando distinções reais como faixas etárias (`"Professor 03–06"` vs `"Professor 07–11"`).
-     - **Resolução Resiliente de Funções e Uso do `ministryId` Ativo (`SwapRequestsScreen.tsx` & `resolveUserSwapFunctions`)**: Corrigida a busca em `ministry_members` para usar o `ministryId` ativo (e não `currentUser.ministryId`), sem `.maybeSingle()`, combinando funções recém-salvas (`localStorage`), banco (`ministry_members`), lista de membros (`publicMembers`) e sessão (`currentUser.ministry_functions`).
-     - **Persistência com `insert` Automático e Fim da Race Condition no Perfil (`updateUserProfile` & `updateMemberData`)**: `ministry_members` agora é atualizado antes de `profiles` (evitando que o listener Realtime de `profiles` trave `refreshSession()`), criando o vínculo com `.insert()` caso o usuário ainda não possua linha em `ministry_members` e sincronizando instantaneamente o cache do React Query (`swap_user_functions`, `member_ministry_functions`, `members`) e `useAppStore`.
-  2. **Padronização de Contraste dos Cards de Avisos (`components/AnnouncementCard.tsx`, `components/AlertsManager.tsx`)**:
-     - Fundos e bordas padronizados por tipo de alerta (`success`, `warning`, `alert`, `info`) em light/dark mode tanto nos cards do mural quanto no preview do editor.
-  3. **Edição de Avisos Exclusiva pelo Autor/Criador (`utils/announcementUtils.ts`, `services/supabase/notifications.ts`, `components/AnnouncementCard.tsx`, `components/AnnouncementsScreen.tsx`, `components/AlertsManager.tsx`, `hooks/useScreenMemos.tsx`, `tests/announcementEditPermission.test.ts`)**:
-     - Apenas quem criou o aviso pode visualizar o botão `Editar` e salvar alterações, com persistência resiliente do UUID do autor em `author_name`.
+  1. **Correção dos endpoints de IA em produção (`api/ai/polish.ts`, `api/ai/schedule.ts`)**: os imports locais usavam a extensão `.ts` (`../../services/aiService.ts`), permitida pelo `tsconfig` (`allowImportingTsExtensions`), mas o bundle da Vercel mantinha o specifier `.ts` e o Node falhava com `ERR_MODULE_NOT_FOUND`. Produção passava 500 e a geração de escala por IA caía silenciosamente na heurística local.
+  2. **Remoção das integrações Spotify, CifraClub/Vagalume (recursos sem uso)**: endpoints `api/spotify/token` e `api/cifraclub/search` (expostos sem autenticação), rotas correspondentes em `server.ts`, serviços `spotifyService`/`cifraClubService`, estados e handlers mortos em `RepertoireScreen.tsx`, fluxo de callback no `App.tsx`, campos de settings (`types.ts`, `useMinistryData.ts`, `ministries.ts`, `SettingsScreen.tsx`), declaração de tipos `vite-env.d.ts` e a dependência `vagalume`.
+  3. **Redução de vulnerabilidades**: de 40 (32 críticas) para 8 (2 críticas: `dompurify` e `proxy-addr`) após a remoção da árvore babel-6 trazida por `vagalume`.
 - **Validação**:
-  - `npm test`: 23 arquivos e 116 testes aprovados (100% no Vitest).
-  - `npm run lint` (`tsc --noEmit`): Compilação estrita sem erros de tipagem.
-  - `npm run build`: Bundles de produção e Service Worker PWA gerados com sucesso.
-- **Próximo Passo**: Validação de secrets em produção e início da comercialização SaaS para novas igrejas.
+  - `npx tsc --noEmit`: sem erros.
+  - `npm test`: 23 arquivos e 114 testes aprovados.
+  - `npm run build`: bundles e Service Worker PWA gerados.
+- **Próximo Passo**: Validar o deploy de preview na Vercel e confirmar que `/api/ai/schedule` volta a responder 401 (auth) em vez de 500.
+

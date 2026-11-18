@@ -10,9 +10,7 @@ import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, notifyRepertoirePlaylistPublished, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
 import { getSupabase } from '../services/supabase/client';
-import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos, extractPlaylistId } from '../services/youtubeService';
-import { searchCifraClub, getVagalumeLyrics } from '../services/cifraClubService';
 import { ChordViewer } from './ChordViewer';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSystemLogo } from '../utils/branding';
@@ -59,7 +57,7 @@ export const RepertoireScreen: React.FC<Props> = ({
   
   // UI State: Sub-Aba Principal (Playlists vs Ranking de Louvores)
   const [mainView, setMainView] = useState<'playlists' | 'ranking'>('playlists');
-  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('youtube');
+  const [activeTab, setActiveTab] = useState<'youtube'>('youtube');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const cultoSelectRef = useRef<HTMLSelectElement>(null);
@@ -485,128 +483,11 @@ export const RepertoireScreen: React.FC<Props> = ({
   const [link, setLink] = useState("");
   const [content, setContent] = useState("");
 
-  // Spotify Auth & Data
-  const [isSpotifyLoggedIn, setIsSpotifyLoggedIn] = useState(false);
-  const [spotifyUser, setSpotifyUser] = useState<any>(null);
-  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
-  const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
-  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
-
   // Search State
-  const [spotifyQuery, setSpotifyQuery] = useState("");
-  const [spotifyResults, setSpotifyResults] = useState<any[]>([]);
-  const [spotifyLoading, setSpotifyLoading] = useState(false);
 
   const [youtubeQuery, setYoutubeQuery] = useState("");
   const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
-
-  const [cifraQuery, setCifraQuery] = useState("");
-  const [cifraResults, setCifraResults] = useState<any[]>([]);
-  const [cifraLoading, setCifraLoading] = useState(false);
-  const [addingToDraftId, setAddingToDraftId] = useState<string | null>(null);
-
-  // Init
-  useEffect(() => {
-    const checkConnection = () => {
-      const justConnected = localStorage.getItem('spotify_just_connected') === 'true';
-      if (justConnected || isUserLoggedIn()) {
-        if (justConnected) {
-          localStorage.removeItem('spotify_just_connected');
-          addToast("Spotify conectado com sucesso!", "success");
-        }
-        setIsSpotifyLoggedIn(true);
-        // setActiveTab('playlists'); // Ocultado até solicitação do usuário
-        loadUserProfile();
-      } else {
-        setIsSpotifyLoggedIn(false);
-        setSpotifyUser(null);
-      }
-    };
-
-    checkConnection();
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'spotify_just_connected' && e.newValue === 'true') {
-        checkConnection();
-      }
-    };
-    
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  const loadUserProfile = async () => {
-    const profile = await getUserProfile();
-    if (profile) {
-      setSpotifyUser(profile);
-      setIsSpotifyLoggedIn(true);
-    } else {
-      logoutSpotify();
-      setIsSpotifyLoggedIn(false);
-      setSpotifyUser(null);
-      setUserPlaylists([]);
-      setPlaylistTracks([]);
-      setSelectedPlaylist(null);
-    }
-  };
-
-  const handleSpotifyLogin = async () => {
-    if (!ministryId) {
-      addToast("Erro: ID do ministério não encontrado.", "error");
-      return;
-    }
-    if (date) localStorage.setItem('repertoire_draft_date', date);
-    localStorage.setItem('spotify_login_origin_tab', mode === 'manage' ? 'repertoire-manager' : 'repertoire');
-    try {
-      const url = await getLoginUrl(integrations?.spotifyClientId);
-      if (url) {
-        window.open(url, '_blank');
-      } else {
-        addToast("A chave do Spotify não está configurada no servidor (.env) nem nas configurações do ministério.", "error");
-      }
-    } catch (err) {
-      addToast("Erro ao carregar link de conexão com o Spotify.", "error");
-    }
-  };
-
-  const handleLoadPlaylists = async () => {
-    setIsLoadingPlaylists(true);
-    try {
-      const playlists = await getUserPlaylists();
-      setUserPlaylists(playlists);
-    } catch (e: any) {
-      addToast(e.message || "Erro ao carregar playlists.", "error");
-    }
-    setIsLoadingPlaylists(false);
-  };
-
-  const handleOpenPlaylist = async (playlist: any) => {
-    setSelectedPlaylist(playlist);
-    setIsLoadingPlaylists(true);
-    try {
-      const tracks = await getPlaylistTracks(playlist.id);
-      setPlaylistTracks(tracks);
-    } catch (e: any) {
-      addToast(e.message || "Erro ao carregar faixas.", "error");
-    }
-    setIsLoadingPlaylists(false);
-  };
-
-  const handleSpotifySearch = async () => {
-    if (!spotifyQuery.trim() || !ministryId) return;
-    setSpotifyLoading(true);
-    try {
-      const results = await searchSpotifyTracks(spotifyQuery, integrations?.spotifyClientId, integrations?.spotifyClientSecret);
-      setSpotifyResults(results);
-      if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
-    } catch (e: any) {
-      addToast(e.message || "Erro ao buscar no Spotify.", "error");
-    } finally {
-      setSpotifyLoading(false);
-    }
-  };
 
   const handleYouTubeSearch = async () => {
     const query = youtubeQuery.trim();
@@ -651,28 +532,6 @@ export const RepertoireScreen: React.FC<Props> = ({
       addToast(`${addedCount} músicas da playlist adicionadas à seleção!`, 'success');
     } else {
       addToast("Todas as músicas desta lista já foram adicionadas.", "info");
-    }
-  };
-
-  const handleCifraSearch = async () => {
-    if (!cifraQuery.trim()) return;
-    setCifraLoading(true);
-    const results = await searchCifraClub(cifraQuery);
-    setCifraResults(results);
-    setCifraLoading(false);
-    if (results.length === 0) addToast("Nenhum resultado encontrado no Vagalume.", "warning");
-  };
-
-  const handleAddVagalumeToDraft = async (result: any, idx: number) => {
-    setAddingToDraftId(`vagalume-${idx}`);
-    try {
-      const lyrics = await getVagalumeLyrics(result.artist, result.title, result.url);
-      const overrideTitle = result.title + (result.key && result.key !== '-' ? ` (${result.key})` : '');
-      handleAddToDraft(overrideTitle, result.url, lyrics);
-    } catch (err) {
-      addToast("Erro ao buscar letra.", "error");
-    } finally {
-      setAddingToDraftId(null);
     }
   };
 
@@ -2242,7 +2101,7 @@ export const RepertoireScreen: React.FC<Props> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
-                    Link (YouTube / Spotify)
+                    Link (YouTube)
                   </label>
                   <input
                     type="text"

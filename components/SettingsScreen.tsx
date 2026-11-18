@@ -71,8 +71,6 @@ interface Props {
   ministryConfig?: any;
   organization: Organization | null;
   onSaveIntegrations?: (
-    spotifyId?: string,
-    spotifySecret?: string,
     youtubeKey?: string,
     quickAccessItems?: string[],
   ) => Promise<void>;
@@ -1056,8 +1054,6 @@ export const SettingsScreen: React.FC<Props> = ({
                       }
                       try {
                         await onSaveIntegrations?.(
-                          undefined,
-                          undefined,
                           undefined,
                           newItems,
                         );
