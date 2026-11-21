@@ -1,5 +1,6 @@
 import React from 'react';
 import { Lock, AlertOctagon, CreditCard, Building2, LogOut } from 'lucide-react';
+import { LEGAL_COMPANY_INFO } from './LegalDocuments';
 
 export const OrganizationInactiveScreen = ({ onLogout }: { onLogout: () => void }) => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0F172A] p-6 text-center">
@@ -19,7 +20,7 @@ export const OrganizationInactiveScreen = ({ onLogout }: { onLogout: () => void 
             </button>
         </div>
         <div className="mt-8 text-zinc-500 text-sm">
-            Precisa de ajuda? <a href="mailto:contato.ministral@gmail.com" className="text-ministral-500 hover:underline">contato.ministral@gmail.com</a>
+            Precisa de ajuda? <a href={`mailto:${LEGAL_COMPANY_INFO.supportEmail}`} className="text-ministral-500 hover:underline">{LEGAL_COMPANY_INFO.supportEmail}</a>
         </div>
     </div>
 );
@@ -74,7 +75,7 @@ export const BillingLockScreen = ({ checkoutUrl, orgId, onLogout, onRefresh }: {
             </div>
             
             <div className="mt-8 text-zinc-500 text-sm">
-                Precisa de ajuda? <a href="mailto:contato.ministral@gmail.com" className="text-ministral-500 hover:underline">contato.ministral@gmail.com</a>
+                Precisa de ajuda? <a href={`mailto:${LEGAL_COMPANY_INFO.supportEmail}`} className="text-ministral-500 hover:underline">{LEGAL_COMPANY_INFO.supportEmail}</a>
             </div>
         </div>
     );

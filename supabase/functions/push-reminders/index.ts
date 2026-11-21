@@ -93,7 +93,8 @@ serve(async (req: Request) => {
       });
     }
     privateKey = privateKey.trim().replace(/[\r\n\s]/g, "").replace(/^['"]|['"]$/g, "");
-    webpush.setVapidDetails("mailto:admin@ministral.app", publicKey, privateKey);
+    const vapidContact = Deno.env.get("EMAIL_REPLY_TO") || "suporte@ministral.app";
+    webpush.setVapidDetails(`mailto:${vapidContact}`, publicKey, privateKey);
 
     const today = localDate(-3); // fuso Brasília aproximado (UTC-3)
     const nowBr = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);

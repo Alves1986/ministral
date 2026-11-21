@@ -152,7 +152,8 @@ Deno.serve(async (req: Request) => {
     privateKey = privateKey.trim().replace(/[\r\n\s]/g, '').replace(/^['"]|['"]$/g, '');
 
     try {
-        webpush.setVapidDetails('mailto:contato@ministral.com.br', publicKey, privateKey);
+        const vapidContact = Deno.env.get('EMAIL_REPLY_TO') || 'suporte@ministral.app';
+        webpush.setVapidDetails(`mailto:${vapidContact}`, publicKey, privateKey);
     } catch (err: any) {
         return new Response(JSON.stringify({ success: false, message: "Erro na configuração de notificações." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }

@@ -267,7 +267,7 @@ async function callOpenRouterREST(apiKey: string, model: string, prompt: string,
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://ministral.app',
+      'HTTP-Referer': process.env.APP_ORIGIN || 'https://ministral.app',
       'X-Title': 'Ministral'
     },
     body: JSON.stringify({

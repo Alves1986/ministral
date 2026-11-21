@@ -1,9 +1,20 @@
-
 import React, { useRef, useEffect } from 'react';
 import { X, Shield, FileText, ArrowLeft, Mail } from 'lucide-react';
 
 export type LegalDocType = 'terms' | 'privacy' | null;
 
+const getEnv = (key: string, fallback: string): string => {
+  try {
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv && metaEnv[key]) return String(metaEnv[key]);
+  } catch {}
+  return fallback;
+};
+
+export const LEGAL_COMPANY_INFO = {
+  dpoEmail: getEnv('VITE_DPO_EMAIL', 'suporte@ministral.app'),
+  supportEmail: getEnv('VITE_SUPPORT_EMAIL', 'suporte@ministral.app'),
+};
 // --- CONTEÚDO PURO (Reutilizável) ---
 const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
   if (type === 'terms') {
@@ -79,7 +90,7 @@ const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
           <p>Se você tiver dúvidas sobre esta Política de Privacidade, entre em contato conosco:</p>
           <div className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg w-fit">
              <Mail size={16} className="text-zinc-500"/>
-             <span className="font-medium text-zinc-700 dark:text-zinc-300">contato@ministerio.com</span>
+             <a href={`mailto:${LEGAL_COMPANY_INFO.supportEmail}`} className="font-medium text-zinc-700 dark:text-zinc-300 hover:underline">{LEGAL_COMPANY_INFO.supportEmail}</a>
           </div>
         </div>
       );

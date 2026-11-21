@@ -85,7 +85,7 @@ serve(async (req: Request) => {
         await sbAdmin.from('organizations').update({ stripe_customer_id: customerId }).eq('id', orgId);
     }
 
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'http://localhost:3000';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_ORIGIN') || Deno.env.get('APP_URL') || 'https://ministral.app';
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],

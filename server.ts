@@ -15,11 +15,51 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: string }).rawBody = buf.toString("utf8");
+      },
+    })
+  );
+
+  // CORS para chamadas de API a partir do domínio oficial (APP_ORIGIN)
+  app.use("/api", (req, res, next) => {
+    const allowedOrigin = process.env.APP_ORIGIN || "https://ministral.app";
+    const origin = req.headers.origin;
+    const allowedSet = new Set([
+      allowedOrigin,
+      "https://ministral.app",
+      "https://www.ministral.app",
+      "https://app.ministral.app",
+      "http://localhost:3000",
+      "http://localhost:5173",
+    ]);
+    if (origin && allowedSet.has(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, svix-id, svix-timestamp, svix-signature");
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+    next();
+  });
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ status: "ok", domain: process.env.APP_DOMAIN || "ministral.app" });
+  });
+
+  app.post("/api/email/inbound", async (req, res) => {
+    const { default: inboundHandler } = await import("./api/email/inbound.ts");
+    return inboundHandler(req, res);
+  });
+
+  app.post("/api/email/send", async (req, res) => {
+    const { default: sendHandler } = await import("./api/email/send.ts");
+    return sendHandler(req, res);
   });
 
   app.post("/api/ai/schedule", async (req, res) => {

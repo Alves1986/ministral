@@ -64,7 +64,7 @@ serve(async (req: Request) => {
     }
 
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'http://localhost:3000';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_ORIGIN') || Deno.env.get('APP_URL') || 'https://ministral.app';
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: orgData.stripe_customer_id,

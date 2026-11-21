@@ -71,15 +71,16 @@
 ---
 
 ## 6. Contexto da Última Sessão
-- **Data**: 18/11/2026
+- **Data**: 21/11/2026
 - **Realizações**:
-  1. **Correção dos endpoints de IA em produção (`api/ai/polish.ts`, `api/ai/schedule.ts`)**: os imports locais usavam a extensão `.ts` (`../../services/aiService.ts`), permitida pelo `tsconfig` (`allowImportingTsExtensions`), mas o bundle da Vercel mantinha o specifier `.ts` e o Node falhava com `ERR_MODULE_NOT_FOUND`. Produção passava 500 e a geração de escala por IA caía silenciosamente na heurística local.
-  2. **Remoção das integrações Spotify, CifraClub/Vagalume (recursos sem uso)**: endpoints `api/spotify/token` e `api/cifraclub/search` (expostos sem autenticação), rotas correspondentes em `server.ts`, serviços `spotifyService`/`cifraClubService`, estados e handlers mortos em `RepertoireScreen.tsx`, fluxo de callback no `App.tsx`, campos de settings (`types.ts`, `useMinistryData.ts`, `ministries.ts`, `SettingsScreen.tsx`), declaração de tipos `vite-env.d.ts` e a dependência `vagalume`.
-  3. **Redução de vulnerabilidades**: de 40 (32 críticas) para 8 (2 críticas: `dompurify` e `proxy-addr`) após a remoção da árvore babel-6 trazida por `vagalume`.
-  4. **Provedor NVIDIA (`NVIDIA_API_KEY`)**: integração adicionada nos três caminhos de IA (`services/aiOrchestrator.ts`, `api/ai/run.ts`, `api/ai/schedule.ts`) com modelos Llama 3.3 70B, Llama 3.1 8B, Nemoguard 8B e Mistral 7B, e seletor de provedor na tela de IA (`AdvancedAIScreen.tsx`). Variável `NVIDIA_API_KEY` criada na Vercel (production/preview/development) — **aguardando o usuário inserir a chave**.
+  1. **Integração Resend e Domínio Oficial `ministral.app` (`services/email/resend.ts`, `api/email/inbound.ts`, `api/email/send.ts`, `supabase/functions/_shared/resend.ts`, `supabase/functions/inbound-email/index.ts`, `server.ts`, `tests/resendEmail.test.ts`)**:
+     - **Wrapper Singleton Resend (`services/email/resend.ts` & `supabase/functions/_shared/resend.ts`)**: Cliente compatível com `resend.emails.send` + helper `sendEmail` usando `fetch` nativo para `https://api.resend.com/emails`, com defaults `Ministral <noreply@ministral.app>` e `reply_to: suporte@ministral.app`.
+     - **Webhook Inbound de E-mails (`api/email/inbound.ts` & `supabase/functions/inbound-email/index.ts`)**: Endpoints prontos para receber eventos `email.received` do Resend tanto via Vercel (`https://ministral.app/api/email/inbound`) quanto via Supabase Edge Function (`/functions/v1/inbound-email`), com verificação opcional de assinatura HMAC-SHA256 Svix (`RESEND_WEBHOOK_SECRET`).
+     - **Remoção de Domínios Antigos & Deploy Supabase**: Atualizados `validate-invite`, `accept-invite`, `push-notification`, `push-reminders`, `stripe-create-checkout`, `stripe-customer-portal`, `api/ai/run.ts`, `components/LegalDocuments.tsx`, `components/LockScreens.tsx` e `index.html` para `ministral.app` / `suporte@ministral.app`. 6 secrets gravadas no projeto `fyenjzfyjlfhvayelrpp`, 7 Edge Functions deployadas e endpoint `inbound-email` validado em produção (`200 OK`).
+  2. **Correções de IA e Remoção de Legados (18/11/2026)**: Imports `.js` nas Vercel Functions, remoção de integrações sem uso (Spotify, CifraClub/Vagalume) e adição do provedor NVIDIA NIM (`NVIDIA_API_KEY`).
 - **Validação**:
   - `npx tsc --noEmit`: sem erros.
-  - `npm test`: 23 arquivos e 114 testes aprovados.
+  - `npx vitest run tests/resendEmail.test.ts`: 9/9 testes aprovados.
   - `npm run build`: bundles e Service Worker PWA gerados.
-- **Próximo Passo**: Validar o deploy de preview na Vercel e confirmar que `/api/ai/schedule` volta a responder 401 (auth) em vez de 500.
+- **Próximo Passo**: Registrar o webhook inbound no Resend Dashboard (`email.received`) e validar o envio/recebimento real em produção.
 
