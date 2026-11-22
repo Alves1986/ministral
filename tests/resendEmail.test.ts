@@ -40,12 +40,15 @@ describe('Resend Email Service & ministral.app config', () => {
 
   it('respeita variáveis de ambiente customizadas em getEmailConfig', () => {
     process.env.APP_DOMAIN = 'ministral.app';
+    process.env.APP_ORIGIN = 'https://vendas.ministral.app';
     process.env.EMAIL_FROM = 'avisos@ministral.app';
     process.env.EMAIL_REPLY_TO = 'contato@ministral.app';
 
     const cfg = getEmailConfig();
+    expect(cfg.appOrigin).toBe('https://vendas.ministral.app');
     expect(cfg.formattedFrom).toBe('Ministral <avisos@ministral.app>');
     expect(cfg.replyTo).toBe('contato@ministral.app');
+    expect(cfg.inboundWebhookUrl).toBe('https://ministral.app/api/email/inbound');
   });
 
   it('retorna erro descritivo se RESEND_API_KEY não estiver configurada', async () => {

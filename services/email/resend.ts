@@ -12,11 +12,17 @@ export interface EmailConfig {
   inboundWebhookUrl: string;
 }
 
+export interface SendEmailTemplateInput {
+  id: string;
+  variables?: Record<string, string | number | boolean>;
+}
+
 export interface SendEmailInput {
   to: string | string[];
-  subject: string;
-  html: string;
+  subject?: string;
+  html?: string;
   text?: string;
+  template?: SendEmailTemplateInput;
   replyTo?: string;
   from?: string;
   cc?: string | string[];
@@ -59,7 +65,7 @@ export function getEmailConfig(): EmailConfig {
   const replyTo = cleanEnv(process.env.EMAIL_REPLY_TO, `suporte@${appDomain}`);
   const inboundWebhookUrl = cleanEnv(
     process.env.INBOUND_EMAIL_WEBHOOK,
-    `${appOrigin.replace(/\/+$/, '')}/api/email/inbound`
+    `https://${appDomain}/api/email/inbound`
   );
   const apiKey = cleanEnv(process.env.RESEND_API_KEY, '');
 
@@ -112,12 +118,32 @@ class ResendClient {
       const payload: Record<string, unknown> = {
         from: params.from || config.formattedFrom,
         to: toList,
-        subject: params.subject,
-        html: params.html,
+        reply_to: params.replyTo || config.replyTo,
       };
 
-      if (params.text !== undefined) payload.text = params.text;
-      if (params.replyTo) payload.reply_to = params.replyTo;
+      if (params.template) {
+        payload.template = {
+          id: params.template.id,
+          ...(params.template.variables ? { variables: params.template.variables } : {}),
+        };
+        if (params.subject) {
+          payload.subject = params.subject;
+        }
+      } else {
+        if (!params.subject || !params.html) {
+          return {
+            data: null,
+            error: {
+              name: 'validation_error',
+              message: 'Campos "subject" e "html" são obrigatórios quando template não é utilizado.',
+              statusCode: 400,
+            },
+          };
+        }
+        payload.subject = params.subject;
+        payload.html = params.html;
+        if (params.text !== undefined) payload.text = params.text;
+      }
 
       const ccList = normalizeRecipients(params.cc);
       if (ccList) payload.cc = ccList;
@@ -181,6 +207,7 @@ export async function sendEmail({
   subject,
   html,
   text,
+  template,
   replyTo,
   from,
   cc,
@@ -194,10 +221,147 @@ export async function sendEmail({
     subject,
     html,
     text,
+    template,
     replyTo: replyTo ?? config.replyTo,
     cc,
     bcc,
     headers,
+  });
+}
+
+export const RESEND_TEMPLATES = {
+  MINISTRY_INVITE: {
+    alias: 'convite-ministerio',
+    id: 'ce6414fd-3697-4966-9f4e-3f3738f98074',
+  },
+  WELCOME: {
+    alias: 'boas-vindas',
+    id: '46164864-2726-45c1-af04-bd889886cbd5',
+  },
+  PASSWORD_RESET: {
+    alias: 'redefinicao-senha',
+    id: 'b4998cd5-2887-4168-b81a-76f9269c056d',
+  },
+  SCALE_REMINDER: {
+    alias: 'notificacao-escala',
+    id: '9f1a8f7f-4ac3-4cf0-b70b-e1551286eb56',
+  },
+  SUPPORT_AUTO_REPLY: {
+    alias: 'suporte-resposta',
+    id: 'e48f9f75-5557-4616-9559-823b59e3ad9c',
+  },
+} as const;
+
+export interface MinistryInviteEmailParams {
+  to: string | string[];
+  userName: string;
+  invitedBy: string;
+  ministryName: string;
+  inviteRole: string;
+  inviteLink: string;
+  inviteToken?: string;
+}
+
+export async function sendMinistryInviteEmail(params: MinistryInviteEmailParams): Promise<ResendSendResponse> {
+  return sendEmail({
+    to: params.to,
+    template: {
+      id: RESEND_TEMPLATES.MINISTRY_INVITE.alias,
+      variables: {
+        USER_NAME: params.userName,
+        INVITED_BY: params.invitedBy,
+        MINISTRY_NAME: params.ministryName,
+        INVITE_ROLE: params.inviteRole,
+        INVITE_LINK: params.inviteLink,
+        INVITE_TOKEN: params.inviteToken || '',
+      },
+    },
+  });
+}
+
+export interface WelcomeEmailParams {
+  to: string | string[];
+  userName: string;
+  confirmationLink: string;
+}
+
+export async function sendWelcomeEmail(params: WelcomeEmailParams): Promise<ResendSendResponse> {
+  return sendEmail({
+    to: params.to,
+    template: {
+      id: RESEND_TEMPLATES.WELCOME.alias,
+      variables: {
+        USER_NAME: params.userName,
+        CONFIRMATION_LINK: params.confirmationLink,
+      },
+    },
+  });
+}
+
+export interface PasswordResetEmailParams {
+  to: string | string[];
+  userName: string;
+  resetLink: string;
+  expiresIn?: string;
+}
+
+export async function sendPasswordResetEmail(params: PasswordResetEmailParams): Promise<ResendSendResponse> {
+  return sendEmail({
+    to: params.to,
+    template: {
+      id: RESEND_TEMPLATES.PASSWORD_RESET.alias,
+      variables: {
+        USER_NAME: params.userName,
+        RESET_LINK: params.resetLink,
+        EXPIRES_IN: params.expiresIn || '60 minutos',
+      },
+    },
+  });
+}
+
+export interface ScaleReminderEmailParams {
+  to: string | string[];
+  userName: string;
+  ministryName: string;
+  eventDate: string;
+  roleName: string;
+  scaleLink: string;
+}
+
+export async function sendScaleReminderEmail(params: ScaleReminderEmailParams): Promise<ResendSendResponse> {
+  return sendEmail({
+    to: params.to,
+    template: {
+      id: RESEND_TEMPLATES.SCALE_REMINDER.alias,
+      variables: {
+        USER_NAME: params.userName,
+        MINISTRY_NAME: params.ministryName,
+        EVENT_DATE: params.eventDate,
+        ROLE_NAME: params.roleName,
+        SCALE_LINK: params.scaleLink,
+      },
+    },
+  });
+}
+
+export interface SupportAutoReplyEmailParams {
+  to: string | string[];
+  userName: string;
+  ticketId: string;
+  messageSummary: string;
+}
+
+export async function sendSupportAutoReplyEmail(params: SupportAutoReplyEmailParams): Promise<ResendSendResponse> {
+  return sendEmail({
+    to: params.to,
+    template: {
+      id: RESEND_TEMPLATES.SUPPORT_AUTO_REPLY.alias,
+      variables: {
+        USER_NAME: params.userName,
+        TICKET_ID: params.ticketId,
+        MESSAGE_SUMMARY: params.messageSummary,
+      },
+    },
   });
 }
 

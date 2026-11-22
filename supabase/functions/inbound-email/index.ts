@@ -5,11 +5,26 @@ declare const Deno: any;
 
 const ALLOWED_ORIGIN = Deno.env.get('APP_ORIGIN') || 'https://ministral.app';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, svix-id, svix-timestamp, svix-signature',
-};
+const ALLOWED_ORIGINS = new Set([
+  ALLOWED_ORIGIN,
+  'https://ministral.app',
+  'https://www.ministral.app',
+  'https://app.ministral.app',
+  'https://vendas.ministral.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+]);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '';
+  const resolvedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : ALLOWED_ORIGIN;
+  return {
+    'Access-Control-Allow-Origin': resolvedOrigin,
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type, svix-id, svix-timestamp, svix-signature',
+    'Vary': 'Origin',
+  };
+}
 
 function decodeBase64(b64: string): Uint8Array {
   const binary = atob(b64);
@@ -75,6 +90,7 @@ async function verifySvixSignature(
 }
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }

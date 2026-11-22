@@ -61,13 +61,13 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { to, subject, html, text, replyTo } = req.body || {};
+    const { to, subject, html, text, replyTo, template } = req.body || {};
 
-    if (!to || !subject || !html) {
-      return res.status(400).json({ error: 'Campos obrigatórios: to, subject, html.' });
+    if (!to || (!html && !template)) {
+      return res.status(400).json({ error: 'Campos obrigatórios: to e (html ou template).' });
     }
 
-    const result = await sendEmail({ to, subject, html, text, replyTo });
+    const result = await sendEmail({ to, subject, html, text, replyTo, template });
 
     if (result.error) {
       return res.status(result.error.statusCode || 500).json({

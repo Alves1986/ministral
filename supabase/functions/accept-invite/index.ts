@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = new Set([
   'https://ministral.app',
   'https://www.ministral.app',
   'https://app.ministral.app',
+  'https://vendas.ministral.app',
   'http://localhost:3000',
   'http://localhost:5173',
 ]);
