@@ -73,14 +73,16 @@
 ## 6. Contexto da Última Sessão
 - **Data**: 21/11/2026
 - **Realizações**:
-  1. **Integração Resend e Domínio Oficial `ministral.app` (`services/email/resend.ts`, `api/email/inbound.ts`, `api/email/send.ts`, `supabase/functions/_shared/resend.ts`, `supabase/functions/inbound-email/index.ts`, `server.ts`, `tests/resendEmail.test.ts`)**:
-     - **Wrapper Singleton Resend (`services/email/resend.ts` & `supabase/functions/_shared/resend.ts`)**: Cliente compatível com `resend.emails.send` + helper `sendEmail` usando `fetch` nativo para `https://api.resend.com/emails`, com defaults `Ministral <noreply@ministral.app>` e `reply_to: suporte@ministral.app`.
-     - **Webhook Inbound de E-mails (`api/email/inbound.ts` & `supabase/functions/inbound-email/index.ts`)**: Endpoints prontos para receber eventos `email.received` do Resend tanto via Vercel (`https://ministral.app/api/email/inbound`) quanto via Supabase Edge Function (`/functions/v1/inbound-email`), com verificação opcional de assinatura HMAC-SHA256 Svix (`RESEND_WEBHOOK_SECRET`).
-     - **Remoção de Domínios Antigos & Deploy Supabase**: Atualizados `validate-invite`, `accept-invite`, `push-notification`, `push-reminders`, `stripe-create-checkout`, `stripe-customer-portal`, `api/ai/run.ts`, `components/LegalDocuments.tsx`, `components/LockScreens.tsx` e `index.html` para `ministral.app` / `suporte@ministral.app`. 6 secrets gravadas no projeto `fyenjzfyjlfhvayelrpp`, 7 Edge Functions deployadas e endpoint `inbound-email` validado em produção (`200 OK`).
-  2. **Correções de IA e Remoção de Legados (18/11/2026)**: Imports `.js` nas Vercel Functions, remoção de integrações sem uso (Spotify, CifraClub/Vagalume) e adição do provedor NVIDIA NIM (`NVIDIA_API_KEY`).
+  1. **Configuração do subdomínio `vendas.ministral.app` e variáveis Vercel (`APP_ORIGIN`, `APP_DOMAIN`, `EMAIL_FROM`, `EMAIL_REPLY_TO`)**:
+     - **Landing Page (`Ministral-Page`)**: atualizados links do app e checkout para `https://ministral.app` / `https://ministral.app/?register=true`, canonical e OpenGraph para `https://vendas.ministral.app` e e-mails de DPO/Suporte para `suporte@ministral.app`. Branch `main` atualizada e deploy de produção acionado na Vercel (`vendas.ministral.app`).
+     - **CORS e Permissões no Web App (`repos/ministral`)**: liberada a origem `https://vendas.ministral.app` em `server.ts` e nas Edge Functions do Supabase (`accept-invite`, `validate-invite`, `inbound-email`).
+     - **Fallback de Inbound Email (`services/email/resend.ts`)**: normalizado para `https://${appDomain}/api/email/inbound` evitando que chamadas inbound apontem para o subdomínio estático de vendas quando `APP_ORIGIN` for `https://vendas.ministral.app`.
+     - **Vercel Env Vars**: configuradas em `gestaoescala` e `ministralpage` (`APP_DOMAIN=ministral.app`, `APP_ORIGIN=https://vendas.ministral.app`, `EMAIL_FROM=noreply@ministral.app`, `EMAIL_REPLY_TO=suporte@ministral.app`).
+  2. **Integração Resend e Domínio Oficial `ministral.app`**:
+     - Wrapper singleton Resend + Edge Functions de e-mail e webhook inbound.
 - **Validação**:
   - `npx tsc --noEmit`: sem erros.
-  - `npx vitest run tests/resendEmail.test.ts`: 9/9 testes aprovados.
-  - `npm run build`: bundles e Service Worker PWA gerados.
-- **Próximo Passo**: Registrar o webhook inbound no Resend Dashboard (`email.received`) e validar o envio/recebimento real em produção.
+  - `npx vitest run`: 24 suítes, 123/123 testes aprovados.
+  - `npm run build`: bundles e Service Worker PWA gerados com sucesso.
+- **Próximo Passo**: Acompanhar o deploy automático da Vercel para `ministral.app` e `vendas.ministral.app`.
 

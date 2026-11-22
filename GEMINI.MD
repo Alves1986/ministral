@@ -34,5 +34,5 @@
 - Componentes Tailwind: sem dependências de UI externas além das já instaladas
 
 ## Contexto da última sessão (atualizar ao fechar)
-- Último trabalho: Integração de e-mail transacional e inbound via Resend com o domínio oficial `ministral.app` (`services/email/resend.ts`, `api/email/inbound.ts`, `api/email/send.ts`, `supabase/functions/_shared/resend.ts`, `supabase/functions/inbound-email/index.ts`, `server.ts`, `tests/resendEmail.test.ts`) e remoção total de referências a domínios antigos (`seu-dominio.com`, `ministral.com.br`, `contato.ministral@gmail.com`). Testes (`9/9`), `npm run lint` e `npm run build` aprovados.
-- Próximo passo: Registrar o webhook inbound (`https://fyenjzfyjlfhvayelrpp.supabase.co/functions/v1/inbound-email`, evento `email.received`) no Resend Dashboard, adicionar `RESEND_API_KEY` na Vercel e commitar/pushar para o GitHub.
+- Último trabalho: Suporte completo ao subdomínio `vendas.ministral.app` e ao domínio oficial `ministral.app` (`server.ts`, `services/email/resend.ts`, `supabase/functions/accept-invite/index.ts`, `supabase/functions/validate-invite/index.ts`, `supabase/functions/inbound-email/index.ts`, `tests/resendEmail.test.ts`), liberando CORS para a página de vendas e configurando variáveis de ambiente no Vercel (`APP_DOMAIN`, `APP_ORIGIN`, `EMAIL_FROM`, `EMAIL_REPLY_TO`). Atualização da landing page em `Ministral-Page` apontando para `ministral.app`. 123/123 testes aprovados no Vitest, lint e build 100% OK.
+- Próximo passo: Validação do webhook inbound no Resend e acompanhamento do deploy na Vercel.
