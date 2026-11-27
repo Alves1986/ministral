@@ -23,14 +23,14 @@ jobs:
 
     - name: Install Android SDK packages
       run: |
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;34.0.0" "platform-tools" >/dev/null
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;34.0.0" "platform-tools" "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
 
     - name: Build Debug APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon
+        ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
